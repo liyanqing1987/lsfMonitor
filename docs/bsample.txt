@@ -1,0 +1,32 @@
+Below is the usage of bsample.py.
+====
+usage: bsample.py [-h] [-j] [-q] [-H] [-l] [-u] [-i INTERVAL]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -j, --job             Sample running job info with command "bjobs -u all -r
+                        -UF".
+  -q, --queue           Sample queue info with command "bqueues".
+  -H, --host            Sample host info with command "bhosts".
+  -l, --load            Sample host load info with command "lsload".
+  -u, --user            Sample user info with command "busers".
+  -i INTERVAL, --interval INTERVAL
+                        Specify the sampling interval, unit is second.
+                        Sampling only once by default".
+====
+
+It is used to sample LSF data for job/queue/host/user.
+The sampling jobs will be started with multi-thread if you specify more than one.
+You can also start the tool as a serve process, then you must specify "-i INTERVAL"
+to do the sampling work in a loop.
+
+
+Suggest to start sampling job with crontab, below is an example.
+====
+# Sampling job/queue/host/load/user infos for lsfMonitor (Frequency : 5 minutes)
+*/5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -j
+*/5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -q
+*/5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -H
+*/5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -l
+*/5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -u
+====

@@ -1,0 +1,7 @@
+bmonitor.py have only a graphical interface window, contains four tabs, JOB/JOBS/HOSTS/QUEUES.
+
+
+JOB    : job information and job memory curve.
+JOBS   : jon list and basic job information.
+HOSTS  : host list and basic host information.
+QUEUES : queue list, queue information and queue RUN/PEND job number curve.

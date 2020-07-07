@@ -1,0 +1,42 @@
+This documentation is a simple description for the "monitor" directory.
+Three sub-directories under "monitor" directory, below are the simple description.
+
+
+monitor/bin:
+Most of the real execution files are on "monitor/bin" direcotry.
+
+    bsample.py:
+    Sample LSF data, details please see "bsample.txt".
+
+    bmonitor.py:
+    Main script for LSF data display, details please see "bmonitor.txt".
+
+    bmonitorGUI.py: 
+    GUI functions for "bmonitor.py".
+
+
+monitor/common:
+Some common function files are on "monitor/common" direcotry.
+
+    common.py:
+    Contains some common functions.
+
+    pyqt5_common.py:
+    Contains some GUI functions for pyqt5.
+
+
+monitor/conf:
+The configuration file is on "monitor/conf" directory.
+
+    config.py: 
+    Configuration file with below information.
+    installPath: lsfMonitor installation path.
+    dbPath: data base path to save the LSF information.
+    tmpPath: tmpPath to save the temporary files.
+
+
+NOTICE:
+This tool is still not fully tested with 0.1 version, welcome have a try with it,
+contact me with a detailed description and issue screenshots if you meet any 
+issue with it.
+We will continuously enhance it.
