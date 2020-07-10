@@ -767,7 +767,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
                 mem = 0
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(mem))
+            item.setData(Qt.DisplayRole, int(float(mem)))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -782,7 +782,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
                 maxmem = 0
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(maxmem))
+            item.setData(Qt.DisplayRole, int(float(maxmem)))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -797,7 +797,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
                 swp = 0
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(swp))
+            item.setData(Qt.DisplayRole, int(float(swp)))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -812,7 +812,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
                 maxswp = 0
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(maxswp))
+            item.setData(Qt.DisplayRole, int(float(maxswp)))
             self.hostsTabTable.setItem(i, j, item)
 
     def hostsTabCheckClick(self, item=None):
