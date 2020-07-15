@@ -56,7 +56,7 @@ else:
 ## Replace string "PYTHONPATH" into the real python path on all of the python files.
 print('>>> Update python path for main executable programs.')
 
-pythonFiles = ['monitor/bin/bmonitor.py', 'monitor/bin/bmonitorGUI.py', 'monitor/bin/bsample.py', 'monitor/tools/seedb.py']
+pythonFiles = ['monitor/bin/bmonitor.py', 'monitor/bin/bsample.py', 'monitor/tools/seedb.py']
 currentPython = sys.executable
 currentPythonEscaping = re.sub('/', '\/', currentPython)
 
@@ -72,7 +72,7 @@ for pythonFile in pythonFiles:
 ## Replace string "MONITORPATH" into the real monitor directory path on all of the python files.
 print('>>> Update monitor directory path for main executable programs.')
 
-pythonFiles = ['monitor/bin/bmonitor.py', 'monitor/bin/bmonitorGUI.py', 'monitor/bin/bsample.py', 'monitor/tools/seedb.py', 'monitor/common/lsf_common.py', 'monitor/common/sqlite3_common.py']
+pythonFiles = ['monitor/bin/bmonitor.py', 'monitor/bin/bsample.py', 'monitor/tools/seedb.py', 'monitor/common/lsf_common.py', 'monitor/common/sqlite3_common.py']
 monitorPath = str(installPath) + '/monitor'
 monitorPathEscaping = re.sub('/', '\/', monitorPath)
 
