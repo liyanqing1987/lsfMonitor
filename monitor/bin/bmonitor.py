@@ -345,7 +345,7 @@ class mainWindow(QMainWindow):
             self.jobTabRusageMemLine.setText('')
         else:
             if self.jobInfoDic[self.currentJob]['rusageMem'] != '':
-                self.jobTabRusageMemLine.setText(self.jobInfoDic[self.currentJob]['rusageMem'] + ' M')
+                self.jobTabRusageMemLine.setText(str(self.jobInfoDic[self.currentJob]['rusageMem']) + ' M')
                 self.jobTabRusageMemLine.setCursorPosition(0)
 
         # For "Mem" item.
@@ -353,7 +353,7 @@ class mainWindow(QMainWindow):
             self.jobTabMemLine.setText('')
         else:
             if self.jobInfoDic[self.currentJob]['mem'] != '':
-                self.jobTabMemLine.setText(self.jobInfoDic[self.currentJob]['mem'] + ' M')
+                self.jobTabMemLine.setText(str(self.jobInfoDic[self.currentJob]['mem']) + ' M')
                 self.jobTabMemLine.setCursorPosition(0)
 
     def updateJobTabFrame2(self, init=False):
@@ -405,7 +405,7 @@ class mainWindow(QMainWindow):
                         mem = memList[i]
                         if mem == '':
                              mem = '0'
-                        realMem = round(int(mem)/1024, 1)
+                        realMem = round(float(mem)/1024, 1)
                         realMemList.append(realMem)
 
                 jobDbConn.close()
@@ -646,7 +646,7 @@ class mainWindow(QMainWindow):
             j = j+1
             if str(jobDic[job]['mem']) != '':
                 item = QTableWidgetItem()
-                memValue = round(int(jobDic[job]['mem'])/1024, 1)
+                memValue = round(float(jobDic[job]['mem'])/1024, 1)
                 item.setData(Qt.DisplayRole, memValue)
                 self.jobsTabTable.setItem(i, j, item)
 
@@ -828,9 +828,12 @@ class mainWindow(QMainWindow):
             mem = lsloadDic['mem'][index]
             if re.search('M', mem):
                 mem = re.sub('M', '', mem)
-                mem = int(mem)/1024
+                mem = float(mem)/1024
             elif re.search('G', mem):
                 mem = re.sub('G', '', mem)
+            elif re.search('T', mem):
+                mem = re.sub('T', '', mem)
+                mem = float(mem)*1024
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
                 mem = 0
@@ -843,9 +846,12 @@ class mainWindow(QMainWindow):
             maxmem = lshostsDic['maxmem'][index]
             if re.search('M', maxmem):
                 maxmem = re.sub('M', '', maxmem)
-                maxmem = int(maxmem)/1024
+                maxmem = float(maxmem)/1024
             elif re.search('G', maxmem):
                 maxmem = re.sub('G', '', maxmem)
+            elif re.search('T', maxmem):
+                maxmem = re.sub('T', '', maxmem)
+                maxmem = float(maxmem)*1024
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
                 maxmem = 0
@@ -858,9 +864,12 @@ class mainWindow(QMainWindow):
             swp = lsloadDic['swp'][index]
             if re.search('M', swp):
                 swp = re.sub('M', '', swp)
-                swp = int(swp)/1024
+                swp = float(swp)/1024
             elif re.search('G', swp):
                 swp = re.sub('G', '', swp)
+            elif re.search('T', swp):
+                swp = re.sub('T', '', swp)
+                swp = float(swp)*1024
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
                 swp = 0
@@ -873,9 +882,12 @@ class mainWindow(QMainWindow):
             maxswp = lshostsDic['maxswp'][index]
             if re.search('M', maxswp):
                 maxswp = re.sub('M', '', maxswp)
-                maxswp = int(maxswp)/1024
+                maxswp = float(maxswp)/1024
             elif re.search('G', maxswp):
                 maxswp = re.sub('G', '', maxswp)
+            elif re.search('T', maxswp):
+                maxswp = re.sub('T', '', maxswp)
+                maxswp = float(maxswp)*1024
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
                 maxswp = 0

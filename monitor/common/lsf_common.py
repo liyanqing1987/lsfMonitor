@@ -140,20 +140,17 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                      'submittedFromCompile'       : re.compile('.*Submitted from host <([^>]+)>.*'),
                      'submittedTimeCompile'       : re.compile('(.*): Submitted from host.*'),
                      'cwdCompile'                 : re.compile('.*CWD <([^>]+)>.*'),
-                     'processorsRequestedCompile' : re.compile('.* ([1-9][0-9]*) Processors Requested.*'),
                      'requestedResourcesCompile'  : re.compile('.*Requested Resources <(.+)>;.*'),
                      'spanHostsCompile'           : re.compile('.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                      'rusageMemCompile'           : re.compile('.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
-                     'startedOnCompile'           : re.compile('.*[sS]tarted on ([0-9]+ Hosts/Processors )?([^;,]+).*'),
-                     'startedTimeCompile'         : re.compile('(.*): (\[\d+\])?\s*[sS]tarted on.*'),
-                     'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with).*'),
+                     'startedOnCompile'           : re.compile('(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
+                     'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Completed <exit>).*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is ([1-9][0-9]*) seconds.*'),
-                     'memCompile'                 : re.compile('.*MEM: ([1-9][0-9]*) Mbytes.*'),
+                     'memCompile'                 : re.compile('.* MEM: (\d+(\.\d+)?) [MG]bytes.*'),
                     }
 
     myDic = collections.OrderedDict()
     job = ''
-    #lines = os.popen(command).readlines()
 
     p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     lines = p.stdout.readlines()
@@ -223,9 +220,6 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                 if jobCompileDic['cwdCompile'].match(line):
                     myMatch = jobCompileDic['cwdCompile'].match(line)
                     myDic[job]['cwd'] = myMatch.group(1)
-                if jobCompileDic['processorsRequestedCompile'].match(line):
-                    myMatch = jobCompileDic['processorsRequestedCompile'].match(line)
-                    myDic[job]['processorsRequested'] = myMatch.group(1)
                 if jobCompileDic['requestedResourcesCompile'].match(line):
                     myMatch = jobCompileDic['requestedResourcesCompile'].match(line)
                     myDic[job]['requestedResources'] = myMatch.group(1)
@@ -237,13 +231,13 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                     myDic[job]['rusageMem'] = myMatch.group(1)
                 if jobCompileDic['startedOnCompile'].match(line):
                     myMatch = jobCompileDic['startedOnCompile'].match(line)
-                    startedHost = myMatch.group(2)
+                    myDic[job]['startedTime'] = myMatch.group(1)
+                    startedHost = myMatch.group(3)
                     startedHost = re.sub('<', '', startedHost)
                     startedHost = re.sub('>', '', startedHost)
+                    startedHost = re.sub('\d+\*', '', startedHost)
                     myDic[job]['startedOn'] = startedHost
-                if jobCompileDic['startedTimeCompile'].match(line):
-                    myMatch = jobCompileDic['startedTimeCompile'].match(line)
-                    myDic[job]['startedTime'] = myMatch.group(1)
+                    myDic[job]['processorsRequested'] = myMatch.group(4)
                 if jobCompileDic['finishedTimeCompile'].match(line):
                     myMatch = jobCompileDic['finishedTimeCompile'].match(line)
                     myDic[job]['finishedTime'] = myMatch.group(1)
@@ -253,6 +247,9 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                 if jobCompileDic['memCompile'].match(line):
                     myMatch = jobCompileDic['memCompile'].match(line)
                     myDic[job]['mem'] = myMatch.group(1)
+                    unit = myMatch.group(3)
+                    if unit == 'Gbytes':
+                        myDic[job]['mem'] = float(myDic[job]['mem'])*1024
 
     return(myDic)
  
