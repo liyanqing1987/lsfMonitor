@@ -47,8 +47,8 @@ def getBjobsInfo(command='bjobs -u all -r -w'):
     """
     Get bjobs info with command 'bjobs'.
     ====
-    JOBID   USER    STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME   SUBMIT_TIME
-    146940  tao.che RUN   short      etxnode02   cm067       abstract   Aug  2 21:00  
+    JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
+    101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
     ====
     """
     bjobsDic = getCommandDict(command)
@@ -58,8 +58,8 @@ def getBqueuesInfo(command='bqueues -w'):
     """
     Get bqueues info with command 'bqueues'.
     ====
-    QUEUE_NAME     PRIO      STATUS      MAX  JL/U JL/P JL/H NJOBS  PEND  RUN  SUSP
-    normal          30    Open:Active      -    -    -    -     1     0     1     0
+    QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS 
+    normal           30  Open:Active       -    -    -    -     2     0     2     0    0     0
     ====
     """
     bqueuesDic = getCommandDict(command)
@@ -69,8 +69,8 @@ def getBhostsInfo(command='bhosts -w'):
     """
     Get bhosts info with command 'bhosts'.
     ====
-    HOST_NAME          STATUS       JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV 
-    lavaHost1          ok              -      2      1      1      0      0      0
+    HOST_NAME          STATUS          JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV 
+    cmp01              ok              -       4    2        2    0      0        0
     ====
     """
     bhostsDic = getCommandDict(command)
@@ -80,8 +80,8 @@ def getLshostsInfo(command='lshosts -w'):
     """
     Get lshosts info with command 'lshosts'.
     ====
-    HOST_NAME      type    model  cpuf ncpus maxmem maxswp server RESOURCES
-    lavaHost1     linux  IntelI5 100.0     2  7807M  5119M    Yes (cs)
+    HOST_NAME                     type       model           cpuf     ncpus maxmem maxswp server RESOURCES
+    cmp01                         X86_64     Intel_Platinum  15.0     4     1.7G   1.9G   Yes    (mg)
     ====
     """
     lshostsDic = getCommandDict(command)
@@ -91,8 +91,8 @@ def getLsloadInfo(command='lsload -w'):
     """
     Get lsload info with command 'lsload'.
     ====
-    HOST_NAME       status  r15s   r1m  r15m   ut    pg  ls    it   tmp   swp   mem
-    lavaHost1           ok   0.3   0.1   0.1  19%   0.0   3     5   35G 5120M 6688M
+    ST_NAME               status  r15s   r1m  r15m   ut    pg    ls    it   tmp    swp   mem
+    cmp01                 ok      0.7    0.3  0.2    5%    0.0   1     0    7391M  1.9G  931M
     ====
     """
     lsloadDic = getCommandDict(command)
@@ -104,7 +104,7 @@ def getBusersInfo(command='busers all'):
     Get lsload info with command 'busers'.
     ====
     USER/GROUP          JL/P    MAX  NJOBS   PEND    RUN  SSUSP  USUSP    RSV 
-    yanqing.li             -      -      0      0      0      0      0      0
+    liyanqing           -       -    2       0       2    0      0        0
     ====
     """
     busersDic = getCommandDict(command)
@@ -114,19 +114,23 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
     """
     Parse job info which are from command 'bjobs -u all -r -UF'.
     ====
-    Job <205>, User <liyanqing>, Project <default>, Status <PEND>, Queue <normal>, Command <sleep 1000>
-    Sun May 13 18:08:26: Submitted from host <lavaHost1>, CWD <$HOME>, 2 Processors Requested, Requested Resources <rusage[mem=1234] span[hosts=1]>;
-    PENDING REASONS:
-    New job is waiting for scheduling: 1 host;
+    Job <101>, Job Name <Tesf for lsfMonitor>, User <liyanqing>, Project <lsf_test>, Status <RUN>, Queue <normal>, Command <sleep 12345>, Share group charged </liyanqing>
+    Mon Oct 26 17:43:07: Submitted from host <cmp01>, CWD <$HOME>, 2 Task(s), Requested Resources <span[hosts=1] rusage[mem=123]>;
+    Mon Oct 26 17:43:07: Started 2 Task(s) on Host(s) <2*cmp01>, Allocated 2 Slot(s) on Host(s) <2*cmp01>, Execution Home </home/liyanqing>, Execution CWD </home/liyanqing>;
+    Mon Oct 26 17:46:17: Resource usage collected. MEM: 2 Mbytes; SWAP: 238 Mbytes; NTHREAD: 4; PGID: 10643; PIDs: 10643 10644 10646;
     
-    SCHEDULING PARAMETERS:
-              r15s   r1m  r15m   ut      pg    io   ls    it    tmp    swp    mem
-    loadSched   -     -     -     -       -     -    -     -     -      -      -  
-    loadStop    -     -     -     -       -     -    -     -     -      -      -  
     
-    RESOURCE REQUIREMENT DETAILS:
-    Combined: rusage[mem=1234] span[hosts=1]
-    Effective: rusage[mem=1234] span[hosts=1]
+     MEMORY USAGE:
+     MAX MEM: 2 Mbytes;  AVG MEM: 2 Mbytes
+    
+     SCHEDULING PARAMETERS:
+               r15s   r1m  r15m   ut      pg    io   ls    it    tmp    swp    mem
+     loadSched   -     -     -     -       -     -    -     -     -      -      -  
+     loadStop    -     -     -     -       -     -    -     -     -      -      -  
+    
+     RESOURCE REQUIREMENT DETAILS:
+     Combined: select[type == local] order[r15s:pg] rusage[mem=123.00] span[hosts=1]
+     Effective: select[type == local] order[r15s:pg] rusage[mem=123.00] span[hosts=1]
     ====
     """
     jobCompileDic = {
