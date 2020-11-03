@@ -8,6 +8,7 @@ import stat
 import copy
 import getpass
 import datetime
+import argparse
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView
 from PyQt5.QtGui import QBrush, QFont
@@ -26,26 +27,51 @@ from conf import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
-user = getpass.getuser()
-
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
+    user = getpass.getuser()
     os.environ['XDG_RUNTIME_DIR'] = '/tmp/runtime-' + str(user)
+
     if not os.path.exists(os.environ['XDG_RUNTIME_DIR']):
         os.makedirs(os.environ['XDG_RUNTIME_DIR'])
+
     os.chmod(os.environ['XDG_RUNTIME_DIR'], stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+
+def readArgs():
+    """
+    Read arguments.
+    """
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-j", "--jobid",
+                        type=int,
+                        help='Specify the jobid which show it\'s information on job tab.')
+
+    args = parser.parse_args()
+
+    if args.jobid:
+        command = 'bjobs -w ' + str(args.jobid)
+        job_dic = lsf_common.getBjobsInfo(command)
+
+        if not job_dic:
+            args.jobid = None 
+
+    return(args.jobid)
+
 
 class FigureCanvas(FigureCanvasQTAgg):
     def __init__(self):
         self.figure = Figure()
         super().__init__(self.figure)
 
+
 class mainWindow(QMainWindow):
     """
     Main window of lsfMonitor.
     """
-    def __init__(self):
+    def __init__(self, specified_jobid):
         super().__init__()
+        self.specified_jobid = specified_jobid
         self.freshMark = False
         self.initUI()
 
@@ -173,6 +199,10 @@ class mainWindow(QMainWindow):
         self.genJobTabFrame1()
         self.genJobTabFrame2()
         self.genJobTabFrame3()
+
+        if self.specified_jobid:
+            self.jobTabJobLine.setText(str(self.specified_jobid))
+            self.checkJob()
 
     def genJobTabFrame0(self):
         # self.jobTabFrame0
@@ -345,7 +375,8 @@ class mainWindow(QMainWindow):
             self.jobTabRusageMemLine.setText('')
         else:
             if self.jobInfoDic[self.currentJob]['rusageMem'] != '':
-                self.jobTabRusageMemLine.setText(str(self.jobInfoDic[self.currentJob]['rusageMem']) + ' M')
+                rusageMemValue = round(int(self.jobInfoDic[self.currentJob]['rusageMem'])/1024, 1)
+                self.jobTabRusageMemLine.setText(str(rusageMemValue) + ' G')
                 self.jobTabRusageMemLine.setCursorPosition(0)
 
         # For "Mem" item.
@@ -353,7 +384,8 @@ class mainWindow(QMainWindow):
             self.jobTabMemLine.setText('')
         else:
             if self.jobInfoDic[self.currentJob]['mem'] != '':
-                self.jobTabMemLine.setText(str(self.jobInfoDic[self.currentJob]['mem']) + ' M')
+                memValue = round(int(self.jobInfoDic[self.currentJob]['mem'])/1024, 1)
+                self.jobTabMemLine.setText(str(memValue) + ' G')
                 self.jobTabMemLine.setCursorPosition(0)
 
     def updateJobTabFrame2(self, init=False):
@@ -1203,13 +1235,15 @@ class mainWindow(QMainWindow):
         """
         print('Bye')
 
+
 #################
 # Main Function #
 #################
 def main():
+    (specified_jobid) = readArgs()
     print('* Loading LSF status, please wait a moment ...')
     app = QApplication(sys.argv)
-    mw = mainWindow()
+    mw = mainWindow(specified_jobid)
     mw.show()
     sys.exit(app.exec_())
 
