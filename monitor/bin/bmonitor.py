@@ -769,8 +769,8 @@ class mainWindow(QMainWindow):
 
         self.hostsTabTable.setShowGrid(True)
         self.hostsTabTable.setSortingEnabled(True)
-        self.hostsTabTable.setColumnCount(10)
-        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Njobs', 'Ncpus', 'Ut (%)', 'Mem (G)', 'Maxmem (G)', 'swp (G)', 'maxswp (G)'])
+        self.hostsTabTable.setColumnCount(11)
+        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Mem (G)', 'Maxmem (G)', 'swp (G)', 'maxswp (G)'])
 
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -782,6 +782,7 @@ class mainWindow(QMainWindow):
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(9, QHeaderView.Stretch)
+        self.hostsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
 
         queue = self.hostsTabQueueCombo.currentText().strip()
 
@@ -825,16 +826,6 @@ class mainWindow(QMainWindow):
                 self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
-            index = bhostsDic['HOST_NAME'].index(host)
-            njobs = bhostsDic['NJOBS'][index]
-            if not re.match('^[0-9]+$', njobs):
-                common.printWarning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
-                njobs = 0
-            item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(njobs))
-            self.hostsTabTable.setItem(i, j, item)
-
-            j = j+1
             index = lshostsDic['HOST_NAME'].index(host)
             ncpus = lshostsDic['ncpus'][index]
             if not re.match('^[0-9]+$', ncpus):
@@ -842,6 +833,26 @@ class mainWindow(QMainWindow):
                 ncpus = 0
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(ncpus))
+            self.hostsTabTable.setItem(i, j, item)
+
+            j = j+1
+            index = bhostsDic['HOST_NAME'].index(host)
+            max = bhostsDic['MAX'][index]
+            if not re.match('^[0-9]+$', max):
+                common.printWarning('*Warning*: host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".')
+                max = 0
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, int(max))
+            self.hostsTabTable.setItem(i, j, item)
+
+            j = j+1
+            index = bhostsDic['HOST_NAME'].index(host)
+            njobs = bhostsDic['NJOBS'][index]
+            if not re.match('^[0-9]+$', njobs):
+                common.printWarning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
+                njobs = 0
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, int(njobs))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -934,9 +945,9 @@ class mainWindow(QMainWindow):
         if item != None:
             currentRow = self.hostsTabTable.currentRow()
             host = self.hostsTabTable.item(currentRow, 0).text().strip()
-            njobsNum = self.hostsTabTable.item(currentRow, 3).text().strip()
+            njobsNum = self.hostsTabTable.item(currentRow, 5).text().strip()
 
-            if (item.column() == 0) or (item.column() == 3):
+            if (item.column() == 0) or (item.column() == 5):
                 if int(njobsNum) > 0:
                     self.jobsTabUserLine.setText('')
                     self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
