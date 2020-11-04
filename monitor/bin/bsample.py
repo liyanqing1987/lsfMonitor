@@ -50,6 +50,7 @@ def readArgs():
 
     return(args.job, args.queue, args.host, args.load, args.user, args.interval)
 
+
 class sampling:
     """
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
@@ -240,7 +241,7 @@ class sampling:
         hostList = bhostsDic['HOST_NAME']
         hostSqlDic = {}
 
-        keyList = ['sampleTime', 'MAX', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
+        keyList = ['sampleTime', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
 
         for i in range(len(hostList)):
             host = hostList[i]
@@ -433,6 +434,7 @@ class sampling:
                  break
             elif self.interval > 0:
                  time.sleep(self.interval)
+
 
 #################
 # Main Function #
