@@ -258,7 +258,7 @@ class sampling:
                 hostSqlDic[host]['keyString'] = keyString
 
             # Insert sql table value.
-            valueList = [self.sampleTime, bhostsDic['MAX'][i], bhostsDic['NJOBS'][i], bhostsDic['RUN'][i], bhostsDic['SSUSP'][i], bhostsDic['USUSP'][i]]
+            valueList = [self.sampleTime, bhostsDic['NJOBS'][i], bhostsDic['RUN'][i], bhostsDic['SSUSP'][i], bhostsDic['USUSP'][i]]
             valueString = sqlite3_common.genSqlTableValueString(valueList)
             hostSqlDic[host]['valueString'] = valueString
 
