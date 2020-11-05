@@ -41,6 +41,7 @@ SHELL=/bin/csh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -j
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -q
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -l
 
 Suggested sampling frequency is 5 minutes.
 You can also sample host/load/user info with bsample.py.
