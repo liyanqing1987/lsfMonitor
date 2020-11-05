@@ -150,7 +150,7 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                      'startedOnCompile'           : re.compile('(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
                      'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Completed <exit>).*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is ([1-9][0-9]*) seconds.*'),
-                     'memCompile'                 : re.compile('.* MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
+                     'memCompile'                 : re.compile('.*\. MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
                     }
 
     myDic = collections.OrderedDict()
