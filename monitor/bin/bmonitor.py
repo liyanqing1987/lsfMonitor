@@ -95,18 +95,21 @@ class mainWindow(QMainWindow):
         self.jobsTab   = QWidget()
         self.hostsTab  = QWidget()
         self.queuesTab = QWidget()
+        self.loadTab   = QWidget()
 
         # Add the sub-tabs into main Tab widget
         self.mainTab.addTab(self.jobTab, 'JOB')
         self.mainTab.addTab(self.jobsTab, 'JOBS')
         self.mainTab.addTab(self.hostsTab, 'HOSTS')
         self.mainTab.addTab(self.queuesTab, 'QUEUES')
+        self.mainTab.addTab(self.loadTab, 'LOAD')
 
         # Generate the sub-tabs
         self.genJobTab()
         self.genJobsTab()
         self.genHostsTab()
         self.genQueuesTab()
+        self.genLoadTab()
 
         # Show main window
         self.resize(1111, 620)
@@ -281,11 +284,11 @@ class mainWindow(QMainWindow):
         self.jobTabFrame2.setLayout(jobTabFrame2Grid)
 
     def genJobTabFrame3(self):
-        # self.jobTabFram3
+        # self.jobTabFrame3
         self.jobMemFigureCanvas = FigureCanvas()
         self.jobMemNavigationToolbar = NavigationToolbar2QT(self.jobMemFigureCanvas, self)
 
-        # self.jobTabFram3 - Grid
+        # self.jobTabFrame3 - Grid
         jobTabFrame3Grid = QGridLayout()
         jobTabFrame3Grid.addWidget(self.jobMemNavigationToolbar, 0, 0)
         jobTabFrame3Grid.addWidget(self.jobMemFigureCanvas, 1, 0)
@@ -402,7 +405,7 @@ class mainWindow(QMainWindow):
         """
         Get job sample-time mem list for self.currentJob.
         """
-        realRuntimeList = []
+        runtimeList = []
         realMemList = []
 
         jobRangeDic = common.getJobRangeDic([self.currentJob,])
@@ -416,7 +419,7 @@ class mainWindow(QMainWindow):
             (jobDbFileConnectResult, jobDbConn) = sqlite3_common.connectDbFile(jobDbFile)
 
             if jobDbFileConnectResult == 'failed':
-                common.printWarning('*Warning*: Failed on connectiong job database file "' + str(jobDbFile) + '".')
+                common.printWarning('*Warning*: Failed on connecting job database file "' + str(jobDbFile) + '".')
             else:
                 print('Getting history of job memory usage for job "' + str(self.currentJob) + '".')
                 tableName = 'job_' + str(self.currentJob)
@@ -425,15 +428,15 @@ class mainWindow(QMainWindow):
                 if not dataDic:
                     common.printWarning('*Warning*: job memory usage information is empty for "' + str(self.currentJob) + '".')
                 else:
-                    runtimeList = dataDic['sampleTime']
+                    sampleTimeList = dataDic['sampleTime']
                     memList = dataDic['mem']
-                    firstRuntime = datetime.datetime.strptime(str(runtimeList[0]), '%Y%m%d_%H%M%S').timestamp()
+                    firstSampleTime = datetime.datetime.strptime(str(sampleTimeList[0]), '%Y%m%d_%H%M%S').timestamp()
 
-                    for i in range(len(runtimeList)):
-                        runtime = runtimeList[i]
-                        currentRuntime = datetime.datetime.strptime(str(runtime), '%Y%m%d_%H%M%S').timestamp()
-                        realRuntime = int((currentRuntime-firstRuntime)/60)
-                        realRuntimeList.append(realRuntime)
+                    for i in range(len(sampleTimeList)):
+                        sampleTime = sampleTimeList[i]
+                        currentTime = datetime.datetime.strptime(str(sampleTime), '%Y%m%d_%H%M%S').timestamp()
+                        runtime = int((currentTime-firstSampleTime)/60)
+                        runtimeList.append(runtime)
                         mem = memList[i]
                         if mem == '':
                              mem = '0'
@@ -442,21 +445,11 @@ class mainWindow(QMainWindow):
 
                 jobDbConn.close()
 
-        return(realRuntimeList, realMemList)
-
-    def drawJobMemCurve(self, fig, runtimeList, memList):
-        fig.subplots_adjust(bottom=0.2)
-        axes = fig.add_subplot(111)
-        axes.set_title('job "' + str(self.currentJob) + '" memory curve')
-        axes.set_xlabel('Runtime (Minutes)')
-        axes.set_ylabel('Memory Usage (G)')
-        axes.plot(runtimeList, memList, 'ro-', color='red')
-        axes.grid()
-        self.jobMemFigureCanvas.draw()
+        return(runtimeList, realMemList)
 
     def updateJobTabFrame3(self, init=False):
         """
-        Draw memory curve for current job, save the png picture and show it on self.jobTabFrame3.
+        Draw memory curve for current job on self.jobTabFrame3.
         """
         fig = self.jobMemFigureCanvas.figure
         fig.clear()
@@ -467,6 +460,16 @@ class mainWindow(QMainWindow):
                 (runtimeList, memList) = self.getJobMemList()
                 if runtimeList and memList:
                     self.drawJobMemCurve(fig, runtimeList, memList)
+
+    def drawJobMemCurve(self, fig, runtimeList, memList):
+        fig.subplots_adjust(bottom=0.2)
+        axes = fig.add_subplot(111)
+        axes.set_title('job "' + str(self.currentJob) + '" memory curve')
+        axes.set_xlabel('Runtime (Minutes)')
+        axes.set_ylabel('Memory Usage (G)')
+        axes.plot(runtimeList, memList, 'ro-', color='red')
+        axes.grid()
+        self.jobMemFigureCanvas.draw()
 ## For job TAB (end) ## 
 
 
@@ -497,41 +500,6 @@ class mainWindow(QMainWindow):
         # Generate sub-frame
         self.genJobsTabFrame0()
         self.genJobsTabTable()
-
-    def setJobsTabStatusCombo(self, statusList):
-        """
-        Set (initialize) self.jobsTabStatusCombo.
-        """
-        self.jobsTabStatusCombo.clear()
-
-        for status in statusList:
-            self.jobsTabStatusCombo.addItem(status)
-
-    def setJobsTabQueueCombo(self, queueList=[]):
-        """
-        Set (initialize) self.jobsTabQueueCombo.
-        """
-        self.jobsTabQueueCombo.clear()
-
-        if not queueList:
-            queueList = copy.deepcopy(self.queueList)
-            queueList.insert(0, 'ALL')
-
-        for queue in queueList:
-            self.jobsTabQueueCombo.addItem(queue)
-
-    def setJobsTabStartedOnCombo(self, hostList=[]):
-        """
-        Set (initialize) self.jobsTabStartedOnCombo.
-        """
-        self.jobsTabStartedOnCombo.clear()
-
-        if not hostList:
-            hostList = copy.deepcopy(self.hostList)
-            hostList.insert(0, 'ALL')
-
-        for host in hostList:
-            self.jobsTabStartedOnCombo.addItem(host)
 
     def genJobsTabFrame0(self):
         # self.jobsTabFrame0
@@ -699,6 +667,41 @@ class mainWindow(QMainWindow):
                     self.jobTabJobLine.setText(job)
                     self.checkJob()
                     self.mainTab.setCurrentWidget(self.jobTab)
+
+    def setJobsTabStatusCombo(self, statusList):
+        """
+        Set (initialize) self.jobsTabStatusCombo.
+        """
+        self.jobsTabStatusCombo.clear()
+
+        for status in statusList:
+            self.jobsTabStatusCombo.addItem(status)
+
+    def setJobsTabQueueCombo(self, queueList=[]):
+        """
+        Set (initialize) self.jobsTabQueueCombo.
+        """
+        self.jobsTabQueueCombo.clear()
+
+        if not queueList:
+            queueList = copy.deepcopy(self.queueList)
+            queueList.insert(0, 'ALL')
+
+        for queue in queueList:
+            self.jobsTabQueueCombo.addItem(queue)
+
+    def setJobsTabStartedOnCombo(self, hostList=[]):
+        """
+        Set (initialize) self.jobsTabStartedOnCombo.
+        """
+        self.jobsTabStartedOnCombo.clear()
+
+        if not hostList:
+            hostList = copy.deepcopy(self.hostList)
+            hostList.insert(0, 'ALL')
+
+        for host in hostList:
+            self.jobsTabStartedOnCombo.addItem(host)
 ## For jobs TAB (end) ## 
 
 
@@ -730,21 +733,9 @@ class mainWindow(QMainWindow):
         self.genHostsTabFrame0()
         self.genHostsTabTable()
 
-    def setHostsTabQueueCombo(self):
-        """
-        Set (initialize) self.hostsTabQueueCombo.
-        """
-        self.hostsTabQueueCombo.clear()
-
-        queueList = copy.deepcopy(self.queueList)
-        queueList.insert(0, 'ALL')
-
-        for queue in queueList:
-            self.hostsTabQueueCombo.addItem(queue)
-
     def genHostsTabFrame0(self):
         # self.hostsTabFrame0
-        hostsTabQueueLabel = QLabel('       Queue', self.hostsTabFrame0)
+        hostsTabQueueLabel = QLabel('Queue', self.hostsTabFrame0)
         hostsTabQueueLabel.setStyleSheet("font-weight: bold;")
         self.hostsTabQueueCombo = QComboBox(self.hostsTabFrame0)
         self.setHostsTabQueueCombo()
@@ -760,7 +751,7 @@ class mainWindow(QMainWindow):
 
         hostsTabFrame0Grid.setColumnStretch(1, 1)
         hostsTabFrame0Grid.setColumnStretch(2, 1)
-        hostsTabFrame0Grid.setColumnStretch(3, 8)
+        hostsTabFrame0Grid.setColumnStretch(3, 12)
 
         self.hostsTabFrame0.setLayout(hostsTabFrame0Grid)
 
@@ -784,7 +775,7 @@ class mainWindow(QMainWindow):
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(9, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
 
-        queue = self.hostsTabQueueCombo.currentText().strip()
+        specifiedQueue = self.hostsTabQueueCombo.currentText().strip()
 
         bhostsDic  = lsf_common.getBhostsInfo()
         lshostsDic = lsf_common.getLshostsInfo()
@@ -794,12 +785,12 @@ class mainWindow(QMainWindow):
         # Get expected host list
         self.queueHostList = []
 
-        if queue == 'ALL':
+        if specifiedQueue == 'ALL':
             self.queueHostList = self.hostList
         else:
             for host in self.hostList:
                 if host in hostQueueDic:
-                    if queue in hostQueueDic[host]:
+                    if specifiedQueue in hostQueueDic[host]:
                         self.queueHostList.append(host)
 
         self.hostsTabTable.setRowCount(len(self.queueHostList))
@@ -963,6 +954,18 @@ class mainWindow(QMainWindow):
                     self.mainTab.setCurrentWidget(self.jobsTab)
 
                 self.mainTab.setCurrentWidget(self.jobsTab)
+
+    def setHostsTabQueueCombo(self):
+        """
+        Set (initialize) self.hostsTabQueueCombo.
+        """
+        self.hostsTabQueueCombo.clear()
+
+        queueList = copy.deepcopy(self.queueList)
+        queueList.insert(0, 'ALL')
+
+        for queue in queueList:
+            self.hostsTabQueueCombo.addItem(queue)
 ## For hosts TAB (end) ## 
 
 
@@ -1132,6 +1135,36 @@ class mainWindow(QMainWindow):
                     self.genJobsTabTable()
                     self.mainTab.setCurrentWidget(self.jobsTab)
 
+    def updateQueueTabFrame0(self, queue):
+        """
+        Draw queue (PEND/RUN) job number current job, save the png picture and show it on self.queuesTabFrame0.
+        """
+        fig = self.queueJobNumFigureCanvas.figure
+        fig.clear()
+        self.queueJobNumFigureCanvas.draw()
+
+        (dateList, pendList, runList) = self.getQueueJobNumList(queue)
+
+        if dateList and pendList and runList:
+            for i in range(len(dateList)):
+                dateList[i] = datetime.datetime.strptime(dateList[i], '%Y%m%d')
+
+            self.drawQueueJobNumCurve(fig, queue, dateList, pendList, runList)
+
+    def updateQueueTabFrame1(self, queue):
+        """
+        Show queue detailed informations on self.queuesTabText.
+        """
+        self.queuesTabText.clear()
+
+        command = 'bqueues -l ' + str(queue)
+        lines = os.popen(command).readlines()
+
+        for line in lines:
+            self.queuesTabText.insertPlainText(line)
+
+        pyqt5_common.textEditVisiblePosition(self.queuesTabText, 'Start')
+
     def getQueueJobNumList(self, queue):
         """
         Draw (PEND/RUN) job number curve for specified queueu.
@@ -1150,7 +1183,7 @@ class mainWindow(QMainWindow):
             (queueDbFileConnectResult, queueDbConn) = sqlite3_common.connectDbFile(queueDbFile)
 
             if queueDbFileConnectResult == 'failed':
-                common.printWarning('*Warning*: Failed on connectiong queue database file "' + str(self.queueDbFile) + '".')
+                common.printWarning('*Warning*: Failed on connecting queue database file "' + str(self.queueDbFile) + '".')
             else:
                 print('Getting history of queue PEND/RUN job number for queue "' + str(queue) + '".')
                 tableName = 'queue_' + str(queue)
@@ -1208,37 +1241,213 @@ class mainWindow(QMainWindow):
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.queueJobNumFigureCanvas.draw()
-
-    def updateQueueTabFrame0(self, queue):
-        """
-        Draw queue (PEND/RUN) job number current job, save the png picture and show it on self.queuesTabFrame0.
-        """
-        fig = self.queueJobNumFigureCanvas.figure
-        fig.clear()
-        self.queueJobNumFigureCanvas.draw()
-
-        (dateList, pendList, runList) = self.getQueueJobNumList(queue) 
-
-        if dateList and pendList and runList:
-            for i in range(len(dateList)):
-                dateList[i] = datetime.datetime.strptime(dateList[i], '%Y%m%d')
-
-            self.drawQueueJobNumCurve(fig, queue, dateList, pendList, runList)
-
-    def updateQueueTabFrame1(self, queue):
-        """
-        Show queue detailed informations on self.queuesTabText.
-        """
-        self.queuesTabText.clear()
-
-        command = 'bqueues -l ' + str(queue)
-        lines = os.popen(command).readlines()
-
-        for line in lines:
-            self.queuesTabText.insertPlainText(line)
-
-        pyqt5_common.textEditVisiblePosition(self.queuesTabText, 'Start')
 ## For queues TAB (end) ## 
+
+## For load TAB (start) ## 
+    def genLoadTab(self):
+        """
+        Generate the load tab on lsfMonitor GUI, show host load (ut/mem) information.
+        """
+        # self.loadTab
+        self.loadTabFrame0 = QFrame(self.loadTab)
+        self.loadTabFrame1 = QFrame(self.loadTab)
+        self.loadTabFrame2 = QFrame(self.loadTab)
+
+        self.loadTabFrame0.setFrameShadow(QFrame.Raised)
+        self.loadTabFrame0.setFrameShape(QFrame.Box)
+        self.loadTabFrame1.setFrameShadow(QFrame.Raised)
+        self.loadTabFrame1.setFrameShape(QFrame.Box)
+        self.loadTabFrame2.setFrameShadow(QFrame.Raised)
+        self.loadTabFrame2.setFrameShape(QFrame.Box)
+
+        # self.loadTab - Grid
+        loadTabGrid = QGridLayout()
+
+        loadTabGrid.addWidget(self.loadTabFrame0, 0, 0)
+        loadTabGrid.addWidget(self.loadTabFrame1, 1, 0)
+        loadTabGrid.addWidget(self.loadTabFrame2, 2, 0)
+
+        loadTabGrid.setRowStretch(0, 1)
+        loadTabGrid.setRowStretch(1, 5)
+        loadTabGrid.setRowStretch(2, 5)
+
+        self.loadTab.setLayout(loadTabGrid)
+
+        # Generate sub-frame
+        self.genLoadTabFrame0()
+        self.genLoadTabFrame1()
+        self.genLoadTabFrame2()
+
+    def genLoadTabFrame0(self):
+        # self.loadTabFrame0
+        loadTabHostLabel = QLabel('Host', self.loadTabFrame0)
+        loadTabHostLabel.setStyleSheet("font-weight: bold;")
+        self.loadTabHostCombo = QComboBox(self.loadTabFrame0)
+        self.setLoadTabHostCombo()
+        self.loadTabHostCombo.currentIndexChanged.connect(self.updateLoadTabLoadInfo)
+        loadTabEmptyLabel = QLabel('')
+
+        # self.loadTabFrame0 - Grid
+        loadTabFrame0Grid = QGridLayout()
+
+        loadTabFrame0Grid.addWidget(loadTabHostLabel, 0, 1)
+        loadTabFrame0Grid.addWidget(self.loadTabHostCombo, 0, 2)
+        loadTabFrame0Grid.addWidget(loadTabEmptyLabel, 0, 3)
+
+        loadTabFrame0Grid.setColumnStretch(1, 1)
+        loadTabFrame0Grid.setColumnStretch(2, 1)
+        loadTabFrame0Grid.setColumnStretch(3, 12)
+
+        self.loadTabFrame0.setLayout(loadTabFrame0Grid)
+
+    def genLoadTabFrame1(self):
+        # self.loadTabFrame1
+        self.hostUtFigureCanvas = FigureCanvas()
+        self.hostUtNavigationToolbar = NavigationToolbar2QT(self.hostUtFigureCanvas, self)
+
+        # self.loadTabFrame1 - Grid
+        loadTabFrame1Grid = QGridLayout()
+        loadTabFrame1Grid.addWidget(self.hostUtNavigationToolbar, 0, 0)
+        loadTabFrame1Grid.addWidget(self.hostUtFigureCanvas, 1, 0)
+        self.loadTabFrame1.setLayout(loadTabFrame1Grid)
+
+    def genLoadTabFrame2(self):
+        # self.loadTabFrame2
+        self.hostMemFigureCanvas = FigureCanvas()
+        self.hostMemNavigationToolbar = NavigationToolbar2QT(self.hostUtFigureCanvas, self)
+
+        # self.loadTabFrame2 - Grid
+        loadTabFrame2Grid = QGridLayout()
+        loadTabFrame2Grid.addWidget(self.hostMemNavigationToolbar, 0, 0)
+        loadTabFrame2Grid.addWidget(self.hostMemFigureCanvas, 1, 0)
+        self.loadTabFrame2.setLayout(loadTabFrame2Grid)
+
+    def setLoadTabHostCombo(self):
+        """
+        Set (initialize) self.loadTabHostCombo.
+        """
+        self.loadTabHostCombo.clear()
+
+        hostList = copy.deepcopy(self.hostList)
+        hostList.insert(0, '')
+
+        for host in hostList:
+            self.loadTabHostCombo.addItem(host)
+
+    def updateLoadTabLoadInfo(self):
+        """
+        Update self.loadTabFrame1 (ut information) and self.loadTabFrame2 (memory information).
+        """
+        self.specifiedHost = self.loadTabHostCombo.currentText().strip()
+
+        self.updateLoadTabFrame1([], [])
+        self.updateLoadTabFrame2([], [])
+
+        (sampleTimeList, utList, memList) = self.getLoadInfo()
+
+        self.updateLoadTabFrame1(sampleTimeList, utList)
+        self.updateLoadTabFrame2(sampleTimeList, memList)
+
+    def getLoadInfo(self):
+        """
+        Get sampleTime/ut/mem list for specified host.
+        """
+        sampleTimeList = []
+        utList = []
+        memList = []
+
+        loadDbFile = str(config.dbPath) + '/monitor/load.db'
+
+        if not os.path.exists(loadDbFile):
+            common.printWarning('*Warning*: load database "' + str(loadDbFile) + '" is missing.')
+        else:
+            (loadDbFileConnectResult, loadDbConn) = sqlite3_common.connectDbFile(loadDbFile)
+          
+            if loadDbFileConnectResult == 'failed':
+                common.printWarning('*Warning*: Failed on connecting load database file "' + str(loadDbFile) + '".')
+            else:
+                print('Getting history of load information for host "' + str(self.specifiedHost) + '".')
+                tableName = 'load_' + str(self.specifiedHost)
+                dataDic = sqlite3_common.getSqlTableData(loadDbFile, loadDbConn, tableName, ['sampleTime', 'ut', 'mem'])
+
+                if not dataDic:
+                    common.printWarning('*Warning*: load information is empty for "' + str(self.specifiedHost) + '".')
+                else:
+                    sampleTimeList = dataDic['sampleTime']
+                    utList = dataDic['ut']
+                    memList = dataDic['mem']
+
+                loadDbConn.close()
+
+        for (i, sampleTime) in enumerate(sampleTimeList):
+            sampleTimeList[i] = datetime.datetime.strptime(sampleTime, '%Y%m%d_%H%M%S')
+
+        for (i, ut) in enumerate(utList):
+            if ut:
+                utList[i] = int(re.sub('%', '', ut))
+            else:
+                utList[i] = 0
+
+        for (i, mem) in enumerate(memList):
+            if mem:
+                if re.match('.*M', mem):
+                    memList[i] = round(float(re.sub('M', '', mem))/1024, 1)
+                elif re.match('.*G', mem):
+                    memList[i] = round(float(re.sub('G', '', mem)), 1)
+                elif re.match('.*T', mem):
+                    memList[i] = round(float(re.sub('T', '', mem))*1024, 1)
+            else:
+                memList[i] = 0
+
+        return(sampleTimeList, utList, memList)
+
+    def updateLoadTabFrame1(self, sampleTimeList, utList):
+        """
+        Draw Ut curve for specified host on self.loadTabFrame1.
+        """
+        fig = self.hostUtFigureCanvas.figure
+        fig.clear()
+        self.hostUtFigureCanvas.draw()
+
+        if sampleTimeList and utList:
+            self.drawHostUtCurve(fig, sampleTimeList, utList)
+
+    def drawHostUtCurve(self, fig, sampleTimeList, utList):
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+        axes.set_title('host "' + str(self.specifiedHost) + '" ut curve')
+        axes.set_xlabel('Sample Time')
+        axes.set_ylabel('Cpu Utilization (%)')
+        axes.plot(sampleTimeList, utList, 'ro-', color='red')
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.hostUtFigureCanvas.draw()
+
+    def updateLoadTabFrame2(self, sampleTimeList, memList):
+        """
+        Draw mem curve for specified host on self.loadTabFrame2.
+        """
+        fig = self.hostMemFigureCanvas.figure
+        fig.clear()
+        self.hostMemFigureCanvas.draw()
+
+        if sampleTimeList and memList:
+            self.drawHostMemCurve(fig, sampleTimeList, memList)
+
+    def drawHostMemCurve(self, fig, sampleTimeList, memList):
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+        axes.set_title('host "' + str(self.specifiedHost) + '" avaliable mem curve')
+        axes.set_xlabel('Sample Time')
+        axes.set_ylabel('Available RAM (G)')
+        axes.plot(sampleTimeList, memList, 'ro-', color='red')
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.hostMemFigureCanvas.draw()
+
+## For load TAB (end) ## 
 
     def closeEvent(self, QCloseEvent):
         """
