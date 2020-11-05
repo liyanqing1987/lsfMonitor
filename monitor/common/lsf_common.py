@@ -140,7 +140,7 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                      'projectCompile'             : re.compile('.*Project <([^>]+)>.*'),
                      'statusCompile'              : re.compile('.*Status <([A-Z]+)>*'),
                      'queueCompile'               : re.compile('.*Queue <([^>]+)>.*'),
-                     'commandCompile'             : re.compile('.*Command <(.+)>\s*$'),
+                     'commandCompile'             : re.compile('.*Command <(.+?)>.*$'),
                      'submittedFromCompile'       : re.compile('.*Submitted from host <([^>]+)>.*'),
                      'submittedTimeCompile'       : re.compile('(.*): Submitted from host.*'),
                      'cwdCompile'                 : re.compile('.*CWD <([^>]+)>.*'),
