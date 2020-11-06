@@ -648,6 +648,9 @@ class mainWindow(QMainWindow):
                 item = QTableWidgetItem()
                 memValue = round(float(jobDic[job]['mem'])/1024, 1)
                 item.setData(Qt.DisplayRole, memValue)
+                if ((not jobDic[job]['rusageMem']) and (memValue > 0)) or (jobDic[job]['rusageMem'] and (memValue > rusageMemValue)):
+                    item.setFont(QFont('song', 10, QFont.Bold))
+                    item.setForeground(QBrush(Qt.red))
                 self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -760,8 +763,8 @@ class mainWindow(QMainWindow):
 
         self.hostsTabTable.setShowGrid(True)
         self.hostsTabTable.setSortingEnabled(True)
-        self.hostsTabTable.setColumnCount(11)
-        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Mem (G)', 'Maxmem (G)', 'swp (G)', 'maxswp (G)'])
+        self.hostsTabTable.setColumnCount(12)
+        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Maxmem (G)', 'Mem (G)', 'Maxswp', 'Swp (G)', 'Tmp (G)'])
 
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -774,6 +777,7 @@ class mainWindow(QMainWindow):
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(9, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
+        self.hostsTabTable.horizontalHeader().setSectionResizeMode(11, QHeaderView.Stretch)
 
         specifiedQueue = self.hostsTabQueueCombo.currentText().strip()
 
@@ -805,7 +809,7 @@ class mainWindow(QMainWindow):
             index = bhostsDic['HOST_NAME'].index(host)
             status = bhostsDic['STATUS'][index]
             item = QTableWidgetItem(status)
-            if str(status) == 'closed':
+            if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
             self.hostsTabTable.setItem(i, j, item)
@@ -855,24 +859,9 @@ class mainWindow(QMainWindow):
                 ut = 0
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(ut))
-            self.hostsTabTable.setItem(i, j, item)
-
-            j = j+1
-            index = lsloadDic['HOST_NAME'].index(host)
-            mem = lsloadDic['mem'][index]
-            if re.search('M', mem):
-                mem = re.sub('M', '', mem)
-                mem = float(mem)/1024
-            elif re.search('G', mem):
-                mem = re.sub('G', '', mem)
-            elif re.search('T', mem):
-                mem = re.sub('T', '', mem)
-                mem = float(mem)*1024
-            else:
-                common.printWarning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
-                mem = 0
-            item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(mem)))
+            if int(ut) > 90:
+                item.setFont(QFont('song', 10, QFont.Bold))
+                item.setForeground(QBrush(Qt.red))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -895,20 +884,23 @@ class mainWindow(QMainWindow):
 
             j = j+1
             index = lsloadDic['HOST_NAME'].index(host)
-            swp = lsloadDic['swp'][index]
-            if re.search('M', swp):
-                swp = re.sub('M', '', swp)
-                swp = float(swp)/1024
-            elif re.search('G', swp):
-                swp = re.sub('G', '', swp)
-            elif re.search('T', swp):
-                swp = re.sub('T', '', swp)
-                swp = float(swp)*1024
+            mem = lsloadDic['mem'][index]
+            if re.search('M', mem):
+                mem = re.sub('M', '', mem)
+                mem = float(mem)/1024
+            elif re.search('G', mem):
+                mem = re.sub('G', '', mem)
+            elif re.search('T', mem):
+                mem = re.sub('T', '', mem)
+                mem = float(mem)*1024
             else:
-                common.printWarning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
-                swp = 0
+                common.printWarning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
+                mem = 0
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(swp)))
+            item.setData(Qt.DisplayRole, int(float(mem)))
+            if float(mem)/float(maxmem) < 0.1:
+                item.setFont(QFont('song', 10, QFont.Bold))
+                item.setForeground(QBrush(Qt.red))
             self.hostsTabTable.setItem(i, j, item)
 
             j = j+1
@@ -927,6 +919,45 @@ class mainWindow(QMainWindow):
                 maxswp = 0
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(maxswp)))
+            self.hostsTabTable.setItem(i, j, item)
+
+            j = j+1
+            index = lsloadDic['HOST_NAME'].index(host)
+            swp = lsloadDic['swp'][index]
+            if re.search('M', swp):
+                swp = re.sub('M', '', swp)
+                swp = float(swp)/1024
+            elif re.search('G', swp):
+                swp = re.sub('G', '', swp)
+            elif re.search('T', swp):
+                swp = re.sub('T', '', swp)
+                swp = float(swp)*1024
+            else:
+                common.printWarning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
+                swp = 0
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, int(float(swp)))
+            self.hostsTabTable.setItem(i, j, item)
+
+            j = j+1
+            index = lsloadDic['HOST_NAME'].index(host)
+            tmp = lsloadDic['tmp'][index]
+            if re.search('M', tmp):
+                tmp = re.sub('M', '', tmp)
+                tmp = float(tmp)/1024
+            elif re.search('G', tmp):
+                tmp = re.sub('G', '', tmp)
+            elif re.search('T', tmp):
+                tmp = re.sub('T', '', tmp)
+                tmp = float(tmp)*1024
+            else:
+                common.printWarning('*Warning*: host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".')
+                tmp = 0
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, int(float(tmp)))
+            if int(float(tmp)) == 0:
+                item.setFont(QFont('song', 10, QFont.Bold))
+                item.setForeground(QBrush(Qt.red))
             self.hostsTabTable.setItem(i, j, item)
 
     def hostsTabCheckClick(self, item=None):
