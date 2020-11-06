@@ -898,7 +898,7 @@ class mainWindow(QMainWindow):
                 mem = 0
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(mem)))
-            if float(mem)/float(maxmem) < 0.1:
+            if (maxmem and (float(mem)/float(maxmem) < 0.1)):
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
             self.hostsTabTable.setItem(i, j, item)
