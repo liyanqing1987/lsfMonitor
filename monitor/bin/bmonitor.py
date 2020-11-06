@@ -184,8 +184,8 @@ class mainWindow(QMainWindow):
         jobTabGrid.addWidget(self.jobTabFrame3, 0, 1, 2, 1)
 
         jobTabGrid.setRowStretch(0, 1)
-        jobTabGrid.setRowStretch(1, 10)
-        jobTabGrid.setRowStretch(2, 5)
+        jobTabGrid.setRowStretch(1, 14)
+        jobTabGrid.setRowStretch(2, 6)
         jobTabGrid.setColumnStretch(0, 1)
         jobTabGrid.setColumnStretch(1, 10)
 
@@ -493,7 +493,7 @@ class mainWindow(QMainWindow):
         jobsTabGrid.addWidget(self.jobsTabTable, 1, 0)
 
         jobsTabGrid.setRowStretch(0, 1)
-        jobsTabGrid.setRowStretch(1, 10)
+        jobsTabGrid.setRowStretch(1, 20)
 
         self.jobsTab.setLayout(jobsTabGrid)
 
@@ -725,7 +725,7 @@ class mainWindow(QMainWindow):
         hostsTabGrid.addWidget(self.hostsTabTable, 1, 0)
 
         hostsTabGrid.setRowStretch(0, 1)
-        hostsTabGrid.setRowStretch(1, 10)
+        hostsTabGrid.setRowStretch(1, 20)
 
         self.hostsTab.setLayout(hostsTabGrid)
 
@@ -1268,8 +1268,8 @@ class mainWindow(QMainWindow):
         loadTabGrid.addWidget(self.loadTabFrame2, 2, 0)
 
         loadTabGrid.setRowStretch(0, 1)
-        loadTabGrid.setRowStretch(1, 5)
-        loadTabGrid.setRowStretch(2, 5)
+        loadTabGrid.setRowStretch(1, 10)
+        loadTabGrid.setRowStretch(2, 10)
 
         self.loadTab.setLayout(loadTabGrid)
 
