@@ -12,7 +12,7 @@ import argparse
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView
 from PyQt5.QtGui import QBrush, QFont
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -54,7 +54,7 @@ def readArgs():
         job_dic = lsf_common.getBjobsInfo(command)
 
         if not job_dic:
-            args.jobid = None 
+            args.jobid = None
 
     return(args.jobid)
 
@@ -72,19 +72,14 @@ class mainWindow(QMainWindow):
     def __init__(self, specified_jobid):
         super().__init__()
         self.specified_jobid = specified_jobid
-        self.freshMark = False
         self.initUI()
 
     def initUI(self):
         """
         Main process, draw the main graphic frame.
         """
-        self.queueList = lsf_common.getQueueList()
-        self.hostList = lsf_common.getHostList()
-
         # Add menubar.
-        if not self.freshMark:
-            self.genMenubar()
+        self.genMenubar()
 
         # Define main Tab widget
         self.mainTab = QTabWidget(self)
@@ -104,6 +99,11 @@ class mainWindow(QMainWindow):
         self.mainTab.addTab(self.queuesTab, 'QUEUES')
         self.mainTab.addTab(self.loadTab, 'LOAD')
 
+        # Get LSF queue/host information.
+        print('* Loading LSF status, please wait a moment ...')
+        self.queueList = lsf_common.getQueueList()
+        self.hostList = lsf_common.getHostList()
+
         # Generate the sub-tabs
         self.genJobTab()
         self.genJobsTab()
@@ -112,9 +112,9 @@ class mainWindow(QMainWindow):
         self.genLoadTab()
 
         # Show main window
+        self.setWindowTitle('lsfMonitor')
         self.resize(1111, 620)
         pyqt5_common.centerWindow(self)
-        self.setWindowTitle('lsfMonitor')
 
     def genMenubar(self):
         """
@@ -123,7 +123,7 @@ class mainWindow(QMainWindow):
         menubar = self.menuBar()
 
         # File
-        exitAction = QAction('Quit', self)
+        exitAction = QAction('Exit', self)
         exitAction.triggered.connect(qApp.quit)
 
         fileMenu = menubar.addMenu('File')
@@ -132,14 +132,53 @@ class mainWindow(QMainWindow):
         # Setup
         freshAction = QAction('Fresh', self)
         freshAction.triggered.connect(self.fresh)
+        self.periodicFreshTimer = QTimer(self)
+        periodicFreshAction = QAction('Periodic Fresh (1 min)', self, checkable=True)
+        periodicFreshAction.triggered.connect(self.periodicFresh)
 
         setupMenu = menubar.addMenu('Setup')
         setupMenu.addAction(freshAction)
+        setupMenu.addAction(periodicFreshAction)
+
+        # Help
+        aboutAction = QAction('About lsfMonitor', self)
+        aboutAction.triggered.connect(self.showAbout)
+
+        helpMenu = menubar.addMenu('Help')
+        helpMenu.addAction(aboutAction)
 
     def fresh(self):
-        print('* Re-Loading LSF status, please wait a moment ...')
-        self.freshMark = True
-        self.initUI()
+        """
+        Re-build the GUI with latest LSF status.
+        """
+        currentTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print('* [' + str(currentTime) + '] Re-Loading LSF status, please wait a moment ...')
+        self.genJobsTabTable()
+        self.genHostsTabTable()
+        self.genQueuesTabTable()
+
+    def periodicFresh(self, state):
+        """
+        Fresh the GUI every 60 seconds.
+        """
+        if state:
+            self.periodicFreshTimer.timeout.connect(self.fresh)
+            self.periodicFreshTimer.start(60000)
+        else:
+            self.periodicFreshTimer.stop()
+
+    def showAbout(self):
+        """
+        Show lsfMonitor about information.
+        """
+        readmeFile = str(config.installPath) + '/README'
+        aboutMessage = ''
+
+        with open(readmeFile, 'r') as RF:
+            for line in RF.readlines():
+                aboutMessage = str(aboutMessage) + str(line)
+
+        QMessageBox.about(self, 'About lsfMonitor', aboutMessage)
 
 ## Common sub-functions (begin) ##
     def guiWarning(self, warningMessage):
@@ -387,7 +426,7 @@ class mainWindow(QMainWindow):
             self.jobTabMemLine.setText('')
         else:
             if self.jobInfoDic[self.currentJob]['mem'] != '':
-                memValue = round(int(self.jobInfoDic[self.currentJob]['mem'])/1024, 1)
+                memValue = round(float(self.jobInfoDic[self.currentJob]['mem'])/1024, 1)
                 self.jobTabMemLine.setText(str(memValue) + ' G')
                 self.jobTabMemLine.setCursorPosition(0)
 
@@ -563,31 +602,31 @@ class mainWindow(QMainWindow):
         self.jobsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
 
         command = 'bjobs -UF '
-        user = self.jobsTabUserLine.text().strip()
+        specifiedUser = self.jobsTabUserLine.text().strip()
 
-        if re.match('^\s*$', user):
+        if re.match('^\s*$', specifiedUser):
             command = str(command) + ' -u all'
         else:
-            command = str(command) + ' -u ' + str(user)
+            command = str(command) + ' -u ' + str(specifiedUser)
 
-        queue = self.jobsTabQueueCombo.currentText().strip()
+        specifiedQueue = self.jobsTabQueueCombo.currentText().strip()
 
-        if queue != 'ALL':
-            command = str(command) + ' -q ' + str(queue)
+        if specifiedQueue != 'ALL':
+            command = str(command) + ' -q ' + str(specifiedQueue)
 
-        status = self.jobsTabStatusCombo.currentText().strip()
+        specifiedStatus = self.jobsTabStatusCombo.currentText().strip()
 
-        if status == 'RUN':
+        if specifiedStatus == 'RUN':
             command = str(command) + ' -r'
-        elif status == 'PEND':
+        elif specifiedStatus == 'PEND':
             command = str(command) + ' -p'
-        elif status == 'ALL':
+        elif specifiedStatus == 'ALL':
             command = str(command) + ' -a'
 
-        startedOn = self.jobsTabStartedOnCombo.currentText().strip()
+        specifiedHost = self.jobsTabStartedOnCombo.currentText().strip()
 
-        if startedOn != 'ALL':
-            command = str(command) + ' -m ' + str(startedOn)
+        if specifiedHost != 'ALL':
+            command = str(command) + ' -m ' + str(specifiedHost)
 
         jobDic = lsf_common.getBjobsUfInfo(command)
 
@@ -648,10 +687,10 @@ class mainWindow(QMainWindow):
                 item = QTableWidgetItem()
                 memValue = round(float(jobDic[job]['mem'])/1024, 1)
                 item.setData(Qt.DisplayRole, memValue)
+                self.jobsTabTable.setItem(i, j, item)
                 if ((not jobDic[job]['rusageMem']) and (memValue > 0)) or (jobDic[job]['rusageMem'] and (memValue > rusageMemValue)):
                     item.setFont(QFont('song', 10, QFont.Bold))
                     item.setForeground(QBrush(Qt.red))
-                self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
             item = QTableWidgetItem()
@@ -759,12 +798,10 @@ class mainWindow(QMainWindow):
         self.hostsTabFrame0.setLayout(hostsTabFrame0Grid)
 
     def genHostsTabTable(self):
-        print('* Updating hosts information, please wait a moment ...')
-
         self.hostsTabTable.setShowGrid(True)
         self.hostsTabTable.setSortingEnabled(True)
         self.hostsTabTable.setColumnCount(12)
-        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Maxmem (G)', 'Mem (G)', 'Maxswp', 'Swp (G)', 'Tmp (G)'])
+        self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Maxmem (G)', 'Mem (G)', 'Maxswp (G)', 'Swp (G)', 'Tmp (G)'])
 
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -1168,7 +1205,7 @@ class mainWindow(QMainWindow):
 
     def updateQueueTabFrame0(self, queue):
         """
-        Draw queue (PEND/RUN) job number current job, save the png picture and show it on self.queuesTabFrame0.
+        Draw queue (PEND/RUN) job number current job on self.queuesTabFrame0.
         """
         fig = self.queueJobNumFigureCanvas.figure
         fig.clear()
@@ -1345,7 +1382,7 @@ class mainWindow(QMainWindow):
     def genLoadTabFrame2(self):
         # self.loadTabFrame2
         self.hostMemFigureCanvas = FigureCanvas()
-        self.hostMemNavigationToolbar = NavigationToolbar2QT(self.hostUtFigureCanvas, self)
+        self.hostMemNavigationToolbar = NavigationToolbar2QT(self.hostMemFigureCanvas, self)
 
         # self.loadTabFrame2 - Grid
         loadTabFrame2Grid = QGridLayout()
@@ -1469,15 +1506,14 @@ class mainWindow(QMainWindow):
     def drawHostMemCurve(self, fig, sampleTimeList, memList):
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
-        axes.set_title('host "' + str(self.specifiedHost) + '" avaliable mem curve')
+        axes.set_title('host "' + str(self.specifiedHost) + '" available mem curve')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Available RAM (G)')
-        axes.plot(sampleTimeList, memList, 'ro-', color='red')
+        axes.plot(sampleTimeList, memList, 'ro-', color='green')
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.hostMemFigureCanvas.draw()
-
 ## For load TAB (end) ## 
 
     def closeEvent(self, QCloseEvent):
@@ -1492,7 +1528,6 @@ class mainWindow(QMainWindow):
 #################
 def main():
     (specified_jobid) = readArgs()
-    print('* Loading LSF status, please wait a moment ...')
     app = QApplication(sys.argv)
     mw = mainWindow(specified_jobid)
     mw.show()
