@@ -30,7 +30,6 @@ print('>>> Generate config file.')
 
 installPath = os.getcwd()
 dbPath = str(installPath) + '/db'
-tmpPath = str(installPath) + '/tmp'
 configFile = str(installPath) + '/monitor/conf/config.py'
 print('    Config file : ' + str(configFile))
 
@@ -43,11 +42,8 @@ else:
             CF.write('installPath = "' + str(installPath) + '"\n')
             print('        dbPath      = "' + str(dbPath) + '"')
             CF.write('dbPath      = "' + str(dbPath) + '"\n')
-            print('        tmpPath     = "' + str(tmpPath) + '"')
-            CF.write('tmpPath     = "' + str(tmpPath) + '"\n')
         os.chmod(configFile, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
         os.chmod(dbPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-        os.chmod(tmpPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
     except Exception as error:
         print('*Error*: Failed on opening config file "' + str(configFile) + '" for write: ' + str(error))
         sys.exit(1)
