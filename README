@@ -5,10 +5,10 @@ data-analysis and information-display.
 
 
 The tool use flow is as below:
-install -> configuration -> sampling -> bmonitor
+installation -> configuration -> sampling -> monitoring
 
 
-INSTALL:
+INSTALLATION:
 To install it, make sure you have Python 3.5 (or greater version) installed,
 you can also install Anaconda3-4.2.0 (or greater version) to solve packge
 dependency. Then run below command to install it:
@@ -18,18 +18,15 @@ Come into install directory, then execute below command.
 
 
 CONFIGURATION:
-After installing the tool, come into <INSTALL>/monitor/conf directory,
+After installing the tool, come into <INSTALL_PATH>/monitor/conf directory,
 then update file config.py for your own configuration.
 
     installPath = "***"
     dbPath      = "***/db"
-    tmpPath     = "***/tmp"
 
 "installPath" is the install path, don't edit it.
-"dbPath" is used to save database files, default is on <INSTALL>/db,
+"dbPath" is used to save database files, default is on <INSTALL_PATH>/db,
 you can re-point it into your own path.
-"tmpPath" is used to save temporary files, default is on
-<INSTALL_PATH>/tmp, you can re-point it into your own path.
 
 
 SAMPLING:
@@ -38,24 +35,31 @@ can show the job/queue info with saved database.
 Below is the suggested crontab setting on sampling data.
 
 SHELL=/bin/csh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -j
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -q
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample.py -l
 
 Suggested sampling frequency is 5 minutes.
-You can also sample host/load/user info with bsample.py.
 
 
-BMONITOR:
+BMONITORING:
 Execute below command to start LSF monitor function.
 <INSTALL_PATH>/monitor/bin/bmonitor
 
 
 LICENSE:
-This tool use "MIT" license.
+This tool use "GNU GENERAL PUBLIC LICENSE (Version 2)" license.
 For more details please see file "LICENSE".
 
 
 DOC:
 For more documents please see files under "docs".
+
+
+AUTHOR:
+liyanqing
+
+
+OTHERS:
+Please contact liyanqing1987@163.com if any issue or question.
