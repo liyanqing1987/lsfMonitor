@@ -39,6 +39,7 @@ For some behaviors:
 * Choice host name on Host combo, it will show all host related jobs.
 * Click jobid, it will jump into JOB tab and the show job information.
 * If the job Mem value is larger than Rusage value, it will be red.
+* Click the table title, it could sort with number or string.
 
 ** HOSTS tab
 * Choice queue name on Queue combo, it will show all queue related hosts.
@@ -46,6 +47,7 @@ For some behaviors:
 * If the Ut value is larger than 90, it will be red.
 * If the Mem value is 10% less than Maxmem, it will be red.
 * If the Tmp valu is 0, it will be red.
+* Click the table title, it could sort with number or string.
 
 ** QUEUES tab
 * Click the QUEUE name, it will show queue information (and PEND/RUN slots number curve).
