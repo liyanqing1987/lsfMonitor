@@ -44,7 +44,7 @@ For some behaviors:
 ** HOSTS tab
 * Choice queue name on Queue combo, it will show all queue related hosts.
 * Click Host name or Njobs number, it will jump into JOBS tab and show all host related jobs.
-* If the Status is unreach/unavail/close_LIM, it will be red.
+* If the Status is unreach/unavail/closed_LIM, it will be red.
 * If the Ut value is larger than 90, it will be red.
 * If the Mem value is 10% less than Maxmem, it will be red.
 * If the Tmp valu is 0, it will be red.
