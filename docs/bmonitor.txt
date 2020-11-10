@@ -23,7 +23,7 @@ For the menu bar:
 
 File  -> Eixt                   : exit the GUI.
 Setup -> Fresh                  : Fresh the GUI.
-Setup -> Periodic Fresh (1 min) : Fresh the GUI.
+Setup -> Periodic Fresh (1 min) : Fresh the GUI periodicly (every minute).
 Help  -> About lsfMonitor       : Readme for lsfMonitor.
 
 
