@@ -24,6 +24,7 @@ to do the sampling work in a loop.
 Suggest to start sampling job with crontab, below is an example.
 ====
 # Sampling job/queue/load information for lsfMonitor (Frequency : 5 minutes)
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
 */5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -j
 */5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -q
 */5 * * * * [ROOT]/lsfMonitor/monitor/bin/bsample.py -l
