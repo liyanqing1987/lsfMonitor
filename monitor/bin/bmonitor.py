@@ -808,7 +808,7 @@ class mainWindow(QMainWindow):
 
     def genHostsTabFrame0(self):
         # self.hostsTabFrame0
-        hostsTabQueueLabel = QLabel('Queue', self.hostsTabFrame0)
+        hostsTabQueueLabel = QLabel('       Queue', self.hostsTabFrame0)
         hostsTabQueueLabel.setStyleSheet("font-weight: bold;")
         self.hostsTabQueueCombo = QComboBox(self.hostsTabFrame0)
         self.setHostsTabQueueCombo()
@@ -1428,13 +1428,13 @@ class mainWindow(QMainWindow):
 
     def genLoadTabFrame0(self):
         # self.loadTabFrame0
-        loadTabHostLabel = QLabel('Host', self.loadTabFrame0)
+        loadTabHostLabel = QLabel('          Host', self.loadTabFrame0)
         loadTabHostLabel.setStyleSheet("font-weight: bold;")
         self.loadTabHostCombo = QComboBox(self.loadTabFrame0)
         self.setLoadTabHostCombo()
         self.loadTabHostCombo.currentIndexChanged.connect(self.updateLoadTabLoadInfo)
 
-        loadTabDateLabel = QLabel('Date', self.loadTabFrame0)
+        loadTabDateLabel = QLabel('          Date', self.loadTabFrame0)
         loadTabDateLabel.setStyleSheet("font-weight: bold;")
         self.loadTabDateCombo = QComboBox(self.loadTabFrame0)
         self.setLoadTabDateCombo()
