@@ -6,6 +6,7 @@ import re
 import sys
 import stat
 import copy
+import time
 import getpass
 import datetime
 import argparse
@@ -101,6 +102,7 @@ class mainWindow(QMainWindow):
 
         # Get LSF queue/host information.
         print('* Loading LSF status, please wait a moment ...')
+
         self.queueList = lsf_common.getQueueList()
         self.hostList = lsf_common.getHostList()
 
@@ -152,7 +154,9 @@ class mainWindow(QMainWindow):
         Re-build the GUI with latest LSF status.
         """
         currentTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
         print('* [' + str(currentTime) + '] Re-Loading LSF status, please wait a moment ...')
+
         self.genJobsTabTable()
         self.genHostsTabTable()
         self.genQueuesTabTable()
@@ -339,6 +343,7 @@ class mainWindow(QMainWindow):
         Update self.jobTabFrame1 and self.jobTabFrame3.
         """
         self.currentJob = self.jobTabJobLine.text().strip()
+
         print('* Checking job "' + str(self.currentJob) + '".')
 
         # Initicalization
@@ -359,6 +364,7 @@ class mainWindow(QMainWindow):
 
         # Get job info
         print('Getting job information for job "' + str(self.currentJob) + '".')
+
         self.jobInfoDic = lsf_common.getBjobsUfInfo(command='bjobs -UF ' + str(currentJob))
 
         # Update the related frames with the job info.
@@ -461,6 +467,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: Failed on connecting job database file "' + str(jobDbFile) + '".')
             else:
                 print('Getting history of job memory usage for job "' + str(self.currentJob) + '".')
+
                 tableName = 'job_' + str(self.currentJob)
                 dataDic = sqlite3_common.getSqlTableData(jobDbFile, jobDbConn, tableName, ['sampleTime', 'mem'])
 
@@ -477,8 +484,10 @@ class mainWindow(QMainWindow):
                         runtime = int((currentTime-firstSampleTime)/60)
                         runtimeList.append(runtime)
                         mem = memList[i]
+
                         if mem == '':
-                             mem = '0'
+                            mem = '0'
+
                         realMem = round(float(mem)/1024, 1)
                         realMemList.append(realMem)
 
@@ -497,6 +506,7 @@ class mainWindow(QMainWindow):
         if not init:
             if self.jobInfoDic[self.currentJob]['status'] != 'PEND':
                 (runtimeList, memList) = self.getJobMemList()
+
                 if runtimeList and memList:
                     self.drawJobMemCurve(fig, runtimeList, memList)
 
@@ -648,6 +658,10 @@ class mainWindow(QMainWindow):
             item.setText(jobDic[job]['status'])
             self.jobsTabTable.setItem(i, j, item)
 
+            if jobDic[job]['status'] == 'PEND':
+                item.setFont(QFont('song', 10, QFont.Bold))
+                item.setForeground(QBrush(Qt.red))
+
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['queue'])
@@ -664,18 +678,21 @@ class mainWindow(QMainWindow):
             self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
+
             if str(jobDic[job]['project']) != '':
                 item = QTableWidgetItem()
                 item.setData(Qt.DisplayRole, jobDic[job]['project'])
                 self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
+
             if str(jobDic[job]['processorsRequested']) != '':
                 item = QTableWidgetItem()
                 item.setData(Qt.DisplayRole, int(jobDic[job]['processorsRequested']))
                 self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
+
             if str(jobDic[job]['rusageMem']) != '':
                 item = QTableWidgetItem()
                 rusageMemValue = round(int(jobDic[job]['rusageMem'])/1024, 1)
@@ -683,11 +700,13 @@ class mainWindow(QMainWindow):
                 self.jobsTabTable.setItem(i, j, item)
 
             j = j+1
+
             if str(jobDic[job]['mem']) != '':
                 item = QTableWidgetItem()
                 memValue = round(float(jobDic[job]['mem'])/1024, 1)
                 item.setData(Qt.DisplayRole, memValue)
                 self.jobsTabTable.setItem(i, j, item)
+
                 if ((not jobDic[job]['rusageMem']) and (memValue > 0)) or (jobDic[job]['rusageMem'] and (memValue > rusageMemValue)):
                     item.setFont(QFont('song', 10, QFont.Bold))
                     item.setForeground(QBrush(Qt.red))
@@ -702,13 +721,25 @@ class mainWindow(QMainWindow):
         With the clicked job, jump the the job Tab, show the job related infos.
         """
         if item != None:
+            currentRow = self.jobsTabTable.currentRow()
+            job = self.jobsTabTable.item(currentRow, 0).text().strip()
+
             if item.column() == 0:
-                currentRow = self.jobsTabTable.currentRow()
-                job = self.jobsTabTable.item(currentRow, 0).text().strip()
                 if job != '':
                     self.jobTabJobLine.setText(job)
                     self.checkJob()
                     self.mainTab.setCurrentWidget(self.jobTab)
+            elif item.column() == 2:
+                jobStatus = self.jobsTabTable.item(currentRow, 2).text().strip()
+
+                if jobStatus == 'PEND':
+                    command = 'bjobs -UF ' + str(job)
+                    jobDic = lsf_common.getBjobsUfInfo(command)
+                    jobPendingReasons = ''
+
+                    for line in jobDic[job]['pendingReasons']:
+                        jobPendingReasons = str(jobPendingReasons) + '\n' + str(line)
+                        QMessageBox.information(self, 'Pending reason for ' + str(job), jobPendingReasons)
 
     def setJobsTabStatusCombo(self, statusList):
         """
@@ -839,71 +870,93 @@ class mainWindow(QMainWindow):
         for i in range(len(self.queueHostList)):
             host = self.queueHostList[i]
 
+            # For "Host" item.
             j = 0
             self.hostsTabTable.setItem(i, j, QTableWidgetItem(host))
 
+            # For "Status" item.
             j = j+1
             index = bhostsDic['HOST_NAME'].index(host)
             status = bhostsDic['STATUS'][index]
             item = QTableWidgetItem(status)
+
             if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Queue" item.
             j = j+1
+
             if host in hostQueueDic.keys():
                 queues = ' '.join(hostQueueDic[host])
                 item = QTableWidgetItem(queues)
                 self.hostsTabTable.setItem(i, j, item)
 
+            # For "Ncpus" item.
             j = j+1
             index = lshostsDic['HOST_NAME'].index(host)
             ncpus = lshostsDic['ncpus'][index]
+
             if not re.match('^[0-9]+$', ncpus):
                 common.printWarning('*Warning*: host(' + str(host) + ') ncpus info "' + str(ncpus) + '": invalid value, reset it to "0".')
                 ncpus = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(ncpus))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "MAX" item.
             j = j+1
             index = bhostsDic['HOST_NAME'].index(host)
             max = bhostsDic['MAX'][index]
+
             if not re.match('^[0-9]+$', max):
                 common.printWarning('*Warning*: host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".')
                 max = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(max))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Njobs" item.
             j = j+1
             index = bhostsDic['HOST_NAME'].index(host)
             njobs = bhostsDic['NJOBS'][index]
+
             if not re.match('^[0-9]+$', njobs):
                 common.printWarning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
                 njobs = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(njobs))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Ut" item.
             j = j+1
             index = lsloadDic['HOST_NAME'].index(host)
             ut = lsloadDic['ut'][index]
             ut = re.sub('%', '', ut)
+
             if not re.match('^[0-9]+$', ut):
                 common.printWarning('*Warning*: host(' + str(host) + ') ut info "' + str(ut) + '": invalid value, reset it to "0".')
                 ut = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(ut))
+
             if int(ut) > 90:
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Maxmem" item.
             j = j+1
             index = lshostsDic['HOST_NAME'].index(host)
             maxmem = lshostsDic['maxmem'][index]
+
             if re.search('M', maxmem):
                 maxmem = re.sub('M', '', maxmem)
                 maxmem = float(maxmem)/1024
@@ -915,13 +968,16 @@ class mainWindow(QMainWindow):
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
                 maxmem = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(maxmem)))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Mem" item.
             j = j+1
             index = lsloadDic['HOST_NAME'].index(host)
             mem = lsloadDic['mem'][index]
+
             if re.search('M', mem):
                 mem = re.sub('M', '', mem)
                 mem = float(mem)/1024
@@ -933,16 +989,21 @@ class mainWindow(QMainWindow):
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
                 mem = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(mem)))
+
             if (maxmem and (float(mem)/float(maxmem) < 0.1)):
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "MaxSwp" item.
             j = j+1
             index = lshostsDic['HOST_NAME'].index(host)
             maxswp = lshostsDic['maxswp'][index]
+
             if re.search('M', maxswp):
                 maxswp = re.sub('M', '', maxswp)
                 maxswp = float(maxswp)/1024
@@ -954,13 +1015,16 @@ class mainWindow(QMainWindow):
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
                 maxswp = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(maxswp)))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Swp" item.
             j = j+1
             index = lsloadDic['HOST_NAME'].index(host)
             swp = lsloadDic['swp'][index]
+
             if re.search('M', swp):
                 swp = re.sub('M', '', swp)
                 swp = float(swp)/1024
@@ -972,13 +1036,16 @@ class mainWindow(QMainWindow):
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
                 swp = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(swp)))
             self.hostsTabTable.setItem(i, j, item)
 
+            # For "Tmp" item.
             j = j+1
             index = lsloadDic['HOST_NAME'].index(host)
             tmp = lsloadDic['tmp'][index]
+
             if re.search('M', tmp):
                 tmp = re.sub('M', '', tmp)
                 tmp = float(tmp)/1024
@@ -990,11 +1057,14 @@ class mainWindow(QMainWindow):
             else:
                 common.printWarning('*Warning*: host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".')
                 tmp = 0
+
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(tmp)))
+
             if int(float(tmp)) == 0:
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
             self.hostsTabTable.setItem(i, j, item)
 
     def hostsTabCheckClick(self, item=None):
@@ -1107,28 +1177,36 @@ class mainWindow(QMainWindow):
             if i < len(queueList)-1:
                 index = queuesDic['QUEUE_NAME'].index(queue)
 
+            # For "QUEUE" item.
             j = 0
             item = QTableWidgetItem(queue)
             self.queuesTabTable.setItem(i, j, item)
 
+            # For "PEND" item.
             j = j+1
+
             if i == len(queueList)-1:
                 pend = str(pendSum)
             else:
                 pend = queuesDic['PEND'][index]
                 pendSum += int(pend)
+
             item = QTableWidgetItem(pend)
+
             if int(pend) > 0:
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
             self.queuesTabTable.setItem(i, j, item)
 
+            # For "RUN" item.
             j = j+1
+
             if i == len(queueList)-1:
                 run = str(runSum)
             else:
                 run = queuesDic['RUN'][index]
                 runSum += int(run)
+
             item = QTableWidgetItem(run)
             self.queuesTabTable.setItem(i, j, item)
 
@@ -1166,6 +1244,7 @@ class mainWindow(QMainWindow):
 
             if item.column() == 0:
                 print('* Checking queue "' + str(queue) + '".')
+
                 self.updateQueueTabFrame0(queue)
                 self.updateQueueTabFrame1(queue)
             elif item.column() == 1:
@@ -1254,6 +1333,7 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: Failed on connecting queue database file "' + str(self.queueDbFile) + '".')
             else:
                 print('Getting history of queue PEND/RUN job number for queue "' + str(queue) + '".')
+
                 tableName = 'queue_' + str(queue)
                 dataDic = sqlite3_common.getSqlTableData(queueDbFile, queueDbConn, tableName, ['sampleTime', 'PEND', 'RUN'])
 
@@ -1353,6 +1433,13 @@ class mainWindow(QMainWindow):
         self.loadTabHostCombo = QComboBox(self.loadTabFrame0)
         self.setLoadTabHostCombo()
         self.loadTabHostCombo.currentIndexChanged.connect(self.updateLoadTabLoadInfo)
+
+        loadTabDateLabel = QLabel('Date', self.loadTabFrame0)
+        loadTabDateLabel.setStyleSheet("font-weight: bold;")
+        self.loadTabDateCombo = QComboBox(self.loadTabFrame0)
+        self.setLoadTabDateCombo()
+        self.loadTabDateCombo.currentIndexChanged.connect(self.updateLoadTabLoadInfo)
+
         loadTabEmptyLabel = QLabel('')
 
         # self.loadTabFrame0 - Grid
@@ -1360,11 +1447,15 @@ class mainWindow(QMainWindow):
 
         loadTabFrame0Grid.addWidget(loadTabHostLabel, 0, 1)
         loadTabFrame0Grid.addWidget(self.loadTabHostCombo, 0, 2)
-        loadTabFrame0Grid.addWidget(loadTabEmptyLabel, 0, 3)
+        loadTabFrame0Grid.addWidget(loadTabDateLabel, 0, 3)
+        loadTabFrame0Grid.addWidget(self.loadTabDateCombo, 0, 4)
+        loadTabFrame0Grid.addWidget(loadTabEmptyLabel, 0, 5)
 
         loadTabFrame0Grid.setColumnStretch(1, 1)
         loadTabFrame0Grid.setColumnStretch(2, 1)
-        loadTabFrame0Grid.setColumnStretch(3, 12)
+        loadTabFrame0Grid.setColumnStretch(3, 1)
+        loadTabFrame0Grid.setColumnStretch(4, 1)
+        loadTabFrame0Grid.setColumnStretch(5, 10)
 
         self.loadTabFrame0.setLayout(loadTabFrame0Grid)
 
@@ -1402,19 +1493,37 @@ class mainWindow(QMainWindow):
         for host in hostList:
             self.loadTabHostCombo.addItem(host)
 
+    def setLoadTabDateCombo(self):
+        """
+        Set (initialize) self.loadTabDateCombo.
+        """
+        self.loadTabDateCombo.clear()
+
+        dateList = [
+                    'Last Day',
+                    'Last Week',
+                    'Last Month',
+                    'Last Year',
+                   ]
+
+        for date in dateList:
+            self.loadTabDateCombo.addItem(date)
+
     def updateLoadTabLoadInfo(self):
         """
         Update self.loadTabFrame1 (ut information) and self.loadTabFrame2 (memory information).
         """
         self.specifiedHost = self.loadTabHostCombo.currentText().strip()
+        self.specifiedDate = self.loadTabDateCombo.currentText().strip()
 
         self.updateLoadTabFrame1([], [])
         self.updateLoadTabFrame2([], [])
 
         (sampleTimeList, utList, memList) = self.getLoadInfo()
 
-        self.updateLoadTabFrame1(sampleTimeList, utList)
-        self.updateLoadTabFrame2(sampleTimeList, memList)
+        if sampleTimeList:
+            self.updateLoadTabFrame1(sampleTimeList, utList)
+            self.updateLoadTabFrame2(sampleTimeList, memList)
 
     def getLoadInfo(self):
         """
@@ -1435,37 +1544,58 @@ class mainWindow(QMainWindow):
                 common.printWarning('*Warning*: Failed on connecting load database file "' + str(loadDbFile) + '".')
             else:
                 print('Getting history of load information for host "' + str(self.specifiedHost) + '".')
+
                 tableName = 'load_' + str(self.specifiedHost)
                 dataDic = sqlite3_common.getSqlTableData(loadDbFile, loadDbConn, tableName, ['sampleTime', 'ut', 'mem'])
 
                 if not dataDic:
                     common.printWarning('*Warning*: load information is empty for "' + str(self.specifiedHost) + '".')
                 else:
-                    sampleTimeList = dataDic['sampleTime']
-                    utList = dataDic['ut']
-                    memList = dataDic['mem']
+                    specifiedDateSecond = 0
+
+                    if self.specifiedDate == 'Last Day':
+                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=1)).timetuple())
+                    elif self.specifiedDate == 'Last Week':
+                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=7)).timetuple())
+                    elif self.specifiedDate == 'Last Month':
+                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=30)).timetuple())
+                    elif self.specifiedDate == 'Last Year':
+                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=365)).timetuple())
+
+                    for i in range(len(dataDic['sampleTime'])-1, -1, -1):
+                        sampleTimeSecond = time.mktime(datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S').timetuple())
+
+                        if sampleTimeSecond > specifiedDateSecond:
+                            # For sampleTime
+                            sampleTime = datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S')
+                            sampleTimeList.append(sampleTime)
+
+                            # For ut
+                            ut = dataDic['ut'][i]
+
+                            if ut:
+                                ut = int(re.sub('%', '', ut))
+                            else:
+                                ut = 0
+
+                            utList.append(ut)
+
+                            # For mem
+                            mem = dataDic['mem'][i]
+
+                            if mem:
+                                if re.match('.*M', mem):
+                                    mem = round(float(re.sub('M', '', mem))/1024, 1)
+                                elif re.match('.*G', mem):
+                                    mem = round(float(re.sub('G', '', mem)), 1)
+                                elif re.match('.*T', mem):
+                                    mem = round(float(re.sub('T', '', mem))*1024, 1)
+                            else:
+                                mem = 0
+
+                            memList.append(mem)
 
                 loadDbConn.close()
-
-        for (i, sampleTime) in enumerate(sampleTimeList):
-            sampleTimeList[i] = datetime.datetime.strptime(sampleTime, '%Y%m%d_%H%M%S')
-
-        for (i, ut) in enumerate(utList):
-            if ut:
-                utList[i] = int(re.sub('%', '', ut))
-            else:
-                utList[i] = 0
-
-        for (i, mem) in enumerate(memList):
-            if mem:
-                if re.match('.*M', mem):
-                    memList[i] = round(float(re.sub('M', '', mem))/1024, 1)
-                elif re.match('.*G', mem):
-                    memList[i] = round(float(re.sub('G', '', mem)), 1)
-                elif re.match('.*T', mem):
-                    memList[i] = round(float(re.sub('T', '', mem))*1024, 1)
-            else:
-                memList[i] = 0
 
         return(sampleTimeList, utList, memList)
 
@@ -1487,7 +1617,6 @@ class mainWindow(QMainWindow):
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Cpu Utilization (%)')
         axes.plot(sampleTimeList, utList, 'ro-', color='red')
-        axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.hostUtFigureCanvas.draw()
@@ -1510,7 +1639,6 @@ class mainWindow(QMainWindow):
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Available RAM (G)')
         axes.plot(sampleTimeList, memList, 'ro-', color='green')
-        axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.hostMemFigureCanvas.draw()

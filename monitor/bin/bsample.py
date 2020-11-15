@@ -86,7 +86,8 @@ class sampling:
 
         print('>>> Sampling job info ...')
 
-        bjobsDic = lsf_common.getBjobsUfInfo()
+        command = 'bjobs -u all -r -UF'
+        bjobsDic = lsf_common.getBjobsUfInfo(command)
         jobList = list(bjobsDic.keys())
         jobRangeDic = common.getJobRangeDic(jobList)
         jobSqlDic = {}
@@ -104,7 +105,9 @@ class sampling:
 
             for job in jobRangeDic[jobRange]:
                 jobTableName='job_' + str(job)
+
                 print('    Sampling for job "' + str(job) + '" ...')
+
                 jobSqlDic[job] = {
                                   'drop': False,
                                   'keyString': '',
@@ -114,10 +117,12 @@ class sampling:
                 # If job table (with old data) has been on the jobDbFile, drop it.
                 if jobTableName in jobTableList:
                     dataDic = sqlite3_common.getSqlTableData(jobDbFile, jobDbConn, jobTableName, ['sampleTime'])
+
                     if dataDic:
                         if len(dataDic['sampleTime']) > 0:
                             lastSampleTime = dataDic['sampleTime'][-1]
                             lastSeconds = int(time.mktime(datetime.datetime.strptime(str(lastSampleTime), "%Y%m%d_%H%M%S").timetuple()))
+
                             if self.currentSeconds-lastSeconds > 3600:
                                 common.printWarning('    *Warning*: table "' + str(jobTableName) + '" already existed even one hour ago, will drop it.')
                                 jobSqlDic[job]['drop'] = True
@@ -140,15 +145,19 @@ class sampling:
         for jobRange in jobRangeDic.keys():
             jobDbFile = str(self.dbPath) + '/job/' + str(jobRange) + '.db'
             (result, jobDbConn) = sqlite3_common.connectDbFile(jobDbFile, mode='write')
+
             if result != 'passed':
                 return
 
             for job in jobRangeDic[jobRange]:
                 jobTableName='job_' + str(job)
+
                 if jobSqlDic[job]['drop']:
                     sqlite3_common.dropSqlTable(jobDbFile, jobDbConn, jobTableName, commit=False)
+
                 if jobSqlDic[job]['keyString'] != '':
                     sqlite3_common.createSqlTable(jobDbFile, jobDbConn, jobTableName, jobSqlDic[job]['keyString'], commit=False)
+
                 if jobSqlDic[job]['valueString'] != '':
                     sqlite3_common.insertIntoSqlTable(jobDbFile, jobDbConn, jobTableName, jobSqlDic[job]['valueString'], commit=False)
 
@@ -165,6 +174,7 @@ class sampling:
         self.getDateInfo()
         queueDbFile = str(self.dbPath) + '/queue.db'
         (result, queueDbConn) = sqlite3_common.connectDbFile(queueDbFile, mode='write')
+
         if result != 'passed':
             return
 
@@ -185,6 +195,7 @@ class sampling:
                                   'valueString': '',
                                  }
             queueTableName = 'queue_' + str(queue)
+
             print('    Sampling for queue "' + str(queue) + '" ...')
 
             # Generate sql table.
@@ -197,13 +208,16 @@ class sampling:
                 valueList = [self.sampleTime, sum([int(i) for i in bqueuesDic['NJOBS']]), sum([int(i) for i in bqueuesDic['PEND']]), sum([int(i) for i in bqueuesDic['RUN']]), sum([int(i) for i in bqueuesDic['SUSP']])]
             else:
                 valueList = [self.sampleTime, bqueuesDic['NJOBS'][i], bqueuesDic['PEND'][i], bqueuesDic['RUN'][i], bqueuesDic['SUSP'][i]]
+
             valueString = sqlite3_common.genSqlTableValueString(valueList)
             queueSqlDic[queue]['valueString'] = valueString
 
         for queue in queueList:
             queueTableName = 'queue_' + str(queue)
+
             if queueSqlDic[queue]['keyString'] != '':
                 sqlite3_common.createSqlTable(queueDbFile, queueDbConn, queueTableName, queueSqlDic[queue]['keyString'], commit=False)
+
             if queueSqlDic[queue]['valueString'] != '':
                 sqlite3_common.insertIntoSqlTable(queueDbFile, queueDbConn, queueTableName, queueSqlDic[queue]['valueString'], commit=False)
 
@@ -213,12 +227,15 @@ class sampling:
         for queue in queueList:
             queueTableName = 'queue_' + str(queue)
             queueTableCount = int(sqlite3_common.getSqlTableCount(queueDbFile, queueDbConn, queueTableName))
+
             if queueTableCount != 'N/A':
                 if int(queueTableCount) > 10000:
                     rowId = 'sampleTime'
                     beginLine = 0
                     endLine = int(queueTableCount) - 10000
+
                     print('    Deleting database "' + str(queueDbFile) + '" table "' + str(queueTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+
                     sqlite3_common.deleteSqlTableRows(queueDbFile, queueDbConn, queueTableName, rowId, beginLine, endLine)
 
         queueDbConn.commit()
@@ -231,6 +248,7 @@ class sampling:
         self.getDateInfo()
         hostDbFile = str(self.dbPath) + '/host.db'
         (result, hostDbConn) = sqlite3_common.connectDbFile(hostDbFile, mode='write')
+
         if result != 'passed':
             return
 
@@ -250,6 +268,7 @@ class sampling:
                                 'valueString': '',
                                }
             hostTableName = 'host_' + str(host)
+
             print('    Sampling for host "' + str(host) + '" ...')
 
             # Generate sql table.
@@ -264,8 +283,10 @@ class sampling:
 
         for host in hostList:
             hostTableName = 'host_' + str(host)
+
             if hostSqlDic[host]['keyString'] != '':
                 sqlite3_common.createSqlTable(hostDbFile, hostDbConn, hostTableName, hostSqlDic[host]['keyString'], commit=False)
+
             if hostSqlDic[host]['valueString'] != '':
                 sqlite3_common.insertIntoSqlTable(hostDbFile, hostDbConn, hostTableName, hostSqlDic[host]['valueString'], commit=False)
 
@@ -275,12 +296,15 @@ class sampling:
         for host in hostList:
             hostTableName = 'host_' + str(host)
             hostTableCount = int(sqlite3_common.getSqlTableCount(hostDbFile, hostDbConn, hostTableName))
+
             if hostTableCount != 'N/A':
                 if int(hostTableCount) > 10000:
                     rowId = 'sampleTime'
                     beginLine = 0
                     endLine = int(hostTableCount) - 10000
+
                     print('    Deleting database "' + str(hostDbFile) + '" table "' + str(hostTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+
                     sqlite3_common.deleteSqlTableRows(hostDbFile, hostDbConn, hostTableName, rowId, beginLine, endLine)
 
         hostDbConn.commit()
@@ -293,6 +317,7 @@ class sampling:
         self.getDateInfo()
         loadDbFile = str(self.dbPath) + '/load.db'
         (result, loadDbConn) = sqlite3_common.connectDbFile(loadDbFile, mode='write')
+
         if result != 'passed':
             return
 
@@ -312,6 +337,7 @@ class sampling:
                                 'valueString': '',
                                }
             loadTableName = 'load_' + str(host)
+
             print('    Sampling for host "' + str(host) + '" ...')
 
             # Generate sql table.
@@ -326,8 +352,10 @@ class sampling:
 
         for host in hostList:
             loadTableName = 'load_' + str(host)
+
             if loadSqlDic[host]['keyString'] != '':
                 sqlite3_common.createSqlTable(loadDbFile, loadDbConn, loadTableName, loadSqlDic[host]['keyString'], commit=False)
+
             if loadSqlDic[host]['valueString'] != '':
                 sqlite3_common.insertIntoSqlTable(loadDbFile, loadDbConn, loadTableName, loadSqlDic[host]['valueString'], commit=False)
 
@@ -337,12 +365,15 @@ class sampling:
         for host in hostList:
             loadTableName = 'load_' + str(host)
             loadTableCount = int(sqlite3_common.getSqlTableCount(loadDbFile, loadDbConn, loadTableName))
+
             if loadTableCount != 'N/A':
                 if int(loadTableCount) > 10000:
                     rowId = 'sampleTime'
                     beginLine = 0
                     endLine = int(loadTableCount) - 10000
+
                     print('    Deleting database "' + str(loadDbFile) + '" table "' + str(loadTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+
                     sqlite3_common.deleteSqlTableRows(loadDbFile, loadDbConn, loadTableName, rowId, beginLine, endLine)
 
         loadDbConn.commit()
@@ -355,6 +386,7 @@ class sampling:
         self.getDateInfo()
         userDbFile = str(self.dbPath) + '/user.db'
         (result, userDbConn) = sqlite3_common.connectDbFile(userDbFile, mode='write')
+
         if result != 'passed':
             return
 
@@ -374,6 +406,7 @@ class sampling:
                                 'valueString': '',
                                }
             userTableName = 'user_' + str(user)
+
             print('    Sampling for user "' + str(user) + '" ...')
 
             # Generate sql table.
@@ -388,8 +421,10 @@ class sampling:
 
         for user in userList:
             userTableName = 'user_' + str(user)
+
             if userSqlDic[user]['keyString'] != '':
                 sqlite3_common.createSqlTable(userDbFile, userDbConn, userTableName, userSqlDic[user]['keyString'], commit=False)
+
             if userSqlDic[user]['valueString'] != '':
                 sqlite3_common.insertIntoSqlTable(userDbFile, userDbConn, userTableName, userSqlDic[user]['valueString'], commit=False)
 
@@ -399,12 +434,15 @@ class sampling:
         for user in userList:
             userTableName = 'user_' + str(user)
             userTableCount = int(sqlite3_common.getSqlTableCount(userDbFile, userDbConn, userTableName))
+
             if userTableCount != 'N/A':
                 if int(userTableCount) > 10000:
                     rowId = 'sampleTime'
                     beginLine = 0
                     endLine = int(userTableCount) - 10000
+
                     print('    Deleting database "' + str(userDbFile) + '" table "' + str(userTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+
                     sqlite3_common.deleteSqlTableRows(userDbFile, userDbConn, userTableName, rowId, beginLine, endLine)
 
         userDbConn.commit()
@@ -415,15 +453,19 @@ class sampling:
             if self.jobSampling:
                 p = Process(target=self.sampleJobInfo)
                 p.start()
+
             if self.queueSampling:
                 p = Process(target=self.sampleQueueInfo)
                 p.start()
+
             if self.hostSampling:
                 p = Process(target=self.sampleHostInfo)
                 p.start()
+
             if self.loadSampling:
                 p = Process(target=self.sampleLoadInfo)
                 p.start()
+
             if self.userSampling:
                 p = Process(target=self.sampleUserInfo)
                 p.start()

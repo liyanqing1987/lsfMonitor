@@ -25,25 +25,29 @@ def getCommandDict(command):
 
         if i == 0:
             keyList = line.split()
+
             for key in keyList:
                 myDic[key] = []
         else:
             commandInfo = line.split()
+
             if len(commandInfo) < len(keyList):
                 common.printWarning('*Warning* (getCommandDict) : For command "' + str(command) + '", below info line is incomplate/unexpected.')
                 common.printWarning('           ' + str(line))
 
             for j in range(len(keyList)):
                 key = keyList[j]
+
                 if j < len(commandInfo):
                     value = commandInfo[j]
                 else:
                     value = ''
+
                 myDic[key].append(value)
 
     return(myDic)
 
-def getBjobsInfo(command='bjobs -u all -r -w'):
+def getBjobsInfo(command='bjobs -u all -w'):
     """
     Get bjobs info with command 'bjobs'.
     ====
@@ -110,9 +114,9 @@ def getBusersInfo(command='busers all'):
     busersDic = getCommandDict(command)
     return(busersDic)
 
-def getBjobsUfInfo(command='bjobs -u all -r -UF'):
+def getBjobsUfInfo(command='bjobs -u all -UF'):
     """
-    Parse job info which are from command 'bjobs -u all -r -UF'.
+    Parse job info which are from command 'bjobs -u all -UF'.
     ====
     Job <101>, Job Name <Tesf for lsfMonitor>, User <liyanqing>, Project <lsf_test>, Status <RUN>, Queue <normal>, Command <sleep 12345>, Share group charged </liyanqing>
     Mon Oct 26 17:43:07: Submitted from host <cmp01>, CWD <$HOME>, 2 Task(s), Requested Resources <span[hosts=1] rusage[mem=123]>;
@@ -148,13 +152,20 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                      'spanHostsCompile'           : re.compile('.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                      'rusageMemCompile'           : re.compile('.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
                      'startedOnCompile'           : re.compile('(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
-                     'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Completed <exit>).*'),
-                     'cpuTimeCompile'             : re.compile('.*The CPU time used is ([1-9][0-9]*) seconds.*'),
+                     'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*'),
+                     'cpuTimeCompile'             : re.compile('.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
                      'memCompile'                 : re.compile('.*\. MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
+                     'swapCompile'                : re.compile('.*\; SWAP: (\d+(\.\d+)?) ([KMGT]bytes).*'),
+                     'runLimitCompile'            : re.compile('\s*RUNLIMIT\s*'),
+                     'maxMemCompile'              : re.compile('\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*'),
+                     'pendingReasonsCompile'      : re.compile('\s*PENDING REASONS:\s*'),
+                     'emptyLineCompile'           : re.compile('^\s*$'),
                     }
 
     myDic = collections.OrderedDict()
     job = ''
+    runLimitMark = False
+    pendingMark = False
 
     p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     lines = p.stdout.readlines()
@@ -171,6 +182,7 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
 
                 # Initialization for myDic[job].
                 myDic[job] = collections.OrderedDict()
+                myDic[job]['jobInfo'] = ''
                 myDic[job]['jobId'] = job
                 myDic[job]['jobName'] = ''
                 myDic[job]['user'] = ''
@@ -190,74 +202,157 @@ def getBjobsUfInfo(command='bjobs -u all -r -UF'):
                 myDic[job]['finishedTime'] = ''
                 myDic[job]['cpuTime'] = ''
                 myDic[job]['mem'] = ''
+                myDic[job]['swap'] = ''
+                myDic[job]['runLimit'] = ''
+                myDic[job]['maxMem'] = ''
+                myDic[job]['avgMem'] = ''
+                myDic[job]['pendingReasons'] = []
 
             if job != '':
-                if 'jobInfo' in myDic[job].keys():
+                if myDic[job]['jobInfo']:
                     myDic[job]['jobInfo'] = str(myDic[job]['jobInfo']) + '\n' + str(line)
                 else:
                     myDic[job]['jobInfo'] = line
 
-                if jobCompileDic['jobNameCompile'].match(line):
-                    myMatch = jobCompileDic['jobNameCompile'].match(line)
-                    myDic[job]['jobName'] = myMatch.group(1)
-                if jobCompileDic['userCompile'].match(line):
-                    myMatch = jobCompileDic['userCompile'].match(line)
-                    myDic[job]['user'] = myMatch.group(1)
-                if jobCompileDic['projectCompile'].match(line):
-                    myMatch = jobCompileDic['projectCompile'].match(line)
-                    myDic[job]['project'] = myMatch.group(1)
-                if jobCompileDic['statusCompile'].match(line):
-                    myMatch = jobCompileDic['statusCompile'].match(line)
-                    myDic[job]['status'] = myMatch.group(1)
-                if jobCompileDic['queueCompile'].match(line):
-                    myMatch = jobCompileDic['queueCompile'].match(line)
-                    myDic[job]['queue'] = myMatch.group(1)
-                if jobCompileDic['commandCompile'].match(line):
-                    myMatch = jobCompileDic['commandCompile'].match(line)
-                    myDic[job]['command'] = myMatch.group(1)
-                if jobCompileDic['submittedFromCompile'].match(line):
-                    myMatch = jobCompileDic['submittedFromCompile'].match(line)
-                    myDic[job]['submittedFrom'] = myMatch.group(1)
-                if jobCompileDic['submittedTimeCompile'].match(line):
-                    myMatch = jobCompileDic['submittedTimeCompile'].match(line)
-                    myDic[job]['submittedTime'] = myMatch.group(1)
-                if jobCompileDic['cwdCompile'].match(line):
-                    myMatch = jobCompileDic['cwdCompile'].match(line)
-                    myDic[job]['cwd'] = myMatch.group(1)
-                if jobCompileDic['requestedResourcesCompile'].match(line):
-                    myMatch = jobCompileDic['requestedResourcesCompile'].match(line)
-                    myDic[job]['requestedResources'] = myMatch.group(1)
-                if jobCompileDic['spanHostsCompile'].match(line):
-                    myMatch = jobCompileDic['spanHostsCompile'].match(line)
-                    myDic[job]['spanHosts'] = myMatch.group(1)
-                if jobCompileDic['rusageMemCompile'].match(line):
-                    myMatch = jobCompileDic['rusageMemCompile'].match(line)
-                    myDic[job]['rusageMem'] = myMatch.group(1)
-                if jobCompileDic['startedOnCompile'].match(line):
-                    myMatch = jobCompileDic['startedOnCompile'].match(line)
-                    myDic[job]['startedTime'] = myMatch.group(1)
-                    startedHost = myMatch.group(3)
-                    startedHost = re.sub('<', '', startedHost)
-                    startedHost = re.sub('>', '', startedHost)
-                    startedHost = re.sub('\d+\*', '', startedHost)
-                    myDic[job]['startedOn'] = startedHost
-                    myDic[job]['processorsRequested'] = myMatch.group(4)
-                if jobCompileDic['finishedTimeCompile'].match(line):
-                    myMatch = jobCompileDic['finishedTimeCompile'].match(line)
-                    myDic[job]['finishedTime'] = myMatch.group(1)
-                if jobCompileDic['cpuTimeCompile'].match(line):
-                    myMatch = jobCompileDic['cpuTimeCompile'].match(line)
-                    myDic[job]['cpuTime'] = myMatch.group(1)
-                if jobCompileDic['memCompile'].match(line):
-                    myMatch = jobCompileDic['memCompile'].match(line)
-                    myDic[job]['mem'] = myMatch.group(1)
-                    unit = myMatch.group(3)
-                    if unit == 'Kbytes':
-                        myDic[job]['mem'] = float(myDic[job]['mem'])/1024
-                    elif unit == 'Gbytes':
-                        myDic[job]['mem'] = float(myDic[job]['mem'])*1024
-                    elif unit == 'Tbytes':
-                        myDic[job]['mem'] = float(myDic[job]['mem'])*1024*1024
+                if jobCompileDic['emptyLineCompile'].match(line):
+                    if runLimitMark:
+                        runLimitMark = False
+
+                    if pendingMark:
+                        pendingMark = False
+                else:
+                    if runLimitMark:
+                        myDic[job]['runLimit'] = re.sub('min', '', line)
+                        myDic[job]['runLimit'] = re.sub('\s', '', myDic[job]['runLimit'])
+                        continue
+
+                    if pendingMark:
+                        myDic[job]['pendingReasons'].append(line.strip())
+                        continue
+
+                    if jobCompileDic['jobNameCompile'].match(line):
+                        myMatch = jobCompileDic['jobNameCompile'].match(line)
+                        myDic[job]['jobName'] = myMatch.group(1)
+
+                    if jobCompileDic['userCompile'].match(line):
+                        myMatch = jobCompileDic['userCompile'].match(line)
+                        myDic[job]['user'] = myMatch.group(1)
+
+                    if jobCompileDic['projectCompile'].match(line):
+                        myMatch = jobCompileDic['projectCompile'].match(line)
+                        myDic[job]['project'] = myMatch.group(1)
+
+                    if jobCompileDic['statusCompile'].match(line):
+                        myMatch = jobCompileDic['statusCompile'].match(line)
+                        myDic[job]['status'] = myMatch.group(1)
+
+                    if jobCompileDic['queueCompile'].match(line):
+                        myMatch = jobCompileDic['queueCompile'].match(line)
+                        myDic[job]['queue'] = myMatch.group(1)
+
+                    if jobCompileDic['commandCompile'].match(line):
+                        myMatch = jobCompileDic['commandCompile'].match(line)
+                        myDic[job]['command'] = myMatch.group(1)
+                        continue
+
+                    if jobCompileDic['submittedTimeCompile'].match(line):
+                        myMatch = jobCompileDic['submittedTimeCompile'].match(line)
+                        myDic[job]['submittedTime'] = myMatch.group(1)
+
+                    if jobCompileDic['cwdCompile'].match(line):
+                        myMatch = jobCompileDic['cwdCompile'].match(line)
+                        myDic[job]['cwd'] = myMatch.group(1)
+
+                    if jobCompileDic['requestedResourcesCompile'].match(line):
+                        myMatch = jobCompileDic['requestedResourcesCompile'].match(line)
+                        myDic[job]['requestedResources'] = myMatch.group(1)
+
+                    if jobCompileDic['spanHostsCompile'].match(line):
+                        myMatch = jobCompileDic['spanHostsCompile'].match(line)
+                        myDic[job]['spanHosts'] = myMatch.group(1)
+
+                    if jobCompileDic['rusageMemCompile'].match(line):
+                        myMatch = jobCompileDic['rusageMemCompile'].match(line)
+                        myDic[job]['rusageMem'] = myMatch.group(1)
+
+                    if jobCompileDic['submittedFromCompile'].match(line):
+                        myMatch = jobCompileDic['submittedFromCompile'].match(line)
+                        myDic[job]['submittedFrom'] = myMatch.group(1)
+                        continue
+
+                    if jobCompileDic['startedOnCompile'].match(line):
+                        myMatch = jobCompileDic['startedOnCompile'].match(line)
+                        myDic[job]['startedTime'] = myMatch.group(1)
+                        startedHost = myMatch.group(3)
+                        startedHost = re.sub('<', '', startedHost)
+                        startedHost = re.sub('>', '', startedHost)
+                        startedHost = re.sub('\d+\*', '', startedHost)
+                        myDic[job]['startedOn'] = startedHost
+                        myDic[job]['processorsRequested'] = myMatch.group(4)
+                        continue
+
+                    if jobCompileDic['cpuTimeCompile'].match(line):
+                        myMatch = jobCompileDic['cpuTimeCompile'].match(line)
+                        myDic[job]['cpuTime'] = myMatch.group(1)
+
+                    if jobCompileDic['memCompile'].match(line):
+                        myMatch = jobCompileDic['memCompile'].match(line)
+                        myDic[job]['mem'] = myMatch.group(1)
+                        unit = myMatch.group(3)
+
+                        if unit == 'Kbytes':
+                            myDic[job]['mem'] = float(myDic[job]['mem'])/1024
+                        elif unit == 'Gbytes':
+                            myDic[job]['mem'] = float(myDic[job]['mem'])*1024
+                        elif unit == 'Tbytes':
+                            myDic[job]['mem'] = float(myDic[job]['mem'])*1024*1024
+
+                    if jobCompileDic['swapCompile'].match(line):
+                        myMatch = jobCompileDic['swapCompile'].match(line)
+                        myDic[job]['swap'] = myMatch.group(1)
+                        unit = myMatch.group(3)
+
+                        if unit == 'Kbytes':
+                            myDic[job]['swap'] = float(myDic[job]['swap'])/1024
+                        elif unit == 'Gbytes':
+                            myDic[job]['swap'] = float(myDic[job]['swap'])*1024
+                        elif unit == 'Tbytes':
+                            myDic[job]['swap'] = float(myDic[job]['swap'])*1024*1024
+
+                    if jobCompileDic['finishedTimeCompile'].match(line):
+                        myMatch = jobCompileDic['finishedTimeCompile'].match(line)
+                        myDic[job]['finishedTime'] = myMatch.group(1)
+                        continue
+
+                    if jobCompileDic['maxMemCompile'].match(line):
+                        myMatch = jobCompileDic['maxMemCompile'].match(line)
+                        myDic[job]['maxMem'] = myMatch.group(1)
+                        unit = myMatch.group(3)
+
+                        if unit == 'Kbytes':
+                            myDic[job]['maxMem'] = float(myDic[job]['maxMem'])/1024
+                        elif unit == 'Gbytes':
+                            myDic[job]['maxMem'] = float(myDic[job]['maxMem'])*1024
+                        elif unit == 'Tbytes':
+                            myDic[job]['maxMem'] = float(myDic[job]['maxMem'])*1024*1024
+
+                        myDic[job]['avgMem'] = myMatch.group(4)
+                        unit = myMatch.group(6)
+
+                        if unit == 'Kbytes':
+                            myDic[job]['avgMem'] = float(myDic[job]['avgMem'])/1024
+                        elif unit == 'Gbytes':
+                            myDic[job]['avgMem'] = float(myDic[job]['avgMem'])*1024
+                        elif unit == 'Tbytes':
+                            myDic[job]['avgMem'] = float(myDic[job]['avgMem'])*1024*1024
+
+                        continue
+
+                    if jobCompileDic['runLimitCompile'].match(line):
+                        runLimitMark = True
+
+                    if jobCompileDic['pendingReasonsCompile'].match(line):
+                        pendingMark = True
 
     return(myDic)
  
@@ -327,31 +422,38 @@ def getQueueHostInfo():
     queue = ''
 
     lines = os.popen('bqueues -l').readlines()
+
     for line in lines:
         line = line.strip()
+
         if queueCompile.match(line):
             myMatch = queueCompile.match(line)
             queue = myMatch.group(1)
             queueHostDic[queue] = []
+
         if hostsCompile.match(line):
             myMatch = hostsCompile.match(line)
             hostsString = myMatch.group(1)
+
             if re.search('all hosts used by the OpenLava system', hostsString):
                 common.printWarning('*Warning* (getQueueHostInfo) : queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.')
                 queueHostDic[queue] = getHostList()
             else:
                 queueHostDic.setdefault(queue, [])
                 hostsList = hostsString.split()
+
                 for hosts in hostsList:
                     if re.match('.+/', hosts):
                         hostGroupName = re.sub('/$', '', hosts)
                         hostList = getHostGroupMembers(hostGroupName)
+
                         if len(hostList) > 0:
                             queueHostDic[queue].extend(hostList)
                     elif re.match('^(.+)\+\d+$', hosts):
                         myMatch = re.match('^(.+)\+\d+$', hosts)
                         hostGroupName = myMatch.group(1)
                         hostList = getHostGroupMembers(hostGroupName)
+
                         if len(hostList) == 0:
                             queueHostDic[queue].append(hosts)
                         else:
@@ -372,6 +474,7 @@ def getHostQueueInfo():
 
     for queue in queueList:
         hostList = queueHostDic[queue]
+
         for host in hostList:
             if host in hostQueueDic.keys():
                hostQueueDic[host].append(queue)
