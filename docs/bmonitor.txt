@@ -37,13 +37,15 @@ For some behaviors:
 * Choice job status on Status combo, it will show all status related jobs.
 * Choice queue name on Queue combo, it will show all queue related jobs.
 * Choice host name on Host combo, it will show all host related jobs.
-* Click jobid, it will jump into JOB tab and the show job information.
+* Click Job item, it will jump into JOB tab and the show job information.
+* Click the "PEND" Status, it will show job pend reasons.
 * If the job Mem value is larger than Rusage value, it will be red.
 * Click the table title, it could sort with number or string.
 
 ** HOSTS tab
 * Choice queue name on Queue combo, it will show all queue related hosts.
-* Click Host name or Njobs number, it will jump into JOBS tab and show all host related jobs.
+* Click Host name, it will jump into LOAD tab and show the host load information.
+* Click Njobs number, it will jump into JOBS tab and show all host related jobs.
 * If the Status is unreach/unavail/closed_LIM, it will be red.
 * If the Ut value is larger than 90, it will be red.
 * If the Mem value is 10% less than Maxmem, it will be red.

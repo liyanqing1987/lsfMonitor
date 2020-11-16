@@ -295,6 +295,12 @@ class mainWindow(QMainWindow):
         jobTabMemLabel = QLabel('Mem', self.jobTabFrame1)
         self.jobTabMemLine = QLineEdit()
 
+        jobTabAvgMemLabel = QLabel('AvgMem', self.jobTabFrame1)
+        self.jobTabAvgMemLine = QLineEdit()
+
+        jobTabMaxMemLabel = QLabel('MaxMem', self.jobTabFrame1)
+        self.jobTabMaxMemLine = QLineEdit()
+
         # self.jobTabFrame1 - Grid
         jobTabFrame1Grid = QGridLayout()
 
@@ -314,6 +320,10 @@ class mainWindow(QMainWindow):
         jobTabFrame1Grid.addWidget(self.jobTabRusageMemLine, 6, 1)
         jobTabFrame1Grid.addWidget(jobTabMemLabel, 7, 0)
         jobTabFrame1Grid.addWidget(self.jobTabMemLine, 7, 1)
+        jobTabFrame1Grid.addWidget(jobTabAvgMemLabel, 8, 0)
+        jobTabFrame1Grid.addWidget(self.jobTabAvgMemLine, 8, 1)
+        jobTabFrame1Grid.addWidget(jobTabMaxMemLabel, 9, 0)
+        jobTabFrame1Grid.addWidget(self.jobTabMaxMemLine, 9, 1)
 
         self.jobTabFrame1.setLayout(jobTabFrame1Grid)
 
@@ -435,6 +445,24 @@ class mainWindow(QMainWindow):
                 memValue = round(float(self.jobInfoDic[self.currentJob]['mem'])/1024, 1)
                 self.jobTabMemLine.setText(str(memValue) + ' G')
                 self.jobTabMemLine.setCursorPosition(0)
+
+        # For "AvgMem" item.
+        if init:
+            self.jobTabAvgMemLine.setText('')
+        else:
+            if self.jobInfoDic[self.currentJob]['avgMem'] != '':
+                avgMemValue = round(float(self.jobInfoDic[self.currentJob]['avgMem'])/1024, 1)
+                self.jobTabAvgMemLine.setText(str(avgMemValue) + ' G')
+                self.jobTabAvgMemLine.setCursorPosition(0)
+
+        # For "MaxMem" item.
+        if init:
+            self.jobTabMaxMemLine.setText('')
+        else:
+            if self.jobInfoDic[self.currentJob]['maxMem'] != '':
+                maxMemValue = round(float(self.jobInfoDic[self.currentJob]['maxMem'])/1024, 1)
+                self.jobTabMaxMemLine.setText(str(maxMemValue) + ' G')
+                self.jobTabMaxMemLine.setCursorPosition(0)
 
     def updateJobTabFrame2(self, init=False):
         """
@@ -718,7 +746,8 @@ class mainWindow(QMainWindow):
 
     def jobsTabCheckClick(self, item=None):
         """
-        With the clicked job, jump the the job Tab, show the job related infos.
+        If click the Job id, jump to the JOB tab and show the job information.
+        If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
         """
         if item != None:
             currentRow = self.jobsTabTable.currentRow()
@@ -1069,14 +1098,22 @@ class mainWindow(QMainWindow):
 
     def hostsTabCheckClick(self, item=None):
         """
-        If click the host name (or Njobs number), jump to the jobs Tab and show the host related jobs.
+        If click the Host name, jump to the LOAD Tab and show the host load inforamtion.
+        If click the non-zero Njobs number, jump to the JOBS tab and show the host related jobs information.
         """
         if item != None:
             currentRow = self.hostsTabTable.currentRow()
             host = self.hostsTabTable.item(currentRow, 0).text().strip()
             njobsNum = self.hostsTabTable.item(currentRow, 5).text().strip()
 
-            if (item.column() == 0) or (item.column() == 5):
+            if item.column() == 0:
+                hostList = copy.deepcopy(self.hostList)
+                hostList.remove(host)
+                hostList.insert(0, host)
+                hostList.insert(1, '')
+                self.setLoadTabHostCombo(hostList)
+                self.mainTab.setCurrentWidget(self.loadTab)
+            elif item.column() == 5:
                 if int(njobsNum) > 0:
                     self.jobsTabUserLine.setText('')
                     self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
@@ -1232,9 +1269,9 @@ class mainWindow(QMainWindow):
 
     def queuesTabCheckClick(self, item=None):
         """
-        If click the queue name, jump to the jobs Tab and show the queue related jobs.
-        If click the PEND number, jump the jobs Tab and show the queue PEND related jobs.
-        If click the RUN number, jump the jobs Tab and show the queue RUN related jobs.
+        If click the QUEUE name, show queue information on QUEUE tab.
+        If click the PEND number, jump to the JOBS Tab and show the queue PEND jobs.
+        If click the RUN number, jump to the JOB Tab and show the queue RUN jobs.
         """
         if item != None:
             currentRow = self.queuesTabTable.currentRow()
@@ -1481,14 +1518,15 @@ class mainWindow(QMainWindow):
         loadTabFrame2Grid.addWidget(self.hostMemFigureCanvas, 1, 0)
         self.loadTabFrame2.setLayout(loadTabFrame2Grid)
 
-    def setLoadTabHostCombo(self):
+    def setLoadTabHostCombo(self, hostList=[]):
         """
         Set (initialize) self.loadTabHostCombo.
         """
         self.loadTabHostCombo.clear()
 
-        hostList = copy.deepcopy(self.hostList)
-        hostList.insert(0, '')
+        if not hostList:
+            hostList = copy.deepcopy(self.hostList)
+            hostList.insert(0, '')
 
         for host in hostList:
             self.loadTabHostCombo.addItem(host)
