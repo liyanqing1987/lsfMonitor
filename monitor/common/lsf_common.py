@@ -140,13 +140,13 @@ def getBjobsUfInfo(command='bjobs -u all -UF'):
     myDic = {}
 
     if tool == 'lsf':
-        myDic = getLsfBjobsUfInfo(command, tool)
+        myDic = getLsfBjobsUfInfo(command)
     elif tool == 'openlava':
-        myDic = getOpenlavaBjobsUfInfo(command, tool)
+        myDic = getOpenlavaBjobsUfInfo(command)
  
     return(myDic)
 
-def getLsfBjobsUfInfo(command, tool):
+def getLsfBjobsUfInfo(command):
     """
     Parse job info which are from command 'bjobs -u all -UF'.
     ====
@@ -388,7 +388,7 @@ def getLsfBjobsUfInfo(command, tool):
 
     return(myDic)
 
-def getOpenlavaBjobsUfInfo(command='bjobs -u all -UF'):
+def getOpenlavaBjobsUfInfo(command):
     """
     Parse job info which are from command 'bjobs -u all -UF'.
     ====
