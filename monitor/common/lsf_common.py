@@ -129,6 +129,7 @@ def get_tool_name():
         elif re.search('Openlava', line): 
             return('openlava')
 
+    print('*Warning*: Not sure current cluster is LSF or Openlava.')
     return('')
 
 def getBjobsUfInfo(command='bjobs -u all -UF'):
