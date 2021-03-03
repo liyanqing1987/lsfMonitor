@@ -126,7 +126,7 @@ def get_tool_name():
 
         if re.search('LSF', line): 
             return('lsf')
-        elif re.search('Openlava', line): 
+        elif re.search('OpenLava', line): 
             return('openlava')
 
     print('*Warning*: Not sure current cluster is LSF or Openlava.')
@@ -137,6 +137,7 @@ def getBjobsUfInfo(command='bjobs -u all -UF'):
     Get job information with "bjobs -UF".
     """
     tool = get_tool_name()
+    myDic = {}
 
     if tool == 'lsf':
         myDic = getLsfBjobsUfInfo(command, tool)
