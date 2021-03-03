@@ -114,10 +114,29 @@ def getBusersInfo(command='busers all'):
     busersDic = getCommandDict(command)
     return(busersDic)
 
-def getBjobsUfInfo(command='bjobs -u all -UF', tool='lsf'):
+def get_tool_name():
+    """
+    Make sure it is lsf or openlava.
+    """
+    command = 'lsid'
+    p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
+    for line in p.stdout.readlines():
+        line = str(line.strip(), 'utf-8')
+
+        if re.search('LSF', line): 
+            return('lsf')
+        elif re.search('Openlava', line): 
+            return('openlava')
+
+    return('')
+
+def getBjobsUfInfo(command='bjobs -u all -UF'):
     """
     Get job information with "bjobs -UF".
     """
+    tool = get_tool_name()
+
     if tool == 'lsf':
         myDic = getLsfBjobsUfInfo(command, tool)
     elif tool == 'openlava':
