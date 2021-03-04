@@ -183,7 +183,7 @@ class mainWindow(QMainWindow):
         """
         Show lsfMonitor about information.
         """
-        readmeFile = str(config.installPath) + '/README'
+        readmeFile = str(os.environ['LSFMONITOR_PATH']) + '/README'
         aboutMessage = ''
 
         with open(readmeFile, 'r') as RF:

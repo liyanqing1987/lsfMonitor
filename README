@@ -21,10 +21,8 @@ CONFIGURATION:
 After installing the tool, come into <INSTALL_PATH>/monitor/conf directory,
 then update file config.py for your own configuration.
 
-    installPath = "***"
     dbPath      = "***/db"
 
-"installPath" is the install path, don't edit it.
 "dbPath" is used to save database files, default is on <INSTALL_PATH>/db,
 you can re-point it into your own path.
 
