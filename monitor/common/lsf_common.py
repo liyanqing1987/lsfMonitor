@@ -114,7 +114,7 @@ def getBusersInfo(command='busers all'):
     busersDic = getCommandDict(command)
     return(busersDic)
 
-def get_tool_name():
+def getToolName():
     """
     Make sure it is lsf or openlava.
     """
@@ -136,7 +136,7 @@ def getBjobsUfInfo(command='bjobs -u all -UF'):
     """
     Get job information with "bjobs -UF".
     """
-    tool = get_tool_name()
+    tool = getToolName()
     myDic = {}
 
     if tool == 'lsf':
@@ -458,7 +458,7 @@ def getOpenlavaBjobsUfInfo(command):
                 myDic[job]['submittedFrom'] = ''
                 myDic[job]['submittedTime'] = ''
                 myDic[job]['cwd'] = ''
-                myDic[job]['processorsRequested'] = ''
+                myDic[job]['processorsRequested'] = '1'
                 myDic[job]['requestedResources'] = ''
                 myDic[job]['spanHosts'] = ''
                 myDic[job]['rusageMem'] = ''
