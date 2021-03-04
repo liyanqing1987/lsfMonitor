@@ -28,6 +28,7 @@ else:
 print('>>> Generate env file ".env.bash".')
 
 defaultPython = sys.executable
+defaultPythonPath = os.path.dirname(defaultPython)
 lsfmonitorPath = os.getcwd()
 envBash = str(lsfmonitorPath) + '/monitor/bin/.env.bash'
 
@@ -38,10 +39,10 @@ if os.path.exists(envBash):
 else:
     try:
         with open(envBash, 'w') as CF:
-            print('        DEFAULT_PYTHON  = "' + str(defaultPython) + '"')
-            CF.write('export DEFAULT_PYTHON="' + str(defaultPython) + '"\n')
-            print('        LSFMONITOR_PATH = "' + str(lsfmonitorPath) + '"')
-            CF.write('export LSFMONITOR_PATH="' + str(lsfmonitorPath) + '"\n')
+            print('        DEFAULT_PYTHON_PATH = ' + str(defaultPythonPath) + '')
+            CF.write('export PATH=' + str(defaultPythonPath) + ':$PATH\n')
+            print('        LSFMONITOR_PATH     = ' + str(lsfmonitorPath) + '')
+            CF.write('export LSFMONITOR_PATH=' + str(lsfmonitorPath) + '\n')
 
         os.chmod(envBash, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
     except Exception as error:
