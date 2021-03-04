@@ -56,6 +56,10 @@ def readArgs():
     parser.add_argument("-j", "--jobid",
                         type=int,
                         help='Specify the jobid which show it\'s information on job tab.')
+    parser.add_argument("-t", "--tab",
+                        default='JOB',
+                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD'],
+                        help='Specify the current tab, default is "JOB" tab.')
 
     args = parser.parse_args()
 
@@ -66,7 +70,7 @@ def readArgs():
         if not job_dic:
             args.jobid = None
 
-    return(args.jobid)
+    return(args.jobid, args.tab)
 
 class FigureCanvas(FigureCanvasQTAgg):
     def __init__(self):
@@ -78,10 +82,11 @@ class mainWindow(QMainWindow):
     """
     Main window of lsfMonitor.
     """
-    def __init__(self, specified_jobid):
+    def __init__(self, specifiedJob, specifiedTab):
         super().__init__()
-        self.specified_jobid = specified_jobid
+        self.specifiedJob = specifiedJob
         self.initUI()
+        self.switchTab(specifiedTab)
 
     def initUI(self):
         """
@@ -125,6 +130,20 @@ class mainWindow(QMainWindow):
         self.setWindowTitle('lsfMonitor')
         self.resize(1111, 620)
         pyqt5_common.centerWindow(self)
+
+    def switchTab(self, specifiedTab):
+        """
+        Switch to the specified Tab.
+        """
+        tabDic = {
+                  'JOB' : self.jobTab,
+                  'JOBS' : self.jobsTab,
+                  'HOSTS' : self.hostsTab,
+                  'QUEUES' : self.queuesTab,
+                  'LOAD' : self.loadTab,
+                 }
+
+        self.mainTab.setCurrentWidget(tabDic[specifiedTab])
 
     def genMenubar(self):
         """
@@ -254,8 +273,8 @@ class mainWindow(QMainWindow):
         self.genJobTabFrame2()
         self.genJobTabFrame3()
 
-        if self.specified_jobid:
-            self.jobTabJobLine.setText(str(self.specified_jobid))
+        if self.specifiedJob:
+            self.jobTabJobLine.setText(str(self.specifiedJob))
             self.checkJob()
 
     def genJobTabFrame0(self):
@@ -1702,9 +1721,9 @@ class mainWindow(QMainWindow):
 #################
 def main():
     check_tool()
-    (specified_jobid) = readArgs()
+    (specifiedJob, specifiedTab) = readArgs()
     app = QApplication(sys.argv)
-    mw = mainWindow(specified_jobid)
+    mw = mainWindow(specifiedJob, specifiedTab)
     mw.show()
     sys.exit(app.exec_())
 
