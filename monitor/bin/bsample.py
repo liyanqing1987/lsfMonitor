@@ -1,4 +1,3 @@
-#!PYTHONPATH
 # -*- coding: utf-8 -*-
 
 import os
@@ -8,7 +7,7 @@ import datetime
 import time
 from multiprocessing import Process
 
-sys.path.append('MONITORPATH')
+sys.path.append(str(os.environ['LSFMONITOR_PATH']) + '/monitor')
 from conf import config
 from common import common
 from common import lsf_common

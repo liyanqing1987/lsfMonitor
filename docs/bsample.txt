@@ -1,6 +1,6 @@
-Below is the usage of bsample.py.
+Below is the usage of bsample.
 ====
-usage: bsample.py [-h] [-j] [-q] [-H] [-l] [-u] [-i INTERVAL]
+usage: bsample [-h] [-j] [-q] [-H] [-l] [-u] [-i INTERVAL]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -25,7 +25,7 @@ Suggest to start sampling job with crontab, below is an example.
 ====
 # Sampling job/queue/load information for lsfMonitor (Frequency : 5 minutes)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample.py -j
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample.py -q
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample.py -l
+*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -j
+*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -q
+*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -l
 ====

@@ -1,4 +1,3 @@
-#!PYTHONPATH
 # -*- coding: utf-8 -*-
 
 import os
@@ -19,7 +18,7 @@ from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
-sys.path.append('MONITORPATH')
+sys.path.append(str(os.environ['LSFMONITOR_PATH']) + '/monitor')
 from common import common
 from common import lsf_common
 from common import pyqt5_common

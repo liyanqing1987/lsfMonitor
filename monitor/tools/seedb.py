@@ -1,11 +1,9 @@
-#!PYTHONPATH
-
 import os
 import re
 import sys
 import argparse
 
-sys.path.insert(0, 'MONITORPATH')
+sys.path.insert(0, 'LSFMONITOR_PATH/monitor')
 from conf import config
 from common import sqlite3_common
 
