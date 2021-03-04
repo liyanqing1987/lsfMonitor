@@ -37,6 +37,16 @@ if 'XDG_RUNTIME_DIR' not in os.environ:
 
     os.chmod(os.environ['XDG_RUNTIME_DIR'], stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
 
+def check_tool():
+    """
+    Make sure LSF or Openlava environment exists.
+    """
+    tool = lsf_common.getToolName()
+
+    if tool == '':
+        print('*Error*: Not find any LSF or Openlava environment!')
+        sys.exit(1)
+
 def readArgs():
     """
     Read arguments.
@@ -57,7 +67,6 @@ def readArgs():
             args.jobid = None
 
     return(args.jobid)
-
 
 class FigureCanvas(FigureCanvasQTAgg):
     def __init__(self):
@@ -1692,6 +1701,7 @@ class mainWindow(QMainWindow):
 # Main Function #
 #################
 def main():
+    check_tool()
     (specified_jobid) = readArgs()
     app = QApplication(sys.argv)
     mw = mainWindow(specified_jobid)
