@@ -73,19 +73,21 @@ else:
         sys.exit(1)
 
 
-## Replace strings "LSFMONITOR_PATH" into the real monitor directory path on all of the python files.
-print('>>> Update monitor directory path for main executable programs.')
+## Replace strings "PYTHON_PATH" and "LSFMONITOR_PATH_SETTING" into the real monitor directory path on all of the python files.
+print('>>> Updating python path and lsfMonitor install path on tools.')
 
 pythonFiles = ['monitor/tools/seedb.py',]
+pythonPathEscaping = re.sub('/', '\/', defaultPython)
 lsfmonitorPathEscaping = re.sub('/', '\/', lsfmonitorPath)
 
 for pythonFile in pythonFiles:
-    try:
-        command = "sed -i 's/LSFMONITOR_PATH/" + str(lsfmonitorPath) + "/g' " + str(pythonFile)
-        os.system(command)
-    except Exception as error:
-        print('*Error*: Failed on replacing real monitor directory path on file "' + str(pythonFile) + '": ' + str(error))
-        sys.exit(1)
+    print('    ' + str(pythonFile))
+    print('        PYTHON_PATH  >>> ' + str(defaultPython))
+    command = "sed -i 's/PYTHON_PATH/" + str(pythonPathEscaping) + "/g' " + str(pythonFile)
+    os.system(command)
+    print('        LSFMONITOR_PATH_SETTING>>> ' + str(lsfmonitorPath))
+    command = "sed -i 's/LSFMONITOR_PATH_SETTING/" + str(lsfmonitorPathEscaping) + "/g' " + str(pythonFile)
+    os.system(command)
 
 
 print('\nDone, Please enjoy it.')
