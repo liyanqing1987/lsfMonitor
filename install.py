@@ -77,6 +77,7 @@ else:
 print('>>> Update monitor directory path for main executable programs.')
 
 pythonFiles = ['monitor/tools/seedb.py',]
+lsfmonitorPathEscaping = re.sub('/', '\/', lsfmonitorPath)
 
 for pythonFile in pythonFiles:
     try:
