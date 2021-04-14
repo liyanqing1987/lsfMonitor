@@ -25,7 +25,7 @@ Suggest to start sampling job with crontab, below is an example.
 ====
 # Sampling job/queue/load information for lsfMonitor (Frequency : 5 minutes)
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -j
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -q
-*/5 * * * * [INSTALL_PATH]/lsfMonitor/monitor/bin/bsample -l
+*/5 * * * * <PYTHON_PATH>/python3 <INSTALL_PATH>/monitor/bin/bsample -j
+*/5 * * * * <PYTHON_PATH>/python3 <INSTALL_PATH>/monitor/bin/bsample -q
+*/5 * * * * <PYTHON_PATH>/python3 <INSTALL_PATH>/monitor/bin/bsample -l
 ====
