@@ -656,6 +656,7 @@ class mainWindow(QMainWindow):
     def genJobsTabTable(self):
         self.jobsTabTable.setShowGrid(True)
         self.jobsTabTable.setSortingEnabled(True)
+        self.jobsTabTable.setColumnCount(0)
         self.jobsTabTable.setColumnCount(11)
         self.jobsTabTable.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Processers', 'Rusage (G)', 'Mem (G)', 'Command'])
 
@@ -695,6 +696,7 @@ class mainWindow(QMainWindow):
 
         jobDic = lsf_common.getBjobsUfInfo(command)
 
+        self.jobsTabTable.setRowCount(0)
         self.jobsTabTable.setRowCount(len(jobDic.keys()))
         jobs = list(jobDic.keys())
 
@@ -887,6 +889,7 @@ class mainWindow(QMainWindow):
     def genHostsTabTable(self):
         self.hostsTabTable.setShowGrid(True)
         self.hostsTabTable.setSortingEnabled(True)
+        self.hostsTabTable.setColumnCount(0)
         self.hostsTabTable.setColumnCount(12)
         self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Maxmem (G)', 'Mem (G)', 'Maxswp (G)', 'Swp (G)', 'Tmp (G)'])
 
@@ -921,6 +924,7 @@ class mainWindow(QMainWindow):
                     if specifiedQueue in hostQueueDic[host]:
                         self.queueHostList.append(host)
 
+        self.hostsTabTable.setRowCount(0)
         self.hostsTabTable.setRowCount(len(self.queueHostList))
 
         for i in range(len(self.queueHostList)):
@@ -1217,6 +1221,7 @@ class mainWindow(QMainWindow):
 
     def genQueuesTabTable(self):
         self.queuesTabTable.setShowGrid(True)
+        self.queuesTabTable.setColumnCount(0)
         self.queuesTabTable.setColumnCount(3)
         self.queuesTabTable.setHorizontalHeaderLabels(['QUEUE', 'PEND', 'RUN'])
 
@@ -1227,8 +1232,10 @@ class mainWindow(QMainWindow):
         # Hide the vertical header
         self.queuesTabTable.verticalHeader().setVisible(False)
 
-        queuesDic = lsf_common.getBqueuesInfo()
+        self.queuesTabTable.setRowCount(0)
         self.queuesTabTable.setRowCount(len(self.queueList)+1)
+
+        queuesDic = lsf_common.getBqueuesInfo()
         queueList = copy.deepcopy(self.queueList)
         queueList.append('ALL')
         pendSum = 0
