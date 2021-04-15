@@ -70,7 +70,7 @@ class sampling:
             try:
                 os.system('mkdir -p ' + str(jobDbPath))
             except:
-                print('*Error*: Failed on creating sqlite job db directory "' + str(jobDbPath) + '".')
+                common.printError('*Error*: Failed on creating sqlite job db directory "' + str(jobDbPath) + '".')
                 sys.exit(1)
 
     def getDateInfo(self):
