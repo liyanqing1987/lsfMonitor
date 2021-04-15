@@ -1141,7 +1141,6 @@ class mainWindow(QMainWindow):
                 hostList = copy.deepcopy(self.hostList)
                 hostList.remove(host)
                 hostList.insert(0, host)
-                hostList.insert(1, '')
                 self.setLoadTabHostCombo(hostList)
                 self.mainTab.setCurrentWidget(self.loadTab)
             elif item.column() == 5:
@@ -1615,59 +1614,60 @@ class mainWindow(QMainWindow):
             if loadDbFileConnectResult == 'failed':
                 common.printWarning('*Warning*: Failed on connecting load database file "' + str(loadDbFile) + '".')
             else:
-                print('Getting history of load information for host "' + str(self.specifiedHost) + '".')
+                if self.specifiedHost:
+                    print('Getting history of load information for host "' + str(self.specifiedHost) + '".')
 
-                tableName = 'load_' + str(self.specifiedHost)
-                dataDic = sqlite3_common.getSqlTableData(loadDbFile, loadDbConn, tableName, ['sampleTime', 'ut', 'mem'])
+                    tableName = 'load_' + str(self.specifiedHost)
+                    dataDic = sqlite3_common.getSqlTableData(loadDbFile, loadDbConn, tableName, ['sampleTime', 'ut', 'mem'])
 
-                if not dataDic:
-                    common.printWarning('*Warning*: load information is empty for "' + str(self.specifiedHost) + '".')
-                else:
-                    specifiedDateSecond = 0
+                    if not dataDic:
+                        common.printWarning('*Warning*: load information is empty for "' + str(self.specifiedHost) + '".')
+                    else:
+                        specifiedDateSecond = 0
 
-                    if self.specifiedDate == 'Last Day':
-                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=1)).timetuple())
-                    elif self.specifiedDate == 'Last Week':
-                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=7)).timetuple())
-                    elif self.specifiedDate == 'Last Month':
-                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=30)).timetuple())
-                    elif self.specifiedDate == 'Last Year':
-                        specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=365)).timetuple())
+                        if self.specifiedDate == 'Last Day':
+                            specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=1)).timetuple())
+                        elif self.specifiedDate == 'Last Week':
+                            specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=7)).timetuple())
+                        elif self.specifiedDate == 'Last Month':
+                            specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=30)).timetuple())
+                        elif self.specifiedDate == 'Last Year':
+                            specifiedDateSecond = time.mktime((datetime.datetime.now()-datetime.timedelta(days=365)).timetuple())
 
-                    for i in range(len(dataDic['sampleTime'])-1, -1, -1):
-                        sampleTimeSecond = time.mktime(datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S').timetuple())
+                        for i in range(len(dataDic['sampleTime'])-1, -1, -1):
+                            sampleTimeSecond = time.mktime(datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S').timetuple())
 
-                        if sampleTimeSecond > specifiedDateSecond:
-                            # For sampleTime
-                            sampleTime = datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S')
-                            sampleTimeList.append(sampleTime)
+                            if sampleTimeSecond > specifiedDateSecond:
+                                # For sampleTime
+                                sampleTime = datetime.datetime.strptime(dataDic['sampleTime'][i], '%Y%m%d_%H%M%S')
+                                sampleTimeList.append(sampleTime)
 
-                            # For ut
-                            ut = dataDic['ut'][i]
+                                # For ut
+                                ut = dataDic['ut'][i]
 
-                            if ut:
-                                ut = int(re.sub('%', '', ut))
-                            else:
-                                ut = 0
+                                if ut:
+                                    ut = int(re.sub('%', '', ut))
+                                else:
+                                    ut = 0
 
-                            utList.append(ut)
+                                utList.append(ut)
 
-                            # For mem
-                            mem = dataDic['mem'][i]
+                                # For mem
+                                mem = dataDic['mem'][i]
 
-                            if mem:
-                                if re.match('.*M', mem):
-                                    mem = round(float(re.sub('M', '', mem))/1024, 1)
-                                elif re.match('.*G', mem):
-                                    mem = round(float(re.sub('G', '', mem)), 1)
-                                elif re.match('.*T', mem):
-                                    mem = round(float(re.sub('T', '', mem))*1024, 1)
-                            else:
-                                mem = 0
+                                if mem:
+                                    if re.match('.*M', mem):
+                                        mem = round(float(re.sub('M', '', mem))/1024, 1)
+                                    elif re.match('.*G', mem):
+                                        mem = round(float(re.sub('G', '', mem)), 1)
+                                    elif re.match('.*T', mem):
+                                        mem = round(float(re.sub('T', '', mem))*1024, 1)
+                                else:
+                                    mem = 0
 
-                            memList.append(mem)
+                                memList.append(mem)
 
-                loadDbConn.close()
+                    loadDbConn.close()
 
         return(sampleTimeList, utList, memList)
 
