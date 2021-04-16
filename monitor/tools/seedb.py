@@ -1,4 +1,4 @@
-#!/bin/env python3
+#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 
 import os

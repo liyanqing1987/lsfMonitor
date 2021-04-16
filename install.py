@@ -117,13 +117,14 @@ def update_tools():
     """
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
     """
+    expected_python = os.path.abspath(sys.executable)
     tool_list = [str(CWD) + '/monitor/tools/seedb.py',]
-
 
     for tool in tool_list:
         with open(tool, 'r+') as TOOL:
             lines = TOOL.read()
             TOOL.seek(0)
+            lines = lines.replace('EXPECTED_PYTHON', expected_python)
             lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
             TOOL.write(lines)
 
