@@ -18,12 +18,12 @@ Come into install directory, then execute below command.
 
 
 CONFIGURATION:
-After installing the tool, come into <INSTALL_PATH>/monitor/conf directory,
+After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
 then update file config.py for your own configuration.
 
     dbPath      = "***/db"
 
-"dbPath" is used to save database files, default is on <INSTALL_PATH>/db,
+"dbPath" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
 you can re-point it into your own path.
 
 
@@ -34,16 +34,16 @@ Below is the suggested crontab setting on sampling data.
 
 SHELL=/bin/csh
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -j
-*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -q
-*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -l
+*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
+*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
+*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
 
 Suggested sampling frequency is 5 minutes.
 
 
 BMONITORING:
 Execute below command to start LSF monitor function.
-<INSTALL_PATH>/monitor/bin/bmonitor
+<LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor
 
 
 LICENSE:

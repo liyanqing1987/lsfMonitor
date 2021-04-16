@@ -1,13 +1,15 @@
-#!PYTHON_PATH
+#!/bin/env python3
+# -*- coding: utf-8 -*-
 
 import os
 import re
 import sys
 import argparse
 
-os.environ['LSFMONITOR_PATH'] = 'LSFMONITOR_PATH_SETTING'
+if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
+    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
 
-sys.path.insert(0, str(os.environ['LSFMONITOR_PATH']) + '/monitor')
+sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from conf import config
 from common import sqlite3_common
 
@@ -35,22 +37,16 @@ def readArgs():
 
     args = parser.parse_args()
 
-    if args.database == '':
-        print('*Error*: No database file is specified.')
-        sys.exit(1)
-    else:
+    if not os.path.exists(args.database):
         if not re.match('^/.*$', args.database):
-            if os.path.exists(args.database):
-                cwd = os.getcwd()
-                database = str(cwd) + '/' + str(args.database)
-                if os.path.exists(database):
-                    args.database = database
-            else:
-                database = str(config.dbPath) + '/' + str(args.database)
-                if os.path.exists(database):
-                    args.database = database
+            database = str(config.dbPath) + '/monitor/' + str(args.database)
 
-        if not os.path.exists(args.database):
+            if os.path.exists(database):
+                args.database = database
+            else:
+                print('*Error*: ' + str(args.database) + ': No such database file.')
+                sys.exit(1)
+        else:
             print('*Error*: ' + str(args.database) + ': No such database file.')
             sys.exit(1)
 
@@ -64,6 +60,7 @@ def getLength(inputList):
 
     for item in inputList:
         itemLength = len(item)
+
         if itemLength > length:
             length = itemLength
 
@@ -74,37 +71,51 @@ def seedb(dbFile, tableList, keyList, number):
 
     if len(tableList) == 0:
         tableList = sqlite3_common.getSqlTableList(dbFile, '')
+
         print('TABLES :')
         print('========')
+
         for table in tableList:
             print(table)
+
         print('========')
     else:
         for table in tableList:
             print('TABLE : ' + str(table))
             print('========')
+
             dataDic = sqlite3_common.getSqlTableData(dbFile, '', table, keyList, number)
             keyList = list(dataDic.keys())
+
             if len(keyList) == 0:
                 print('*Error*: No valid keyList is specified.')
             else:
                 length = getLength(keyList)
                 formatString = '%-' + str(length+10) + 's'
+
                 for key in keyList:
                     print(formatString % (key), end='')
+
                 print('')
+
                 for key in keyList:
                     print(formatString % ('----'), end='')
+
                 print('')
+
                 firstKey = keyList[0]
                 firstValueList = dataDic[firstKey]
+
                 for i in range(len(firstValueList)):
                     for j in range(len(keyList)):
                         key = keyList[j]
                         valueList = dataDic[key]
                         value = valueList[i]
+
                         print(formatString % (value), end='')
+
                     print('')
+
             print('========')
 
 ################

@@ -3,7 +3,7 @@ import re
 import sys
 import sqlite3
 
-sys.path.append(str(os.environ['LSFMONITOR_PATH']) + '/monitor')
+sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 
 def connectDbFile(dbFile, mode='read'):

@@ -7,7 +7,7 @@ import datetime
 import time
 from multiprocessing import Process
 
-sys.path.append(str(os.environ['LSFMONITOR_PATH']) + '/monitor')
+sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from conf import config
 from common import common
 from common import lsf_common

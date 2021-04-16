@@ -1,94 +1,144 @@
 import os
-import re
 import sys
 import stat
 
+CWD = os.getcwd()
 
-## Python 3.5 or greater version is required.
-print('>>> Check python version.')
-
-CURRENT_PYTHON = sys.version_info[:2]
-REQUIRED_PYTHON = (3, 5)
-
-if CURRENT_PYTHON < REQUIRED_PYTHON:
-    sys.stderr.write("""
+def check_python_version():
+    """
+    Check python version.
+    python3 is required, anaconda3 is better.
+    """
+    print('>>> Check python version.')
+    
+    current_python = sys.version_info[:2]
+    required_python = (3, 5)
+    
+    if current_python < required_python:
+        sys.stderr.write("""
 ==========================
 Unsupported Python version
 ==========================
 This version of lsfMonitor requires Python {}.{} (or greater version), 
 but you're trying to install it on Python {}.{}.
-""".format(*(REQUIRED_PYTHON + CURRENT_PYTHON)))
-    sys.exit(1)
-else:
-    print('    Required python version : ' + str(REQUIRED_PYTHON))
-    print('    Current  python version : ' + str(CURRENT_PYTHON))
+""".format(*(required_python + current_python)))
+        sys.exit(1)
+    else:
+        print('    Required python version : ' + str(required_python))
+        print('    Current  python version : ' + str(current_python))
 
+def gen_bmonitor():
+    """
+    Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor.
+    """
+    bmonitor = str(CWD) + '/monitor/bin/bmonitor'
 
-## Generate .env.bash file for bmonitor and bsample.
-print('>>> Generate env file ".env.bash".')
+    print('')
+    print('>>> Generate script "' + str(bmonitor) + '".')
 
-defaultPython = sys.executable
-defaultPythonPath = os.path.dirname(defaultPython)
-lsfmonitorPath = os.getcwd()
-envBash = str(lsfmonitorPath) + '/monitor/bin/.env.bash'
-
-print('    Env file : ' + str(envBash))
-
-if os.path.exists(envBash):
-    print('*Warning*: env file "' + str(envBash) + '" already exists, will not update it.')
-else:
     try:
-        with open(envBash, 'w') as CF:
-            print('        DEFAULT_PYTHON_PATH = ' + str(defaultPythonPath) + '')
-            CF.write('export PATH=' + str(defaultPythonPath) + ':$PATH\n')
-            print('        LSFMONITOR_PATH     = ' + str(lsfmonitorPath) + '')
-            CF.write('export LSFMONITOR_PATH=' + str(lsfmonitorPath) + '\n')
+        with open(bmonitor, 'w') as BM:
+             python_path = os.path.dirname(os.path.abspath(sys.executable))
 
-        os.chmod(envBash, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-    except Exception as error:
-        print('*Error*: Failed on opening env file "' + str(envBash) + '" for write: ' + str(error))
+             BM.write("""#!/bin/bash
+
+# Set python3 path.
+export PATH=""" + str(python_path) + """:$PATH
+
+# Set lsfMonitor install path.
+export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
+
+# Execute bmonitor.py.
+python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bmonitor.py $@
+""")
+
+        os.chmod(bmonitor, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+    except Exception as err:
+        print('*Error*: Failed on generating script "' + str(bmonitor) + '": ' + str(err))
         sys.exit(1)
 
+def gen_bsample():
+    """
+    Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample.
+    """
+    bsample = str(CWD) + '/monitor/bin/bsample'
 
-## Generate config file.
-print('>>> Generate config file.')
+    print('')
+    print('>>> Generate script "' + str(bsample) + '".')
 
-dbPath = str(lsfmonitorPath) + '/db'
-configFile = str(lsfmonitorPath) + '/monitor/conf/config.py'
-
-print('    Config file : ' + str(configFile))
-
-if os.path.exists(configFile):
-    print('*Warning*: config file "' + str(configFile) + '" already exists, will not update it.')
-else:
     try:
-        with open(configFile, 'w') as CF:
-            print('        dbPath = "' + str(dbPath) + '"')
-            CF.write('# Specify the database directory.\n')
-            CF.write('dbPath = "' + str(dbPath) + '"\n')
+        with open(bsample, 'w') as BS:
+             python_path = os.path.dirname(os.path.abspath(sys.executable))
 
-        os.chmod(configFile, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-        os.chmod(dbPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-    except Exception as error:
-        print('*Error*: Failed on opening config file "' + str(configFile) + '" for write: ' + str(error))
+             BS.write("""#!/bin/bash
+
+# Set python3 path.
+export PATH=""" + str(python_path) + """:$PATH
+
+# Set lsfMonitor install path.
+export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
+
+# Execute bsample.py.
+python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
+""")
+
+        os.chmod(bsample, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+    except Exception as err:
+        print('*Error*: Failed on generating script "' + str(bsample) + '": ' + str(err))
         sys.exit(1)
 
+def gen_config_file():
+    """
+    Generate config file <LSFMONITOR_INSTALL_PATH>/monitor/conf/config.py.
+    """
+    config_file = str(CWD) + '/monitor/conf/config.py'
 
-## Replace strings "PYTHON_PATH" and "LSFMONITOR_PATH_SETTING" into the real monitor directory path on all of the python files.
-print('>>> Updating python path and lsfMonitor install path on tools.')
+    print('')
+    print('>>> Generate config file "' + str(config_file) + '".')
+    
+    if os.path.exists(config_file):
+        print('*Warning*: config file "' + str(config_file) + '" already exists, will not update it.')
+    else:
+        try:
+            db_path = str(CWD) + '/db'
 
-pythonFiles = ['monitor/tools/seedb.py',]
-pythonPathEscaping = re.sub('/', '\/', defaultPython)
-lsfmonitorPathEscaping = re.sub('/', '\/', lsfmonitorPath)
+            with open(config_file, 'w') as CF:
+                print('        dbPath = "' + str(db_path) + '"')
+                CF.write('# Specify the database directory.\n')
+                CF.write('dbPath = "' + str(db_path) + '"\n')
+    
+            os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+            os.chmod(db_path, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+        except Exception as error:
+            print('*Error*: Failed on opening config file "' + str(config_file) + '" for write: ' + str(error))
+            sys.exit(1)
 
-for pythonFile in pythonFiles:
-    print('    ' + str(pythonFile))
-    print('        PYTHON_PATH  >>> ' + str(defaultPython))
-    command = "sed -i 's/PYTHON_PATH/" + str(pythonPathEscaping) + "/g' " + str(pythonFile)
-    os.system(command)
-    print('        LSFMONITOR_PATH_SETTING>>> ' + str(lsfmonitorPath))
-    command = "sed -i 's/LSFMONITOR_PATH_SETTING/" + str(lsfmonitorPathEscaping) + "/g' " + str(pythonFile)
-    os.system(command)
+def update_tools():
+    """
+    Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
+    """
+    tool_list = [str(CWD) + '/monitor/tools/seedb.py',]
 
 
-print('\nDone, Please enjoy it.')
+    for tool in tool_list:
+        with open(tool, 'r+') as TOOL:
+            lines = TOOL.read()
+            TOOL.seek(0)
+            lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
+            TOOL.write(lines)
+
+################
+# Main Process #
+################
+def main():
+    check_python_version()
+    gen_bmonitor()
+    gen_bsample()
+    gen_config_file()
+    update_tools()
+
+    print('')
+    print('Done, Please enjoy it.')
+
+if __name__ == '__main__':
+    main()

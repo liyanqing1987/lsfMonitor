@@ -18,7 +18,7 @@ from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
-sys.path.append(str(os.environ['LSFMONITOR_PATH']) + '/monitor')
+sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 from common import lsf_common
 from common import pyqt5_common
@@ -202,7 +202,7 @@ class mainWindow(QMainWindow):
         """
         Show lsfMonitor about information.
         """
-        readmeFile = str(os.environ['LSFMONITOR_PATH']) + '/README'
+        readmeFile = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/README'
         aboutMessage = ''
 
         with open(readmeFile, 'r') as RF:
