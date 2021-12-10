@@ -1,22 +1,27 @@
 Below is the usage of bsample.py.
 ====
-usage: bmonitor [-h] [-j JOBID]
+usage: bmonitor.py [-h] [-j JOBID] [-u USER] [-f FEATURE] [-t {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}]
 
 optional arguments:
   -h, --help            show this help message and exit
   -j JOBID, --jobid JOBID
-                        Specify the jobid which show it's information on job
-                        tab.
+                        Specify the jobid which show it's information on "JOB" tab.
+  -u USER, --user USER  Specify the user show how's job information on "JOBS" tab.
+  -f FEATURE, --feature FEATURE
+                        Specify license feature which you want to see on "LICENSE" tab.
+  -t {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}, --tab {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}
+                        Specify the current tab, default is "JOB" tab.
 ====
 
 
 bmonitor.py have only a graphical interface window, contains five tabs, JOB/JOBS/HOSTS/QUEUES/LOAD.
 
-JOB    : job information and job memory curve.
-JOBS   : job list and basic job information.
-HOSTS  : host list and basic host information.
-QUEUES : queue list, queue information and queue RUN/PEND job number curve.
-LOAD   : host load information, could show ut/mem curve for specified host.
+JOB     : job information and job memory curve.
+JOBS    : job list and basic job information.
+HOSTS   : host list and basic host information.
+QUEUES  : queue list, queue information and queue RUN/PEND job number curve.
+LOAD    : host load information, could show ut/mem curve for specified host.
+LICENSE : EDA license feature usage and expiration information.
 
 
 For the menu bar:
@@ -30,20 +35,21 @@ Help  -> About lsfMonitor       : Readme for lsfMonitor.
 For some behaviors:
 
 ** JOB tab
-* Input jobid on Job label, click "Check" button, it will show job information (and job memory curve).
+* Input jobid on "Job" label, click "Check" button, it will show job information (and job memory curve).
+* Click "Process Tracer" button, it can trace the job related process conditions.
 
 ** JOBS tab
-* Input user name on User label, click "Check" button, it will show all user related jobs.
-* Choice job status on Status combo, it will show all status related jobs.
-* Choice queue name on Queue combo, it will show all queue related jobs.
-* Choice host name on Host combo, it will show all host related jobs.
+* Choice job status on "Status" combo, it will show all status related jobs.
+* Choice queue name on "Queue" combo, it will show all queue related jobs.
+* Choice host name on "Host" combo, it will show all host related jobs.
+* Input user name on "User" label, click "Check" button, it will show all user related jobs.
 * Click Job item, it will jump into JOB tab and the show job information.
 * Click the "PEND" Status, it will show job pend reasons.
 * If the job Mem value is larger than Rusage value, it will be red.
 * Click the table title, it could sort with number or string.
 
 ** HOSTS tab
-* Choice queue name on Queue combo, it will show all queue related hosts.
+* Choice queue name on "Queue" combo, it will show all queue related hosts.
 * Click Host name, it will jump into LOAD tab and show the host load information.
 * Click Njobs number, it will jump into JOBS tab and show all host related jobs.
 * If the Status is unreach/unavail/closed_LIM, it will be red.
@@ -58,4 +64,10 @@ For some behaviors:
 * If the PEND job number is larger than 0, it will be red.
 
 ** LOAD tab
-* Choice host name on Host combo, it will show the host ut/mem curve.
+* Choice host name on "Host" combo, it will show the host ut/mem curve.
+* Choice date range on "Date" combo.
+
+** LICENSE tab
+* Choice license server on "License Server" combo, it will show all license server related features information.
+* Choice show mode on "Show" combo, it will show all/in_use features information.
+* Input license features on "License Feature" label, click "Filter" button, it will show specified features information.

@@ -4,30 +4,30 @@ import stat
 
 CWD = os.getcwd()
 
-def check_python_version():
+def checkPythonVersion():
     """
     Check python version.
     python3 is required, anaconda3 is better.
     """
     print('>>> Check python version.')
     
-    current_python = sys.version_info[:2]
-    required_python = (3, 5)
+    currentPython = sys.version_info[:2]
+    requiredPython = (3, 5)
     
-    if current_python < required_python:
+    if currentPython < requiredPython:
         sys.stderr.write("""
 ==========================
 Unsupported Python version
 ==========================
 This version of lsfMonitor requires Python {}.{} (or greater version), 
 but you're trying to install it on Python {}.{}.
-""".format(*(required_python + current_python)))
+""".format(*(requiredPython + currentPython)))
         sys.exit(1)
     else:
-        print('    Required python version : ' + str(required_python))
-        print('    Current  python version : ' + str(current_python))
+        print('    Required python version : ' + str(requiredPython))
+        print('    Current  python version : ' + str(currentPython))
 
-def gen_bmonitor():
+def genBmonitor():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor.
     """
@@ -38,12 +38,12 @@ def gen_bmonitor():
 
     try:
         with open(bmonitor, 'w') as BM:
-             python_path = os.path.dirname(os.path.abspath(sys.executable))
+             pythonPath = os.path.dirname(os.path.abspath(sys.executable))
 
              BM.write("""#!/bin/bash
 
 # Set python3 path.
-export PATH=""" + str(python_path) + """:$PATH
+export PATH=""" + str(pythonPath) + """:$PATH
 
 # Set lsfMonitor install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
@@ -57,7 +57,7 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bmonitor.py $@
         print('*Error*: Failed on generating script "' + str(bmonitor) + '": ' + str(err))
         sys.exit(1)
 
-def gen_bsample():
+def genBsample():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample.
     """
@@ -68,12 +68,12 @@ def gen_bsample():
 
     try:
         with open(bsample, 'w') as BS:
-             python_path = os.path.dirname(os.path.abspath(sys.executable))
+             pythonPath = os.path.dirname(os.path.abspath(sys.executable))
 
              BS.write("""#!/bin/bash
 
 # Set python3 path.
-export PATH=""" + str(python_path) + """:$PATH
+export PATH=""" + str(pythonPath) + """:$PATH
 
 # Set lsfMonitor install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
@@ -87,44 +87,49 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
         print('*Error*: Failed on generating script "' + str(bsample) + '": ' + str(err))
         sys.exit(1)
 
-def gen_config_file():
+def genConfigFile():
     """
     Generate config file <LSFMONITOR_INSTALL_PATH>/monitor/conf/config.py.
     """
-    config_file = str(CWD) + '/monitor/conf/config.py'
+    configFile = str(CWD) + '/monitor/conf/config.py'
 
     print('')
-    print('>>> Generate config file "' + str(config_file) + '".')
+    print('>>> Generate config file "' + str(configFile) + '".')
     
-    if os.path.exists(config_file):
-        print('*Warning*: config file "' + str(config_file) + '" already exists, will not update it.')
+    if os.path.exists(configFile):
+        print('*Warning*: config file "' + str(configFile) + '" already exists, will not update it.')
     else:
         try:
-            db_path = str(CWD) + '/db'
+            dbPath = str(CWD) + '/db'
 
-            with open(config_file, 'w') as CF:
-                print('        dbPath = "' + str(db_path) + '"')
-                CF.write('# Specify the database directory.\n')
-                CF.write('dbPath = "' + str(db_path) + '"\n')
-    
-            os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-            os.chmod(db_path, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+            with open(configFile, 'w') as CF:
+                CF.write('''# Specify the database directory.
+dbPath = "''' + str(dbPath) + '''"
+
+# Specify lmstat path, example "/*/*/bin".
+lmstatPath = ""
+
+# Specify lmstat bsub command, example "bsub -q normal -Is".
+lmstatBsubCommand = ""''')
+
+            os.chmod(configFile, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+            os.chmod(dbPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
         except Exception as error:
-            print('*Error*: Failed on opening config file "' + str(config_file) + '" for write: ' + str(error))
+            print('*Error*: Failed on opening config file "' + str(configFile) + '" for write: ' + str(error))
             sys.exit(1)
 
-def update_tools():
+def updateTools():
     """
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
     """
-    expected_python = os.path.abspath(sys.executable)
-    tool_list = [str(CWD) + '/monitor/tools/seedb.py',]
+    expectedPython = os.path.abspath(sys.executable)
+    toolList = [str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py']
 
-    for tool in tool_list:
+    for tool in toolList:
         with open(tool, 'r+') as TOOL:
             lines = TOOL.read()
             TOOL.seek(0)
-            lines = lines.replace('EXPECTED_PYTHON', expected_python)
+            lines = lines.replace('EXPECTED_PYTHON', expectedPython)
             lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
             TOOL.write(lines)
 
@@ -132,11 +137,11 @@ def update_tools():
 # Main Process #
 ################
 def main():
-    check_python_version()
-    gen_bmonitor()
-    gen_bsample()
-    gen_config_file()
-    update_tools()
+    checkPythonVersion()
+    genBmonitor()
+    genBsample()
+    genConfigFile()
+    updateTools()
 
     print('')
     print('Done, Please enjoy it.')

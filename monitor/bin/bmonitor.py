@@ -12,7 +12,7 @@ import argparse
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView
 from PyQt5.QtGui import QBrush, QFont
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QThread
 
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -21,6 +21,7 @@ from matplotlib.figure import Figure
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 from common import lsf_common
+from common import license_common
 from common import pyqt5_common
 from common import sqlite3_common
 from conf import config
@@ -55,36 +56,66 @@ def readArgs():
 
     parser.add_argument("-j", "--jobid",
                         type=int,
-                        help='Specify the jobid which show it\'s information on job tab.')
+                        help='Specify the jobid which show it\'s information on "JOB" tab.')
+    parser.add_argument("-u", "--user",
+                        default='',
+                        help='Specify the user show how\'s job information on "JOBS" tab.')
+    parser.add_argument("-f", "--feature",
+                        default='',
+                        help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
-                        default='JOB',
-                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD'],
+                        default='',
+                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'LICENSE'],
                         help='Specify the current tab, default is "JOB" tab.')
 
     args = parser.parse_args()
 
+    # Make sure specified job exists.
     if args.jobid:
-        command = 'bjobs -w ' + str(args.jobid)
-        job_dic = lsf_common.getBjobsInfo(command)
+        if not args.tab:
+            args.tab = 'JOB'
 
-        if not job_dic:
+        command = 'bjobs -w ' + str(args.jobid)
+        jobDic = lsf_common.getBjobsInfo(command)
+
+        if not jobDic:
             args.jobid = None
 
-    return(args.jobid, args.tab)
+    # Set default tab for args.user.
+    if args.user:
+        if not args.tab:
+            args.tab = 'JOBS'
+
+    # Set default tab for args.feature.
+    if args.feature:
+        if not args.tab:
+            args.tab = 'LICENSE'
+
+    # Set default tab.
+    if not args.tab:
+        args.tab = 'JOB'
+
+    return(args.jobid, args.user, args.feature, args.tab)
+
 
 class FigureCanvas(FigureCanvasQTAgg):
+    """
+    Generate a new figure canvas.
+    """
     def __init__(self):
         self.figure = Figure()
         super().__init__(self.figure)
 
 
-class mainWindow(QMainWindow):
+class MainWindow(QMainWindow):
     """
     Main window of lsfMonitor.
     """
-    def __init__(self, specifiedJob, specifiedTab):
+    def __init__(self, specifiedJob, specifiedUser, specifiedFeature, specifiedTab):
         super().__init__()
         self.specifiedJob = specifiedJob
+        self.specifiedUser = specifiedUser
+        self.specifiedFeature = specifiedFeature
         self.initUI()
         self.switchTab(specifiedTab)
 
@@ -100,11 +131,12 @@ class mainWindow(QMainWindow):
         self.setCentralWidget(self.mainTab)
 
         # Define four sub-tabs (JOB/JOBS/HOSTS/QUEUES)
-        self.jobTab    = QWidget()
-        self.jobsTab   = QWidget()
-        self.hostsTab  = QWidget()
-        self.queuesTab = QWidget()
-        self.loadTab   = QWidget()
+        self.jobTab     = QWidget()
+        self.jobsTab    = QWidget()
+        self.hostsTab   = QWidget()
+        self.queuesTab  = QWidget()
+        self.loadTab    = QWidget()
+        self.licenseTab = QWidget()
 
         # Add the sub-tabs into main Tab widget
         self.mainTab.addTab(self.jobTab, 'JOB')
@@ -112,12 +144,16 @@ class mainWindow(QMainWindow):
         self.mainTab.addTab(self.hostsTab, 'HOSTS')
         self.mainTab.addTab(self.queuesTab, 'QUEUES')
         self.mainTab.addTab(self.loadTab, 'LOAD')
+        self.mainTab.addTab(self.licenseTab, 'LICENSE')
 
         # Get LSF queue/host information.
-        print('* Loading LSF status, please wait a moment ...')
-
+        print('* Loading LSF basic information, please wait a moment ...')
         self.queueList = lsf_common.getQueueList()
         self.hostList = lsf_common.getHostList()
+
+        # Get license information.
+        print('* Loading license basic information, please wait a moment ...')
+        self.licenseDic = license_common.getLicenseInfo()
 
         # Generate the sub-tabs
         self.genJobTab()
@@ -125,6 +161,7 @@ class mainWindow(QMainWindow):
         self.genHostsTab()
         self.genQueuesTab()
         self.genLoadTab()
+        self.genLicenseTab()
 
         # Show main window
         self.setWindowTitle('lsfMonitor')
@@ -136,11 +173,12 @@ class mainWindow(QMainWindow):
         Switch to the specified Tab.
         """
         tabDic = {
-                  'JOB' : self.jobTab,
-                  'JOBS' : self.jobsTab,
-                  'HOSTS' : self.hostsTab,
-                  'QUEUES' : self.queuesTab,
-                  'LOAD' : self.loadTab,
+                  'JOB'     : self.jobTab,
+                  'JOBS'    : self.jobsTab,
+                  'HOSTS'   : self.hostsTab,
+                  'QUEUES'  : self.queuesTab,
+                  'LOAD'    : self.loadTab,
+                  'LICENSE' : self.licenseTab,
                  }
 
         self.mainTab.setCurrentWidget(tabDic[specifiedTab])
@@ -182,11 +220,13 @@ class mainWindow(QMainWindow):
         """
         currentTime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        print('* [' + str(currentTime) + '] Re-Loading LSF status, please wait a moment ...')
+        print('* [' + str(currentTime) + '] Re-Loading LSF and License status, please wait a moment ...')
 
         self.genJobsTabTable()
         self.genHostsTabTable()
         self.genQueuesTabTable()
+        self.genLicenseTabFeatureTable(update=True)
+        self.genLicenseTabExpiresTable()
 
     def periodicFresh(self, state):
         """
@@ -210,6 +250,7 @@ class mainWindow(QMainWindow):
                 aboutMessage = str(aboutMessage) + str(line)
 
         QMessageBox.about(self, 'About lsfMonitor', aboutMessage)
+
 
 ## Common sub-functions (begin) ##
     def guiWarning(self, warningMessage):
@@ -328,6 +369,9 @@ class mainWindow(QMainWindow):
         jobTabMaxMemLabel = QLabel('MaxMem', self.jobTabFrame1)
         self.jobTabMaxMemLine = QLineEdit()
 
+        processTracerButton = QPushButton('Process  Tracer', self.jobTabFrame1)
+        processTracerButton.clicked.connect(self.processTracer)
+
         # self.jobTabFrame1 - Grid
         jobTabFrame1Grid = QGridLayout()
 
@@ -351,8 +395,17 @@ class mainWindow(QMainWindow):
         jobTabFrame1Grid.addWidget(self.jobTabAvgMemLine, 8, 1)
         jobTabFrame1Grid.addWidget(jobTabMaxMemLabel, 9, 0)
         jobTabFrame1Grid.addWidget(self.jobTabMaxMemLine, 9, 1)
+        jobTabFrame1Grid.addWidget(processTracerButton, 10, 0, 1, 2)
 
         self.jobTabFrame1.setLayout(jobTabFrame1Grid)
+
+    def processTracer(self):
+        # Call script process_tracer.py to get job process information.
+        self.currentJob = self.jobTabJobLine.text().strip()
+
+        if self.currentJob:
+            self.myProcessTracer = ProcessTracer(self.currentJob)
+            self.myProcessTracer.start()
 
     def genJobTabFrame2(self):
         # self.jobTabFrame2
@@ -400,8 +453,7 @@ class mainWindow(QMainWindow):
             return
 
         # Get job info
-        print('Getting job information for job "' + str(self.currentJob) + '".')
-
+        print('* Getting LSF job information for "' + str(currentJob) + '", please wait a moment ...')
         self.jobInfoDic = lsf_common.getBjobsUfInfo(command='bjobs -UF ' + str(currentJob))
 
         # Update the related frames with the job info.
@@ -566,6 +618,9 @@ class mainWindow(QMainWindow):
                     self.drawJobMemCurve(fig, runtimeList, memList)
 
     def drawJobMemCurve(self, fig, runtimeList, memList):
+        """
+        Draw memory curve for specified job.
+        """
         fig.subplots_adjust(bottom=0.2)
         axes = fig.add_subplot(111)
         axes.set_title('job "' + str(self.currentJob) + '" memory curve')
@@ -603,15 +658,15 @@ class mainWindow(QMainWindow):
 
         # Generate sub-frame
         self.genJobsTabFrame0()
+
+        if self.specifiedUser:
+            self.jobsTabUserLine.setText(str(self.specifiedUser))
+
         self.genJobsTabTable()
 
     def genJobsTabFrame0(self):
         # self.jobsTabFrame0
-        jobsTabUserLabel = QLabel('User', self.jobsTabFrame0)
-        jobsTabUserLabel.setStyleSheet("font-weight: bold;")
-        self.jobsTabUserLine = QLineEdit()
-
-        jobsTabStatusLabel = QLabel('       Status', self.jobsTabFrame0)
+        jobsTabStatusLabel = QLabel('Status', self.jobsTabFrame0)
         jobsTabStatusLabel.setStyleSheet("font-weight: bold;")
         self.jobsTabStatusCombo = QComboBox(self.jobsTabFrame0)
         self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
@@ -626,6 +681,10 @@ class mainWindow(QMainWindow):
         self.jobsTabStartedOnCombo = QComboBox(self.jobsTabFrame0)
         self.setJobsTabStartedOnCombo()
 
+        jobsTabUserLabel = QLabel('       User', self.jobsTabFrame0)
+        jobsTabUserLabel.setStyleSheet("font-weight: bold;")
+        self.jobsTabUserLine = QLineEdit()
+
         self.jobsTabStatusCombo.currentIndexChanged.connect(self.genJobsTabTable)
         self.jobsTabQueueCombo.currentIndexChanged.connect(self.genJobsTabTable)
         self.jobsTabStartedOnCombo.currentIndexChanged.connect(self.genJobsTabTable)
@@ -636,14 +695,14 @@ class mainWindow(QMainWindow):
         # self.jobsTabFrame0 - Grid
         jobsTabFrame0Grid = QGridLayout()
 
-        jobsTabFrame0Grid.addWidget(jobsTabUserLabel, 0, 0)
-        jobsTabFrame0Grid.addWidget(self.jobsTabUserLine, 0, 1)
-        jobsTabFrame0Grid.addWidget(jobsTabStatusLabel, 0, 2)
-        jobsTabFrame0Grid.addWidget(self.jobsTabStatusCombo, 0, 3)
-        jobsTabFrame0Grid.addWidget(jobsTabQueueLabel, 0, 4)
-        jobsTabFrame0Grid.addWidget(self.jobsTabQueueCombo, 0, 5)
-        jobsTabFrame0Grid.addWidget(jobsTabStartedOnLabel, 0, 6)
-        jobsTabFrame0Grid.addWidget(self.jobsTabStartedOnCombo, 0, 7)
+        jobsTabFrame0Grid.addWidget(jobsTabStatusLabel, 0, 0)
+        jobsTabFrame0Grid.addWidget(self.jobsTabStatusCombo, 0, 1)
+        jobsTabFrame0Grid.addWidget(jobsTabQueueLabel, 0, 2)
+        jobsTabFrame0Grid.addWidget(self.jobsTabQueueCombo, 0, 3)
+        jobsTabFrame0Grid.addWidget(jobsTabStartedOnLabel, 0, 4)
+        jobsTabFrame0Grid.addWidget(self.jobsTabStartedOnCombo, 0, 5)
+        jobsTabFrame0Grid.addWidget(jobsTabUserLabel, 0, 6)
+        jobsTabFrame0Grid.addWidget(self.jobsTabUserLine, 0, 7)
         jobsTabFrame0Grid.addWidget(jobsTabCheckButton, 0, 8)
 
         jobsTabFrame0Grid.setColumnStretch(1, 1)
@@ -654,6 +713,7 @@ class mainWindow(QMainWindow):
         self.jobsTabFrame0.setLayout(jobsTabFrame0Grid)
 
     def genJobsTabTable(self):
+        # self.jobsTabTable
         self.jobsTabTable.setShowGrid(True)
         self.jobsTabTable.setSortingEnabled(True)
         self.jobsTabTable.setColumnCount(0)
@@ -667,6 +727,7 @@ class mainWindow(QMainWindow):
         self.jobsTabTable.setColumnWidth(9, 80)
         self.jobsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
 
+        # Get specified user related jobs.
         command = 'bjobs -UF '
         specifiedUser = self.jobsTabUserLine.text().strip()
 
@@ -675,11 +736,13 @@ class mainWindow(QMainWindow):
         else:
             command = str(command) + ' -u ' + str(specifiedUser)
 
+        # Get specified queue related jobs.
         specifiedQueue = self.jobsTabQueueCombo.currentText().strip()
 
         if specifiedQueue != 'ALL':
             command = str(command) + ' -q ' + str(specifiedQueue)
 
+        # Get specified status (RUN/PEND/ALL) related jobs.
         specifiedStatus = self.jobsTabStatusCombo.currentText().strip()
 
         if specifiedStatus == 'RUN':
@@ -689,13 +752,17 @@ class mainWindow(QMainWindow):
         elif specifiedStatus == 'ALL':
             command = str(command) + ' -a'
 
+        # Get specified host related jobs.
         specifiedHost = self.jobsTabStartedOnCombo.currentText().strip()
 
         if specifiedHost != 'ALL':
             command = str(command) + ' -m ' + str(specifiedHost)
 
+        # Run command to get expected jobs information.
+        print('* Loading LSF jobs information, please wait a moment ...')
         jobDic = lsf_common.getBjobsUfInfo(command)
 
+        # Fill self.jobsTabTable items.
         self.jobsTabTable.setRowCount(0)
         self.jobsTabTable.setRowCount(len(jobDic.keys()))
         jobs = list(jobDic.keys())
@@ -778,7 +845,7 @@ class mainWindow(QMainWindow):
         If click the Job id, jump to the JOB tab and show the job information.
         If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
         """
-        if item != None:
+        if item is not None:
             currentRow = self.jobsTabTable.currentRow()
             job = self.jobsTabTable.item(currentRow, 0).text().strip()
 
@@ -792,6 +859,8 @@ class mainWindow(QMainWindow):
 
                 if jobStatus == 'PEND':
                     command = 'bjobs -UF ' + str(job)
+
+                    print('* Getting LSF job information for "' + str(job) + '", please wait a moment ...')
                     jobDic = lsf_common.getBjobsUfInfo(command)
                     jobPendingReasons = ''
 
@@ -876,37 +945,37 @@ class mainWindow(QMainWindow):
         # self.hostsTabFrame0 - Grid
         hostsTabFrame0Grid = QGridLayout()
 
-        hostsTabFrame0Grid.addWidget(hostsTabQueueLabel, 0, 1)
-        hostsTabFrame0Grid.addWidget(self.hostsTabQueueCombo, 0, 2)
-        hostsTabFrame0Grid.addWidget(hostsTabEmptyLabel, 0, 3)
+        hostsTabFrame0Grid.addWidget(hostsTabQueueLabel, 0, 0)
+        hostsTabFrame0Grid.addWidget(self.hostsTabQueueCombo, 0, 1)
+        hostsTabFrame0Grid.addWidget(hostsTabEmptyLabel, 0, 2)
 
+        hostsTabFrame0Grid.setColumnStretch(0, 1)
         hostsTabFrame0Grid.setColumnStretch(1, 1)
-        hostsTabFrame0Grid.setColumnStretch(2, 1)
-        hostsTabFrame0Grid.setColumnStretch(3, 12)
+        hostsTabFrame0Grid.setColumnStretch(2, 12)
 
         self.hostsTabFrame0.setLayout(hostsTabFrame0Grid)
 
     def genHostsTabTable(self):
+        # self.hostsTabTable
         self.hostsTabTable.setShowGrid(True)
         self.hostsTabTable.setSortingEnabled(True)
         self.hostsTabTable.setColumnCount(0)
         self.hostsTabTable.setColumnCount(12)
         self.hostsTabTable.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'Maxmem (G)', 'Mem (G)', 'Maxswp (G)', 'Swp (G)', 'Tmp (G)'])
 
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.hostsTabTable.setColumnWidth(1, 80)
         self.hostsTabTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(7, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(9, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
-        self.hostsTabTable.horizontalHeader().setSectionResizeMode(11, QHeaderView.Stretch)
+        self.hostsTabTable.setColumnWidth(3, 80)
+        self.hostsTabTable.setColumnWidth(4, 80)
+        self.hostsTabTable.setColumnWidth(5, 80)
+        self.hostsTabTable.setColumnWidth(6, 80)
+        self.hostsTabTable.setColumnWidth(7, 100)
+        self.hostsTabTable.setColumnWidth(8, 80)
+        self.hostsTabTable.setColumnWidth(9, 80)
+        self.hostsTabTable.setColumnWidth(10, 80)
+        self.hostsTabTable.setColumnWidth(11, 80)
 
-        specifiedQueue = self.hostsTabQueueCombo.currentText().strip()
+        print('* Loading LSF hosts information, please wait a moment ...')
 
         bhostsDic  = lsf_common.getBhostsInfo()
         lshostsDic = lsf_common.getLshostsInfo()
@@ -915,6 +984,7 @@ class mainWindow(QMainWindow):
 
         # Get expected host list
         self.queueHostList = []
+        specifiedQueue = self.hostsTabQueueCombo.currentText().strip()
 
         if specifiedQueue == 'ALL':
             self.queueHostList = self.hostList
@@ -924,6 +994,7 @@ class mainWindow(QMainWindow):
                     if specifiedQueue in hostQueueDic[host]:
                         self.queueHostList.append(host)
 
+        # Fill self.hostsTabTable items.
         self.hostsTabTable.setRowCount(0)
         self.hostsTabTable.setRowCount(len(self.queueHostList))
 
@@ -1132,7 +1203,7 @@ class mainWindow(QMainWindow):
         If click the Host name, jump to the LOAD Tab and show the host load inforamtion.
         If click the non-zero Njobs number, jump to the JOBS tab and show the host related jobs information.
         """
-        if item != None:
+        if item is not None:
             currentRow = self.hostsTabTable.currentRow()
             host = self.hostsTabTable.item(currentRow, 0).text().strip()
             njobsNum = self.hostsTabTable.item(currentRow, 5).text().strip()
@@ -1179,7 +1250,6 @@ class mainWindow(QMainWindow):
         """
         Generate the queues tab on lsfMonitor GUI, show queues informations.
         """
-        # Init var
         self.bqueuesFilesDic = {}
 
         # self.queuesTab
@@ -1231,12 +1301,16 @@ class mainWindow(QMainWindow):
         # Hide the vertical header
         self.queuesTabTable.verticalHeader().setVisible(False)
 
+        # File self.queuesTabTable items.
         self.queuesTabTable.setRowCount(0)
         self.queuesTabTable.setRowCount(len(self.queueList)+1)
 
+        print('* Loading LSF queue information, please wait a moment ...')
         queuesDic = lsf_common.getBqueuesInfo()
         queueList = copy.deepcopy(self.queueList)
+
         queueList.append('ALL')
+
         pendSum = 0
         runSum = 0
 
@@ -1306,7 +1380,7 @@ class mainWindow(QMainWindow):
         If click the PEND number, jump to the JOBS Tab and show the queue PEND jobs.
         If click the RUN number, jump to the JOB Tab and show the queue RUN jobs.
         """
-        if item != None:
+        if item is not None:
             currentRow = self.queuesTabTable.currentRow()
             queue      = self.queuesTabTable.item(currentRow, 0).text().strip()
             pendNum    = self.queuesTabTable.item(currentRow, 1).text().strip()
@@ -1375,9 +1449,10 @@ class mainWindow(QMainWindow):
         self.queuesTabText.clear()
 
         command = 'bqueues -l ' + str(queue)
-        lines = os.popen(command).readlines()
+        (returnCode, stdout, stderr) = common.run_command(command)
 
-        for line in lines:
+        for line in str(stdout, 'utf-8').split('\n'):
+            line = line.strip()
             self.queuesTabText.insertPlainText(line)
 
         pyqt5_common.textEditVisiblePosition(self.queuesTabText, 'Start')
@@ -1434,7 +1509,7 @@ class mainWindow(QMainWindow):
                         tmpPendList.append(int(pendNum))
                         tmpRunList.append(int(runNum))
 
-                    # Cut dateList/pendList/runList, only save 15 days result.a
+                    # Cut dateList/pendList/runList, only save recent 30 days result.
                     if len(dateList) > 30:
                         dateList = dateList[-30:]
                         pendList = pendList[-30:]
@@ -1683,6 +1758,7 @@ class mainWindow(QMainWindow):
             self.drawHostUtCurve(fig, sampleTimeList, utList)
 
     def drawHostUtCurve(self, fig, sampleTimeList, utList):
+        # Fil self.hostUtFigureCanvas.
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('host "' + str(self.specifiedHost) + '" ut curve')
@@ -1705,6 +1781,7 @@ class mainWindow(QMainWindow):
             self.drawHostMemCurve(fig, sampleTimeList, memList)
 
     def drawHostMemCurve(self, fig, sampleTimeList, memList):
+        # File self.hostMemFigureCanvas.
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('host "' + str(self.specifiedHost) + '" available mem curve')
@@ -1716,6 +1793,272 @@ class mainWindow(QMainWindow):
         self.hostMemFigureCanvas.draw()
 ## For load TAB (end) ## 
 
+
+## For license TAB (start) ## 
+    def genLicenseTab(self):
+        """
+        Generate the license tab on lsfMonitor GUI, show host license usage information.
+        """
+        # self.licenseTab
+        self.licenseTabFrame0 = QFrame(self.licenseTab)
+        self.licenseTabFrame0.setFrameShadow(QFrame.Raised)
+        self.licenseTabFrame0.setFrameShape(QFrame.Box)
+
+        self.licenseTabFeatureLabel = QLabel('Feature Information', self.licenseTab)
+        self.licenseTabFeatureLabel.setStyleSheet("font-weight: bold;") 
+        self.licenseTabFeatureLabel.setAlignment(Qt.AlignCenter)
+        self.licenseTabExpiresLabel = QLabel('Expires Information', self.licenseTab)
+        self.licenseTabExpiresLabel.setStyleSheet("font-weight: bold;") 
+        self.licenseTabExpiresLabel.setAlignment(Qt.AlignCenter)
+
+        self.licenseTabFeatureTable = QTableWidget(self.licenseTab)
+        self.licenseTabExpiresTable = QTableWidget(self.licenseTab)
+
+        # self.licenseTab - Grid
+        licenseTabGrid = QGridLayout()
+
+        licenseTabGrid.addWidget(self.licenseTabFrame0, 0, 0, 1, 2)
+        licenseTabGrid.addWidget(self.licenseTabFeatureLabel, 1, 0)
+        licenseTabGrid.addWidget(self.licenseTabExpiresLabel, 1, 1)
+        licenseTabGrid.addWidget(self.licenseTabFeatureTable, 2, 0)
+        licenseTabGrid.addWidget(self.licenseTabExpiresTable, 2, 1)
+
+        licenseTabGrid.setRowStretch(0, 2)
+        licenseTabGrid.setRowStretch(1, 1)
+        licenseTabGrid.setRowStretch(2, 20)
+
+        self.licenseTab.setLayout(licenseTabGrid)
+
+        # Generate sub-frame
+        self.genLicenseTabFrame0()
+        self.genLicenseTabFeatureTable()
+        self.genLicenseTabExpiresTable()
+
+        if self.specifiedFeature:
+            self.licenseTabLicenseFeatureLine.setText(str(self.specifiedFeature))
+            self.filterLicenseFeature()
+
+    def genLicenseTabFrame0(self):
+        # self.licenseTabFrame0
+        licenseTabLicenseServerLabel = QLabel('License Server', self.licenseTabFrame0)
+        licenseTabLicenseServerLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabLicenseServerCombo = QComboBox(self.licenseTabFrame0)
+        self.setLicenseTabLicenseServerCombo()
+
+        self.licenseTabLicenseServerCombo.currentIndexChanged.connect(self.filterLicenseFeature)
+
+        licenseTabEmpty1Label = QLabel('')
+
+        licenseTabShowLabel = QLabel('   Show', self.licenseTabFrame0)
+        licenseTabShowLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabShowCombo = QComboBox(self.licenseTabFrame0)
+        self.licenseTabShowCombo.addItem('ALL')
+        self.licenseTabShowCombo.addItem('in_use')
+
+        self.licenseTabShowCombo.currentIndexChanged.connect(self.filterLicenseFeature)
+
+        licenseTabEmpty2Label = QLabel('')
+
+        licenseTabLicenseFeatureLabel = QLabel('License Feature', self.licenseTabFrame0)
+        licenseTabLicenseFeatureLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabLicenseFeatureLine = QLineEdit()
+
+        licenseTabFilterButton = QPushButton('Filter', self.licenseTabFrame0)
+        licenseTabFilterButton.clicked.connect(self.filterLicenseFeature)
+
+        # self.licenseTabFrame0 - Grid
+        licenseTabFrame0Grid = QGridLayout()
+
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseServerLabel, 0, 0)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseServerCombo, 0, 1)
+        licenseTabFrame0Grid.addWidget(licenseTabEmpty1Label, 0, 2)
+        licenseTabFrame0Grid.addWidget(licenseTabShowLabel, 0, 3)
+        licenseTabFrame0Grid.addWidget(self.licenseTabShowCombo, 0, 4)
+        licenseTabFrame0Grid.addWidget(licenseTabEmpty2Label, 0, 5)
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseFeatureLabel, 0, 6)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseFeatureLine, 0, 7)
+        licenseTabFrame0Grid.addWidget(licenseTabFilterButton, 0, 8)
+
+        licenseTabFrame0Grid.setColumnStretch(0, 1)
+        licenseTabFrame0Grid.setColumnStretch(1, 2)
+        licenseTabFrame0Grid.setColumnStretch(2, 1)
+        licenseTabFrame0Grid.setColumnStretch(3, 1)
+        licenseTabFrame0Grid.setColumnStretch(4, 2)
+        licenseTabFrame0Grid.setColumnStretch(5, 1)
+        licenseTabFrame0Grid.setColumnStretch(6, 1)
+        licenseTabFrame0Grid.setColumnStretch(7, 3)
+        licenseTabFrame0Grid.setColumnStretch(8, 1)
+
+        self.licenseTabFrame0.setLayout(licenseTabFrame0Grid)
+
+    def setLicenseTabLicenseServerCombo(self):
+        self.licenseTabLicenseServerCombo.clear()
+
+        licenseServerList = list(self.licenseDic.keys())
+        licenseServerList.insert(0, 'ALL')
+
+        for licenseServer in licenseServerList:
+            self.licenseTabLicenseServerCombo.addItem(licenseServer)
+
+    def filterLicenseFeature(self):
+        # Get license information.
+        print('* Loading license information, please wait a moment ...')
+        self.licenseDic = license_common.getLicenseInfo()
+
+        # Get all license feature list from self.licenseDic.
+        allLicenseFeatureList = []
+        
+        for (licenseServer, licenseServerDic) in self.licenseDic.items():
+            if 'feature' in licenseServerDic:
+                for licenseFeature in licenseServerDic['feature']:
+                    if licenseFeature not in allLicenseFeatureList:
+                        allLicenseFeatureList.append(licenseFeature)
+
+        expectedLicenseFeatureList = []
+        specifiedLicenseFeatureList = self.licenseTabLicenseFeatureLine.text().strip().split()
+ 
+        if not specifiedLicenseFeatureList:
+            expectedLicenseFeatureList = allLicenseFeatureList
+        else:    
+            # Get real expected license feature list.
+            expectedLicenseFeatureAbsoluteList = []
+            expectedLicenseFeatureRelativeList = []
+
+            for expectedLicenseFeature in specifiedLicenseFeatureList:
+                if expectedLicenseFeature in allLicenseFeatureList:
+                    expectedLicenseFeatureAbsoluteList.append(expectedLicenseFeature)
+                else:
+                    for licenseFeature in allLicenseFeatureList:
+                        if re.search(expectedLicenseFeature, licenseFeature):
+                            expectedLicenseFeatureRelativeList.append(licenseFeature)
+
+            expectedLicenseFeatureList = expectedLicenseFeatureAbsoluteList + expectedLicenseFeatureRelativeList
+
+        if expectedLicenseFeatureList:
+            if len(expectedLicenseFeatureList) > 5:
+                print('* Filter license features "' + str(' '.join(expectedLicenseFeatureList[0:4])) + '" ...')
+            else:
+                print('* Filter license features "' + str(' '.join(expectedLicenseFeatureList)) + '" ...')
+            specifiedLicenseServer = self.licenseTabLicenseServerCombo.currentText().strip()
+            specifiedShow = self.licenseTabShowCombo.currentText().strip()
+            self.licenseDic = license_common.filterLicenseFeature(self.licenseDic, features=expectedLicenseFeatureList, servers=[specifiedLicenseServer,], mode=specifiedShow)
+
+        # Update self.licenseTabFeatureTable and self.licenseTabExpiresTable.
+        self.genLicenseTabFeatureTable()
+        self.genLicenseTabExpiresTable()
+
+    def genLicenseTabFeatureTable(self, update=False):
+        # Get license information.
+        if update:
+            print('* Loading license information, please wait a moment ...')
+            self.licenseDic = license_common.getLicenseInfo()
+
+        self.licenseTabFeatureTable.setShowGrid(True)
+        self.licenseTabFeatureTable.setColumnCount(0)
+        self.licenseTabFeatureTable.setColumnCount(4)
+        self.licenseTabFeatureTable.setHorizontalHeaderLabels(['License Server', 'Feature', 'Issued', 'In_use'])
+
+        self.licenseTabFeatureTable.setColumnWidth(0, 160)
+        self.licenseTabFeatureTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.licenseTabFeatureTable.setColumnWidth(2, 50)
+        self.licenseTabFeatureTable.setColumnWidth(3, 50)
+
+        # Get license feature information length.
+        licenseFeatureInfoLength = 0
+
+        for (licenseServer, licenseServerDic) in self.licenseDic.items():
+            if 'feature' in licenseServerDic:
+                for feature in licenseServerDic['feature']:
+                    licenseFeatureInfoLength += 1
+                    licenseFeatureInfoLength += len(licenseServerDic['feature'][feature]['in_use_info'])
+
+        # Fill self.licenseTabFeatureTable items.
+        self.licenseTabFeatureTable.setRowCount(0)
+        self.licenseTabFeatureTable.setRowCount(licenseFeatureInfoLength)
+
+        row = -1
+
+        for (licenseServer, licenseServerDic) in self.licenseDic.items():
+            if 'feature' in licenseServerDic:
+                for feature in licenseServerDic['feature']:
+                    row += 1
+                    self.licenseTabFeatureTable.setItem(row, 0, QTableWidgetItem(licenseServer))
+
+                    item = QTableWidgetItem(feature)
+                    item.setFont(QFont('song', 10, QFont.Bold))
+                    item.setForeground(QBrush(Qt.blue))
+                    self.licenseTabFeatureTable.setItem(row, 1, item)
+
+                    issued = licenseServerDic['feature'][feature]['issued']
+                    self.licenseTabFeatureTable.setItem(row, 2, QTableWidgetItem(issued))
+
+                    in_use = licenseServerDic['feature'][feature]['in_use']
+                    self.licenseTabFeatureTable.setItem(row, 3, QTableWidgetItem(in_use))
+
+                    if licenseServerDic['feature'][feature]['in_use_info']:
+                        for in_use_info in licenseServerDic['feature'][feature]['in_use_info']:
+                            row += 1
+                            item = QTableWidgetItem(in_use_info)
+
+                            if license_common.checkLongRuntime(in_use_info):
+                                item.setForeground(QBrush(Qt.red))
+
+                            self.licenseTabFeatureTable.setSpan(row, 1, 1, 4)
+                            self.licenseTabFeatureTable.setItem(row, 1, item)
+
+    def genLicenseTabExpiresTable(self):
+        self.licenseTabExpiresTable.setShowGrid(True)
+        self.licenseTabExpiresTable.setColumnCount(0)
+        self.licenseTabExpiresTable.setColumnCount(4)
+        self.licenseTabExpiresTable.setHorizontalHeaderLabels(['License Server', 'Feature', 'Num', 'Expires'])
+
+        self.licenseTabExpiresTable.setColumnWidth(0, 160)
+        self.licenseTabExpiresTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.licenseTabExpiresTable.setColumnWidth(2, 50)
+        self.licenseTabExpiresTable.setColumnWidth(3, 100)
+
+        # Get license feature information length.
+        licenseExpiresInfoLength = 0
+
+        for (licenseServer, licenseServerDic) in self.licenseDic.items():
+            if 'expires' in licenseServerDic:
+                for feature in licenseServerDic['expires']:
+                    licenseExpiresInfoLength += len(licenseServerDic['expires'][feature])
+
+        # File self.licenseTabExpiresTable items.
+        self.licenseTabExpiresTable.setRowCount(0)
+        self.licenseTabExpiresTable.setRowCount(licenseExpiresInfoLength)
+
+        row = -1
+
+        for (licenseServer, licenseServerDic) in self.licenseDic.items():
+            if 'expires' in licenseServerDic:
+                for feature in licenseServerDic['expires']:
+                    for expiresDic in licenseServerDic['expires'][feature]:
+                        row += 1
+                        self.licenseTabExpiresTable.setItem(row, 0, QTableWidgetItem(licenseServer))
+
+                        item = QTableWidgetItem(feature)
+                        item.setFont(QFont('song', 10, QFont.Bold))
+                        item.setForeground(QBrush(Qt.blue))
+                        self.licenseTabExpiresTable.setItem(row, 1, item)
+
+                        license = expiresDic['license']
+                        self.licenseTabExpiresTable.setItem(row, 2, QTableWidgetItem(license))
+
+                        expires = expiresDic['expires']
+                        item = QTableWidgetItem(expires)
+                        expiresMark = license_common.checkExpireDate(expires)
+                        if expiresMark == 0:
+                            pass
+                        elif expiresMark == -1:
+                            item.setForeground(QBrush(Qt.gray))
+                        else:
+                            item.setForeground(QBrush(Qt.red))
+                        self.licenseTabExpiresTable.setItem(row, 3, item)
+## For license TAB (end) ## 
+
+
     def closeEvent(self, QCloseEvent):
         """
         When window close, post-process.
@@ -1723,14 +2066,27 @@ class mainWindow(QMainWindow):
         print('Bye')
 
 
+class ProcessTracer(QThread):
+    """
+    Start tool process_tracer.py to trace job process.
+    """
+    def __init__(self, job):
+        super(ProcessTracer, self).__init__()
+        self.job = job
+
+    def run(self):
+        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer.py -j ' + str(self.job)
+        os.system(command)
+
+
 #################
 # Main Function #
 #################
 def main():
     check_tool()
-    (specifiedJob, specifiedTab) = readArgs()
+    (specifiedJob, specifiedUser, specifiedFeature, specifiedTab) = readArgs()
     app = QApplication(sys.argv)
-    mw = mainWindow(specifiedJob, specifiedTab)
+    mw = MainWindow(specifiedJob, specifiedUser, specifiedFeature, specifiedTab)
     mw.show()
     sys.exit(app.exec_())
 

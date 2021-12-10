@@ -21,10 +21,15 @@ CONFIGURATION:
 After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
 then update file config.py for your own configuration.
 
-    dbPath      = "***/db"
+    dbPath = ""
+    lmstatPath = ""
+    lmstatBsubCommand = ""
 
 "dbPath" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
 you can re-point it into your own path.
+"lmstatPath" is used to specify lmstat path, it is for LICENSE tab.
+"lmstatBsubCommand" is used to specify LSF command for lmstat, for example, "bsub -q
+normal -Is". (It is forbidden to run lmstat on login server.)
 
 
 SAMPLING:
@@ -56,7 +61,7 @@ For more documents please see files under "docs".
 
 
 VERSION:
-21.4
+21.12
 
 
 AUTHOR:

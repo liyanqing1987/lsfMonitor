@@ -2,7 +2,6 @@ import os
 import re
 import sys
 import collections
-import subprocess
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
@@ -14,36 +13,40 @@ def getCommandDict(command):
     """
     myDic = collections.OrderedDict()
     keyList = []
-    lines = os.popen(command).readlines()
+    (returnCode, stdout, stderr) = common.run_command(command)
+    i = -1
 
-    for i in range(len(lines)):
-        line = lines[i].strip()
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
 
-        # Some speciall preprocess.
-        if re.search('lsload', command):
-            line = re.sub('\*', ' ', line)
+        if line:
+            i += 1
 
-        if i == 0:
-            keyList = line.split()
+            # Some speciall preprocess.
+            if re.search('lsload', command):
+                line = re.sub('\*', ' ', line)
 
-            for key in keyList:
-                myDic[key] = []
-        else:
-            commandInfo = line.split()
+            if i == 0:
+                keyList = line.split()
 
-            if len(commandInfo) < len(keyList):
-                common.printWarning('*Warning* (getCommandDict) : For command "' + str(command) + '", below info line is incomplate/unexpected.')
-                common.printWarning('           ' + str(line))
+                for key in keyList:
+                    myDic[key] = []
+            else:
+                commandInfo = line.split()
 
-            for j in range(len(keyList)):
-                key = keyList[j]
+                if len(commandInfo) < len(keyList):
+                    common.printWarning('*Warning* (getCommandDict) : For command "' + str(command) + '", below info line is incomplate/unexpected.')
+                    common.printWarning('           ' + str(line))
 
-                if j < len(commandInfo):
-                    value = commandInfo[j]
-                else:
-                    value = ''
+                for j in range(len(keyList)):
+                    key = keyList[j]
 
-                myDic[key].append(value)
+                    if j < len(commandInfo):
+                        value = commandInfo[j]
+                    else:
+                        value = ''
+
+                    myDic[key].append(value)
 
     return(myDic)
 
@@ -119,14 +122,14 @@ def getToolName():
     Make sure it is lsf or openlava.
     """
     command = 'lsid'
-    p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in p.stdout.readlines():
-        line = str(line.strip(), 'utf-8')
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
 
         if re.search('LSF', line): 
             return('lsf')
-        elif re.search('OpenLava', line): 
+        elif re.search('OpenLava', line) or re.search('openlava', line): 
             return('openlava')
 
     print('*Warning*: Not sure current cluster is LSF or Openlava.')
@@ -189,6 +192,7 @@ def getLsfBjobsUfInfo(command):
                      'memCompile'                 : re.compile('.*\. MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
                      'swapCompile'                : re.compile('.*\; SWAP: (\d+(\.\d+)?) ([KMGT]bytes).*'),
                      'runLimitCompile'            : re.compile('\s*RUNLIMIT\s*'),
+                     'pidsCompile'                : re.compile('PIDs:\s+(.+?);'),
                      'maxMemCompile'              : re.compile('\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*'),
                      'pendingReasonsCompile'      : re.compile('\s*PENDING REASONS:\s*'),
                      'emptyLineCompile'           : re.compile('^\s*$'),
@@ -199,11 +203,10 @@ def getLsfBjobsUfInfo(command):
     runLimitMark = False
     pendingMark = False
 
-    p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    lines = p.stdout.readlines()
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in lines:
-        line = str(line.strip(), 'utf-8')
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
 
         if re.match('Job <' + str(job) + '> is not found', line):
             continue
@@ -236,6 +239,7 @@ def getLsfBjobsUfInfo(command):
                 myDic[job]['mem'] = ''
                 myDic[job]['swap'] = ''
                 myDic[job]['runLimit'] = ''
+                myDic[job]['pids'] = []
                 myDic[job]['maxMem'] = ''
                 myDic[job]['avgMem'] = ''
                 myDic[job]['pendingReasons'] = []
@@ -356,6 +360,12 @@ def getLsfBjobsUfInfo(command):
                         myDic[job]['finishedTime'] = myMatch.group(1)
                         continue
 
+                    if jobCompileDic['pidsCompile'].findall(line):
+                        myMatch = jobCompileDic['pidsCompile'].findall(line)
+                        myString = ' '.join(myMatch)
+                        myDic[job]['pids'] = myString.split()
+                        continue
+
                     if jobCompileDic['maxMemCompile'].match(line):
                         myMatch = jobCompileDic['maxMemCompile'].match(line)
                         myDic[job]['maxMem'] = myMatch.group(1)
@@ -432,11 +442,10 @@ def getOpenlavaBjobsUfInfo(command):
     myDic = collections.OrderedDict()
     job = ''
 
-    p = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    lines = p.stdout.readlines()
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in lines:
-        line = str(line.strip(), 'utf-8')
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
 
         if re.match('Job <' + str(job) + '> is not found', line):
             continue
@@ -582,9 +591,12 @@ def getHostGroupMembers(hostGroupName):
     ====
     """
     hostList = []
-    lines = os.popen('bmgroup -r ' + str(hostGroupName)).readlines()
+    command = 'bmgroup -r ' + str(hostGroupName)
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in lines:
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
+
         if re.search('No such user/host group', line):
             break
         elif re.match('^' + str(hostGroupName) + ' .*$', line):
@@ -603,9 +615,12 @@ def getUserGroupMembers(userGroupName):
     ====
     """
     userList = []
-    lines = os.popen('bugroup -r ' + str(userGroupName)).readlines()
+    command = 'bugroup -r ' + str(userGroupName)
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in lines:
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
+
         if re.match('^' + str(userGroupName) + ' .*$', line):
             myList = line.split()
             userList = myList[1:]
@@ -621,9 +636,10 @@ def getQueueHostInfo():
     hostsCompile= re.compile('^HOSTS:\s*(.*?)\s*$')
     queue = ''
 
-    lines = os.popen('bqueues -l').readlines()
+    command = 'bqueues -l'
+    (returnCode, stdout, stderr) = common.run_command(command)
 
-    for line in lines:
+    for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
         if queueCompile.match(line):
