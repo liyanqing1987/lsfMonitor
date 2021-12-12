@@ -1453,7 +1453,7 @@ class MainWindow(QMainWindow):
 
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
-            self.queuesTabText.insertPlainText(line)
+            self.queuesTabText.insertPlainText(str(line) + '\n')
 
         pyqt5_common.textEditVisiblePosition(self.queuesTabText, 'Start')
 
