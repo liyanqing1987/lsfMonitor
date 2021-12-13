@@ -50,7 +50,7 @@ def readArgs():
     return(args.job, args.queue, args.host, args.load, args.user, args.interval)
 
 
-class sampling:
+class Sampling:
     """
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
@@ -482,7 +482,7 @@ class sampling:
 #################
 def main():
     (job, queue, host, load, user, interval) = readArgs()
-    mySampling = sampling(job, queue, host, load, user, interval)
+    mySampling = Sampling(job, queue, host, load, user, interval)
     mySampling.sampling()
 
 if __name__ == '__main__':
