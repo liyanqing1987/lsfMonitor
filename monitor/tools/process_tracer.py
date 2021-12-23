@@ -152,7 +152,8 @@ class ProcessTracer(QMainWindow):
             bsubCommand = str(bsubCommand) + ' -q ' + str(queue)
 
         if startedOn:
-            bsubCommand = str(bsubCommand) + ' -m ' + str(startedOn)
+            startedOnList = startedOn.split()
+            bsubCommand = str(bsubCommand) + ' -m ' + str(startedOnList[0])
 
         return(bsubCommand)
 
