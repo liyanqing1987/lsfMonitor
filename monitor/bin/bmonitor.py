@@ -6,6 +6,7 @@ import sys
 import stat
 import copy
 import time
+import yaml
 import getpass
 import datetime
 import argparse
@@ -147,13 +148,25 @@ class MainWindow(QMainWindow):
         self.mainTab.addTab(self.licenseTab, 'LICENSE')
 
         # Get LSF queue/host information.
-        print('* Loading LSF basic information, please wait a moment ...')
+        print('* Loading LSF information, please wait a moment ...')
         self.queueList = lsf_common.getQueueList()
         self.hostList = lsf_common.getHostList()
 
         # Get license information.
-        print('* Loading license basic information, please wait a moment ...')
+        print('* Loading license information, please wait a moment ...')
         self.licenseDic = license_common.getLicenseInfo()
+
+        if not self.licenseDic:
+            print('*Warning*: Not find any valid license information.')
+
+        # Get liense product-feature relationshi directory.
+        print('* Loading license product-feature relationship, please wait a moment ...')
+        self.productFeatureRelationshipDic = {}
+
+        if os.path.exists(config.productFeatureRelationshipFile):
+            self.productFeatureRelationshipDic = yaml.load(open(config.productFeatureRelationshipFile), Loader=yaml.FullLoader)
+        else:
+            print('*Warning*: product feature relationshi file "' + str(config.productFeatureRelationshipFile) + '" is missing.')
 
         # Generate the sub-tabs
         self.genJobTab()
@@ -1840,26 +1853,43 @@ class MainWindow(QMainWindow):
 
     def genLicenseTabFrame0(self):
         # self.licenseTabFrame0
-        licenseTabLicenseServerLabel = QLabel('License Server', self.licenseTabFrame0)
+        # Show
+        licenseTabShowLabel = QLabel('       Show', self.licenseTabFrame0)
+        licenseTabShowLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabShowCombo = QComboBox(self.licenseTabFrame0)
+        self.setLicenseTabShowCombo()
+
+        self.licenseTabShowCombo.currentIndexChanged.connect(self.filterLicenseFeature)
+
+        # License Server
+        licenseTabLicenseServerLabel = QLabel('     Server', self.licenseTabFrame0)
         licenseTabLicenseServerLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabLicenseServerCombo = QComboBox(self.licenseTabFrame0)
+        self.licenseTabLicenseServerCombo.setMaximumWidth(100)
         self.setLicenseTabLicenseServerCombo()
 
         self.licenseTabLicenseServerCombo.currentIndexChanged.connect(self.filterLicenseFeature)
 
-        licenseTabEmpty1Label = QLabel('')
+        # License Vendor 
+        licenseTabLicenseVendorLabel = QLabel('     Vendor', self.licenseTabFrame0)
+        licenseTabLicenseVendorLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabLicenseVendorCombo = QComboBox(self.licenseTabFrame0)
+        self.licenseTabLicenseVendorCombo.setMaximumWidth(100)
+        self.setLicenseTabLicenseVendorCombo()
 
-        licenseTabShowLabel = QLabel('   Show', self.licenseTabFrame0)
-        licenseTabShowLabel.setStyleSheet("font-weight: bold;")
-        self.licenseTabShowCombo = QComboBox(self.licenseTabFrame0)
-        self.licenseTabShowCombo.addItem('ALL')
-        self.licenseTabShowCombo.addItem('in_use')
+        self.licenseTabLicenseVendorCombo.activated.connect(self.updateLicenseTabLicenseProductCombo)
 
-        self.licenseTabShowCombo.currentIndexChanged.connect(self.filterLicenseFeature)
+        # License Product 
+        licenseTabLicenseProductLabel = QLabel('    Product', self.licenseTabFrame0)
+        licenseTabLicenseProductLabel.setStyleSheet("font-weight: bold;")
+        self.licenseTabLicenseProductCombo = QComboBox(self.licenseTabFrame0)
+        self.licenseTabLicenseProductCombo.setMaximumWidth(100)
+        self.setLicenseTabLicenseProductCombo()
 
-        licenseTabEmpty2Label = QLabel('')
+        self.licenseTabLicenseProductCombo.activated.connect(self.filterLicenseFeature)
 
-        licenseTabLicenseFeatureLabel = QLabel('License Feature', self.licenseTabFrame0)
+        # License Feature
+        licenseTabLicenseFeatureLabel = QLabel('    Feature', self.licenseTabFrame0)
         licenseTabLicenseFeatureLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabLicenseFeatureLine = QLineEdit()
 
@@ -1869,27 +1899,36 @@ class MainWindow(QMainWindow):
         # self.licenseTabFrame0 - Grid
         licenseTabFrame0Grid = QGridLayout()
 
-        licenseTabFrame0Grid.addWidget(licenseTabLicenseServerLabel, 0, 0)
-        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseServerCombo, 0, 1)
-        licenseTabFrame0Grid.addWidget(licenseTabEmpty1Label, 0, 2)
-        licenseTabFrame0Grid.addWidget(licenseTabShowLabel, 0, 3)
-        licenseTabFrame0Grid.addWidget(self.licenseTabShowCombo, 0, 4)
-        licenseTabFrame0Grid.addWidget(licenseTabEmpty2Label, 0, 5)
-        licenseTabFrame0Grid.addWidget(licenseTabLicenseFeatureLabel, 0, 6)
-        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseFeatureLine, 0, 7)
-        licenseTabFrame0Grid.addWidget(licenseTabFilterButton, 0, 8)
+        licenseTabFrame0Grid.addWidget(licenseTabShowLabel, 0, 0)
+        licenseTabFrame0Grid.addWidget(self.licenseTabShowCombo, 0, 1)
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseServerLabel, 0, 2)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseServerCombo, 0, 3)
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseVendorLabel, 0, 4)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseVendorCombo, 0, 5)
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseProductLabel, 0, 6)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseProductCombo, 0, 7)
+        licenseTabFrame0Grid.addWidget(licenseTabLicenseFeatureLabel, 0, 8)
+        licenseTabFrame0Grid.addWidget(self.licenseTabLicenseFeatureLine, 0, 9)
+        licenseTabFrame0Grid.addWidget(licenseTabFilterButton, 0, 10)
 
         licenseTabFrame0Grid.setColumnStretch(0, 1)
-        licenseTabFrame0Grid.setColumnStretch(1, 2)
+        licenseTabFrame0Grid.setColumnStretch(1, 1)
         licenseTabFrame0Grid.setColumnStretch(2, 1)
         licenseTabFrame0Grid.setColumnStretch(3, 1)
-        licenseTabFrame0Grid.setColumnStretch(4, 2)
+        licenseTabFrame0Grid.setColumnStretch(4, 1)
         licenseTabFrame0Grid.setColumnStretch(5, 1)
         licenseTabFrame0Grid.setColumnStretch(6, 1)
-        licenseTabFrame0Grid.setColumnStretch(7, 3)
+        licenseTabFrame0Grid.setColumnStretch(7, 1)
         licenseTabFrame0Grid.setColumnStretch(8, 1)
+        licenseTabFrame0Grid.setColumnStretch(9, 3)
+        licenseTabFrame0Grid.setColumnStretch(10, 1)
 
         self.licenseTabFrame0.setLayout(licenseTabFrame0Grid)
+
+    def setLicenseTabShowCombo(self):
+        self.licenseTabShowCombo.clear()
+        self.licenseTabShowCombo.addItem('ALL')
+        self.licenseTabShowCombo.addItem('in_use')
 
     def setLicenseTabLicenseServerCombo(self):
         self.licenseTabLicenseServerCombo.clear()
@@ -1900,58 +1939,119 @@ class MainWindow(QMainWindow):
         for licenseServer in licenseServerList:
             self.licenseTabLicenseServerCombo.addItem(licenseServer)
 
+    def setLicenseTabLicenseVendorCombo(self):
+        self.licenseTabLicenseVendorCombo.clear()
+
+        licenseVendorList = list(self.productFeatureRelationshipDic.keys())
+        licenseVendorList.insert(0, 'ALL')
+
+        for licenseVendor in licenseVendorList:
+            self.licenseTabLicenseVendorCombo.addItem(licenseVendor)
+
+    def setLicenseTabLicenseProductCombo(self):
+        self.licenseTabLicenseProductCombo.clear()
+
+        licenseProductList = []
+        currentVendor = self.licenseTabLicenseVendorCombo.currentText().strip()
+
+        for vendor in self.productFeatureRelationshipDic.keys():
+            if (currentVendor == 'ALL') or (vendor == currentVendor):
+                for product in self.productFeatureRelationshipDic[vendor].keys():
+                    if product not in licenseProductList:
+                        licenseProductList.append(product)
+
+        licenseProductList.insert(0, 'ALL')
+
+        for licenseProduct in licenseProductList:
+            self.licenseTabLicenseProductCombo.addItem(licenseProduct)
+
+    def updateLicenseTabLicenseProductCombo(self):
+        self.setLicenseTabLicenseProductCombo()
+        self.filterLicenseFeature()
+
     def filterLicenseFeature(self):
         # Get license information.
         print('* Loading license information, please wait a moment ...')
+        myShowMessage = ShowMessage('Info', 'Please wait, getting license information ...')
+        myShowMessage.start()
         self.licenseDic = license_common.getLicenseInfo()
+        myShowMessage.terminate()
+     
+        if not self.licenseDic:
+            print('*Warning*: Not find any valid license information.')
 
-        # Get all license feature list from self.licenseDic.
-        allLicenseFeatureList = []
-        
-        for (licenseServer, licenseServerDic) in self.licenseDic.items():
-            if 'feature' in licenseServerDic:
-                for licenseFeature in licenseServerDic['feature']:
-                    if licenseFeature not in allLicenseFeatureList:
-                        allLicenseFeatureList.append(licenseFeature)
+        if self.licenseDic:
+            # Get specified Vendor-Product license features.
+            vendorProductFeatureList = []
+            currentVendor = self.licenseTabLicenseVendorCombo.currentText().strip()
+            currentProduct = self.licenseTabLicenseProductCombo.currentText().strip()
 
-        expectedLicenseFeatureList = []
-        specifiedLicenseFeatureList = self.licenseTabLicenseFeatureLine.text().strip().split()
+            if not ((currentVendor == 'ALL') and (currentProduct == 'ALL')):
+                for vendor in self.productFeatureRelationshipDic.keys():
+                    if (currentVendor == 'ALL') or (vendor == currentVendor):
+                        for product in self.productFeatureRelationshipDic[vendor].keys():
+                            if (currentProduct == 'ALL') or (product == currentProduct):
+                                for feature in self.productFeatureRelationshipDic[vendor][product]:
+                                    if feature not in vendorProductFeatureList:
+                                        vendorProductFeatureList.append(feature) 
+
+            # Fileter license feature with Server/Vendor/Product.
+            filteredLicenseFeatureList = []
+            currentServer = self.licenseTabLicenseServerCombo.currentText().strip()
+            
+            for (licenseServer, licenseServerDic) in self.licenseDic.items():
+                if (currentServer == 'ALL') or (licenseServer == currentServer):
+                    if 'feature' in licenseServerDic:
+                        for feature in licenseServerDic['feature']:
+                            if feature not in filteredLicenseFeatureList:
+                                if vendorProductFeatureList:
+                                    if feature in vendorProductFeatureList:
+                                        filteredLicenseFeatureList.append(feature)
+                                else:
+                                    if (currentVendor == 'ALL') and (currentProduct == 'ALL'):
+                                        filteredLicenseFeatureList.append(feature)
+
+            # Filter license feature with Feature line.
+            expectedLicenseFeatureList = []
+            specifiedLicenseFeatureList = self.licenseTabLicenseFeatureLine.text().strip().split()
  
-        if not specifiedLicenseFeatureList:
-            expectedLicenseFeatureList = allLicenseFeatureList
-        else:    
-            # Get real expected license feature list.
-            expectedLicenseFeatureAbsoluteList = []
-            expectedLicenseFeatureRelativeList = []
+            if not specifiedLicenseFeatureList:
+                expectedLicenseFeatureList = filteredLicenseFeatureList
+            else:    
+                expectedLicenseFeatureAbsoluteList = []
+                expectedLicenseFeatureRelativeList = []
 
-            for expectedLicenseFeature in specifiedLicenseFeatureList:
-                if expectedLicenseFeature in allLicenseFeatureList:
-                    expectedLicenseFeatureAbsoluteList.append(expectedLicenseFeature)
-                else:
-                    for licenseFeature in allLicenseFeatureList:
-                        if re.search(expectedLicenseFeature, licenseFeature):
-                            expectedLicenseFeatureRelativeList.append(licenseFeature)
+                for expectedLicenseFeature in specifiedLicenseFeatureList:
+                    if expectedLicenseFeature in filteredLicenseFeatureList:
+                        expectedLicenseFeatureAbsoluteList.append(expectedLicenseFeature)
+                    else:
+                        for licenseFeature in filteredLicenseFeatureList:
+                            if re.search(expectedLicenseFeature.lower(), licenseFeature.lower()):
+                                expectedLicenseFeatureRelativeList.append(licenseFeature)
 
-            expectedLicenseFeatureList = expectedLicenseFeatureAbsoluteList + expectedLicenseFeatureRelativeList
+                expectedLicenseFeatureList = expectedLicenseFeatureAbsoluteList + expectedLicenseFeatureRelativeList
 
-        if expectedLicenseFeatureList:
             if len(expectedLicenseFeatureList) > 5:
                 print('* Filter license features "' + str(' '.join(expectedLicenseFeatureList[0:4])) + '" ...')
-            else:
-                print('* Filter license features "' + str(' '.join(expectedLicenseFeatureList)) + '" ...')
-            specifiedLicenseServer = self.licenseTabLicenseServerCombo.currentText().strip()
-            specifiedShow = self.licenseTabShowCombo.currentText().strip()
-            self.licenseDic = license_common.filterLicenseFeature(self.licenseDic, features=expectedLicenseFeatureList, servers=[specifiedLicenseServer,], mode=specifiedShow)
+            elif len(expectedLicenseFeatureList) > 0:
+                print('* Filter license features "' + str(' '.join(expectedLicenseFeatureList)) + '".')
 
-        # Update self.licenseTabFeatureTable and self.licenseTabExpiresTable.
-        self.genLicenseTabFeatureTable()
-        self.genLicenseTabExpiresTable()
+            currentServer = self.licenseTabLicenseServerCombo.currentText().strip()
+            specifiedShow = self.licenseTabShowCombo.currentText().strip()
+            self.licenseDic = license_common.filterLicenseFeature(self.licenseDic, features=expectedLicenseFeatureList, servers=[currentServer,], mode=specifiedShow)
+
+            # Update self.licenseTabFeatureTable and self.licenseTabExpiresTable.
+            self.genLicenseTabFeatureTable()
+            self.genLicenseTabExpiresTable()
 
     def genLicenseTabFeatureTable(self, update=False):
         # Get license information.
         if update:
             print('* Loading license information, please wait a moment ...')
             self.licenseDic = license_common.getLicenseInfo()
+     
+            if not self.licenseDic:
+                print('*Warning*: Not find any valid license information.')
 
         self.licenseTabFeatureTable.setShowGrid(True)
         self.licenseTabFeatureTable.setColumnCount(0)
@@ -2076,6 +2176,20 @@ class ProcessTracer(QThread):
 
     def run(self):
         command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer.py -j ' + str(self.job)
+        os.system(command)
+
+
+class ShowMessage(QThread):
+    """
+    Show message with tool message.py.
+    """
+    def __init__(self, title, message):
+        super(ShowMessage, self).__init__()
+        self.title = title
+        self.message = message
+
+    def run(self):
+        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
         os.system(command)
 
 

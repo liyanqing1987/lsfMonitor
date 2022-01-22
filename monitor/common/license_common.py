@@ -3,6 +3,7 @@ import re
 import sys
 import time
 import datetime
+import yaml
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
@@ -84,7 +85,7 @@ def getLicenseInfo():
             expires = myMatch.group(5)
             licenseDic[licenseServer]['expires'].setdefault(feature, [])
             licenseDic[licenseServer]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
-   
+  
     return(licenseDic)
 
 def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
@@ -105,7 +106,7 @@ def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
 
             if 'feature' in licenseServerDic.keys():
                 for (feature, featureDic) in licenseServerDic['feature'].items():
-                    if (not features) or (feature in features):
+                    if feature in features:
                         issuedNum = featureDic['issued']
                         inUseNum = featureDic['in_use']
                         inUseInfo = featureDic['in_use_info']
@@ -181,3 +182,168 @@ def checkExpireDate(expireDate):
         return((expireSeconds - currentSeconds)//86400 + 1)
     else:
         return(0)
+
+
+class GetProductFeatureRelationship():
+    def __init__(self, licenseFileList, vendorList, outputFile='./product_feature_relationship.yaml'):
+        """
+        licenseFileList : license files.
+        vendorList : same order with licenseFileList, vendor must be "cadence/synopsys/mentor".
+        outputFile : must be yaml format.
+        """
+        self.licenseFileList = licenseFileList
+        self.vendorList = vendorList
+        self.outputFile = outputFile
+        self.licenseDic = {}
+
+        # Check licenseFile exist or not.
+        for (i, licenseFile) in enumerate(self.licenseFileList):
+            if os.path.exists(licenseFile):
+                self.licenseFileList[i] = os.path.realpath(licenseFile)
+            else:
+                print('*Error*: "' + str(licenseFile) + '": No such license file.')
+                sys.exit(1)
+
+        # Check vendor setting.
+        validVendorList = ['cadence', 'synopsys', 'mentor']
+
+        for vendor in self.vendorList:
+            if vendor not in validVendorList:
+                print('*Error*: "' + str(vendor) + '": Invalid vendor.')
+                sys.exit(1)
+
+        # Check self.licenseFileList and self.vendorList length.
+        if len(self.licenseFileList) != len(self.vendorList):
+            print('*Error*: length of licenseFileList is different with vendorList.')
+            sys.exit(1)
+
+        # Check output file.
+        outputDir = os.path.dirname(self.outputFile)
+
+        if os.path.exists(outputDir):
+            self.outputFile = os.path.abspath(self.outputFile)
+        else:
+            print('*Error*: "' + str(self.outputFile) + '": No such output directory.')
+            sys.exit(1)
+
+    def parseCadenceLicenseFile(self, licenseFile):
+        """
+        Parse cadence license file, and save product-feature relationship into self.licenseDic.
+        """
+        self.licenseDic.setdefault('cadence', {})
+        productName = ''
+        feature = ''
+
+        with open(licenseFile, 'r') as LF:
+            for line in LF.readlines():
+                if re.match('^\s*#\s*Product\s+Name\s*:\s*(.+?)\s*$', line):
+                    myMatch = re.match('^\s*#\s*Product\s+Name\s*:\s*(.+?)\s*$', line)
+                    productName = myMatch.group(1)
+                    self.licenseDic['cadence'].setdefault(productName, [])
+                elif re.match('^\s*#\s*Feature\s*:\s*(.+?)\s+.*$', line):
+                    myMatch = re.match('^\s*#\s*Feature\s*:\s*(.+?)\s+.*$', line)
+                    feature = myMatch.group(1)
+
+                    if productName:
+                        if feature not in self.licenseDic['cadence'][productName]:
+                            self.licenseDic['cadence'][productName].append(feature)
+                    else:
+                        print('*Warning*: Not find product name for feature "' + str(feature) + '".')
+
+    def parseSynopsysLicenseFile(self, licenseFile):
+        """
+        Parse synopsys license file, and save product-feature relationship into self.licenseDic.
+        """
+        self.licenseDic.setdefault('synopsys', {})
+        productDic = {}
+        productId = ''
+        productName = ''
+        feature = ''
+        productMark = 0
+
+        with open(licenseFile, 'r') as LF:
+            for line in LF.readlines():
+                if (productMark == 0) and re.match('^\s*#\s*Product\s*:.*$', line):
+                    productMark = 1
+                elif (productMark == 1) and re.match('^\s*#\s*----.*$', line):
+                    productMark = 2
+                elif (productMark == 2) and re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line):
+                    myMatch = re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line)
+                    productId = myMatch.group(1)
+                    productName = myMatch.group(2)
+                    self.licenseDic['synopsys'].setdefault(productName, [])
+                    productDic.setdefault(productId, productName)
+                elif (productMark == 2) and re.match('^\s*#\s*----.*$', line):
+                    productMark = 0
+                elif (productMark == 0) and re.match('^\s*(INCREMENT|FEATURE)\s+(\S+)\s+.*$', line):
+                    myMatch = re.match('^\s*(INCREMENT|FEATURE)\s+(\S+)\s+.*$', line)
+                    feature = myMatch.group(2)
+                elif (productMark == 0) and re.match('^.*SN=RK:(.+?):.*$', line):
+                    myMatch = re.match('^.*SN=RK:(.+?):.*$', line)
+                    currentProductId = myMatch.group(1)
+
+                    if feature:
+                        if currentProductId in productDic:
+                            if feature not in self.licenseDic['synopsys'][productDic[currentProductId]]:
+                                self.licenseDic['synopsys'][productDic[currentProductId]].append(feature)
+                        else:
+                            print('*Warning*: Not find product name for feature "' + str(feature) + '".')
+
+    def parseMentorLicenseFile(self, licenseFile):
+        """
+        Parse mentor license file, and save product-feature relationship into self.licenseDic.
+        """
+        self.licenseDic.setdefault('mentor', {})
+        productName = ''
+        feature = ''
+
+        with open(licenseFile, 'r', encoding='ISO-8859-1') as LF:
+            for line in LF.readlines():
+                if re.match(r'^\s*#\s*(\d+)\s*(.+?)\s+\d+\s*$', line):
+                    myMatch = re.match(r'^\s*#\s*(\d+)\s*(.+?)\s+\d+\s*$', line)
+                    productName = myMatch.group(2)
+                    self.licenseDic['mentor'].setdefault(productName, [])
+                elif re.match(r'^\s*#\s*(\S+)\s*(20\S+)\s*(\S+)\s*(\S+)\s*\d+\s*$', line):
+                    myMatch = re.match(r'^\s*#\s*(\S+)\s*(20\S+)\s*(\S+)\s*(\S+)\s*\d+\s*$', line)
+                    feature = myMatch.group(1)
+
+                    if productName:
+                        if feature not in self.licenseDic['mentor'][productName]:
+                            self.licenseDic['mentor'][productName].append(feature)
+                    else:
+                        print('*Warning*: Not find product name for feature "' + str(feature) + '".')
+
+    def parseLicenseFile(self):
+        """
+        Parse license file to get product-feature relationship.
+        """
+        for (i, licenseFile) in enumerate(self.licenseFileList):
+            vendor = self.vendorList[i] 
+
+            print('>>> Parse ' + str(vendor) + ' license file "' + str(licenseFile) + '".')
+
+            if vendor == 'cadence':
+                self.parseCadenceLicenseFile(licenseFile)
+            elif vendor == 'synopsys':
+                self.parseSynopsysLicenseFile(licenseFile)
+            elif vendor == 'mentor':
+                self.parseMentorLicenseFile(licenseFile)
+
+        return(self.licenseDic)
+
+    def writeOutputFile(self):
+        """
+        Write self.outputFile with yaml format.
+        """
+        print('')
+        print('* Write output file "' + str(self.outputFile) + '".')
+
+        with open(self.outputFile, 'w', encoding='utf-8') as OF:
+            yaml.dump(self.licenseDic, OF)
+
+    def run(self):
+        """
+        Main function of class GetProductFeatureRelationship.
+        """
+        self.parseLicenseFile()
+        self.writeOutputFile()

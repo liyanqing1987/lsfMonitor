@@ -101,6 +101,7 @@ def genConfigFile():
     else:
         try:
             dbPath = str(CWD) + '/db'
+            defaultProductFeatureRelationshipFile = str(CWD) + '/monitor/conf/product_feature_relationship.yaml'
 
             with open(configFile, 'w') as CF:
                 CF.write('''# Specify the database directory.
@@ -110,7 +111,11 @@ dbPath = "''' + str(dbPath) + '''"
 lmstatPath = ""
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
-lmstatBsubCommand = ""''')
+lmstatBsubCommand = ""
+
+# Specify EDA license product-feature relationship file.
+productFeatureRelationshipFile = "''' + str(defaultProductFeatureRelationshipFile) + '''"
+''')
 
             os.chmod(configFile, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
             os.chmod(dbPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
@@ -123,7 +128,7 @@ def updateTools():
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
     """
     expectedPython = os.path.abspath(sys.executable)
-    toolList = [str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py']
+    toolList = [str(CWD) + '/monitor/tools/get_license_product_feature_relationship.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py']
 
     for tool in toolList:
         with open(tool, 'r+') as TOOL:

@@ -24,12 +24,15 @@ then update file config.py for your own configuration.
     dbPath = ""
     lmstatPath = ""
     lmstatBsubCommand = ""
+    productFeatureRelationshipFile = ""
 
 "dbPath" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
 you can re-point it into your own path.
 "lmstatPath" is used to specify lmstat path, it is for LICENSE tab.
 "lmstatBsubCommand" is used to specify LSF command for lmstat, for example, "bsub -q
 normal -Is". (It is forbidden to run lmstat on login server.)
+"productFeatureRelationshipFile" is used to get EDA license product-feature 
+relationship from a yaml configuration file.
 
 
 SAMPLING:
@@ -61,7 +64,7 @@ For more documents please see files under "docs".
 
 
 VERSION:
-21.12
+22.1
 
 
 AUTHOR:
