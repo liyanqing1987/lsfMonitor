@@ -469,10 +469,13 @@ class MainWindow(QMainWindow):
         print('* Getting LSF job information for "' + str(currentJob) + '", please wait a moment ...')
         self.jobInfoDic = lsf_common.getBjobsUfInfo(command='bjobs -UF ' + str(currentJob))
 
-        # Update the related frames with the job info.
-        self.updateJobTabFrame1()
-        self.updateJobTabFrame2()
-        self.updateJobTabFrame3()
+        if self.jobInfoDic:
+            # Update the related frames with the job info.
+            self.updateJobTabFrame1()
+            self.updateJobTabFrame2()
+            self.updateJobTabFrame3()
+        else:
+            print('*Warning*: Not find job information for job "' + str(currentJob) + '".')
 
     def updateJobTabFrame1(self, init=False):
         """
