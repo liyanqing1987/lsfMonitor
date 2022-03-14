@@ -144,13 +144,13 @@ def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
               
     return(newLicenseDic)
 
-def checkLongRuntime(line):
+def checkLongRuntime(line, secondThreshold=259200):
     """
-    Runtime is more than 3 days, return True.
-    Runtime is less than 3 days, return False.
+    Runtime is more than secondThreshold (default is 3 days), return True.
+    Runtime is less than secondThreshold (default is 3 days), return False.
     """
-    if re.match('^.* start (.+?)\s*$', line):
-        myMatch = re.match('^.* start (.+?)(,.+)?$', line)
+    if re.match('^.* start ([A-Z][a-z]+ \d+/\d+ \d+:\d+)\s*(,.+)?$', line):
+        myMatch = re.match('^.* start ([A-Z][a-z]+ \d+/\d+ \d+:\d+)\s*(,.+)?$', line)
         startTime = myMatch.group(1)
         currentYear = datetime.date.today().year
         startTime = str(currentYear) + ' ' + str(startTime)
@@ -161,16 +161,16 @@ def checkLongRuntime(line):
             currentYear = int(datetime.date.today().year) - 1
             startSeconds = int(time.mktime(time.strptime(startTime, '%Y %a %m/%d %H:%M')))
 
-        if currentSeconds - startSeconds >= 259200:
+        if currentSeconds - startSeconds >= secondThreshold:
             return(True)
 
     return(False)
 
-def checkExpireDate(expireDate):
+def checkExpireDate(expireDate, secondThreshold=1209600):
     """
     Expired, return -1.
-    Expire in 14 days, return day number.
-    Expire later than 14 days, return 0.
+    Expire in secondThreshold (default is 14 days), return day number.
+    Expire later than secondThreshold (default is 14 days), return 0.
     """
     expireSeconds = int(time.mktime(time.strptime(expireDate, '%d-%b-%Y')))
     expireSeconds = expireSeconds + 86400
@@ -178,7 +178,7 @@ def checkExpireDate(expireDate):
 
     if expireSeconds < currentSeconds:
         return(-1)
-    elif expireSeconds - currentSeconds <= 1209600:
+    elif expireSeconds - currentSeconds <= secondThreshold:
         return((expireSeconds - currentSeconds)//86400 + 1)
     else:
         return(0)
