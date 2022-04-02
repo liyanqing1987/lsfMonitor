@@ -76,8 +76,8 @@ def getLicenseInfo():
         elif re.match('^Feature .* Expires\s*$', line):
             expiresMark = True
             licenseDic[licenseServer].setdefault('expires', {})
-        elif expiresMark and re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line):
-            myMatch = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line)
+        elif expiresMark and re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line):
+            myMatch = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line)
             feature = myMatch.group(1)
             version = myMatch.group(2)
             license = myMatch.group(3)
@@ -172,16 +172,19 @@ def checkExpireDate(expireDate, secondThreshold=1209600):
     Expire in secondThreshold (default is 14 days), return day number.
     Expire later than secondThreshold (default is 14 days), return 0.
     """
-    expireSeconds = int(time.mktime(time.strptime(expireDate, '%d-%b-%Y')))
-    expireSeconds = expireSeconds + 86400
-    currentSeconds = int(time.time())
-
-    if expireSeconds < currentSeconds:
-        return(-1)
-    elif expireSeconds - currentSeconds <= secondThreshold:
-        return((expireSeconds - currentSeconds)//86400 + 1)
-    else:
+    if re.search('permanent', expireDate):
         return(0)
+    else:
+        expireSeconds = int(time.mktime(time.strptime(expireDate, '%d-%b-%Y')))
+        expireSeconds = expireSeconds + 86400
+        currentSeconds = int(time.time())
+
+        if expireSeconds < currentSeconds:
+            return(-1)
+        elif expireSeconds - currentSeconds <= secondThreshold:
+            return((expireSeconds - currentSeconds)//86400 + 1)
+        else:
+            return(0)
 
 
 class GetProductFeatureRelationship():
