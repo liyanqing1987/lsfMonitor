@@ -636,7 +636,7 @@ def getQueueHostInfo():
     hostsCompile= re.compile('^HOSTS:\s*(.*?)\s*$')
     queue = ''
 
-    command = 'bqueues -l'
+    command = 'bqueues -w -l'
     (returnCode, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
