@@ -1245,7 +1245,7 @@ class MainWindow(QMainWindow):
                     self.genJobsTabTable()
                     self.mainTab.setCurrentWidget(self.jobsTab)
 
-                self.mainTab.setCurrentWidget(self.jobsTab)
+                    self.mainTab.setCurrentWidget(self.jobsTab)
 
     def setHostsTabQueueCombo(self):
         """
