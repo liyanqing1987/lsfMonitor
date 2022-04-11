@@ -48,7 +48,7 @@ def readArgs():
             sys.exit(1)
 
     # Check vendor valid or not.
-    validVendorList = ['cadence', 'synopsys', 'mentor']
+    validVendorList = ['cadence', 'synopsys', 'mentor', 'xilinx']
 
     for vendor in args.vendors:
         if vendor not in validVendorList:

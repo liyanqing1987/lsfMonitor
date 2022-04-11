@@ -208,7 +208,7 @@ class GetProductFeatureRelationship():
                 sys.exit(1)
 
         # Check vendor setting.
-        validVendorList = ['cadence', 'synopsys', 'mentor']
+        validVendorList = ['cadence', 'synopsys', 'mentor', 'xilinx']
 
         for vendor in self.vendorList:
             if vendor not in validVendorList:
@@ -316,6 +316,50 @@ class GetProductFeatureRelationship():
                     else:
                         print('*Warning*: Not find product name for feature "' + str(feature) + '".')
 
+    def parseXilinxLicenseFile(self, licenseFile):
+        """
+        Parse xilinx license file, and save product-feature relationship into self.licenseDic.
+        """
+        self.licenseDic.setdefault('xilinx', {})
+        lineString = ''
+        productName = ''
+        feature = ''
+        featureList = []
+        packageFeatureList = []
+
+        with open(licenseFile, 'r') as LF:
+            for line in LF.readlines():
+                line = line.strip()
+                line = re.sub('\\\s*$', '', line)
+
+                if re.match('^\s*#.*$', line) or re.match('^\s*$', line):
+                    if lineString:
+                        if re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', lineString):
+                            myMatch = re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', lineString)
+                            productName = myMatch.group(1)
+                            featureString = myMatch.group(2)
+                            featureList = featureString.split()
+                            packageFeatureList.extend(featureList)
+                            self.licenseDic['xilinx'].setdefault(productName, featureList)
+                        elif re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString):
+                            myMatch = re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString)
+                            feature = myMatch.group(2)
+                            featureList.append(feature) 
+
+                    lineString = ''
+                elif re.match('^FEATURE\s+.*$', line) or re.match('^INCREMENT\s+.*$', line) or re.match('^PACKAGE\s+.*$', line):
+                    lineString = line
+                else:
+                    if lineString:
+                        lineString = str(lineString) + str(line)
+
+            for feature in featureList:
+                if feature not in packageFeatureList:
+                    if feature in self.licenseDic['xilinx'].keys():
+                        self.licenseDic['xilinx'][feature].append(feature)
+                    else:
+                        print('*Warning*: Not find product name for feature "' + str(feature) + '".')
+
     def parseLicenseFile(self):
         """
         Parse license file to get product-feature relationship.
@@ -331,6 +375,8 @@ class GetProductFeatureRelationship():
                 self.parseSynopsysLicenseFile(licenseFile)
             elif vendor == 'mentor':
                 self.parseMentorLicenseFile(licenseFile)
+            elif vendor == 'xilinx':
+                self.parseXilinxLicenseFile(licenseFile)
 
         return(self.licenseDic)
 
