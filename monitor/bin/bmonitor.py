@@ -994,6 +994,7 @@ class MainWindow(QMainWindow):
         print('* Loading LSF hosts information, please wait a moment ...')
 
         bhostsDic  = lsf_common.getBhostsInfo()
+        bhostsLoadDic  = lsf_common.getBhostsLoadInfo()
         lshostsDic = lsf_common.getLshostsInfo()
         lsloadDic  = lsf_common.getLsloadInfo()
         hostQueueDic = lsf_common.getHostQueueInfo()
@@ -1082,8 +1083,13 @@ class MainWindow(QMainWindow):
 
             # For "Ut" item.
             j = j+1
-            index = lsloadDic['HOST_NAME'].index(host)
-            ut = lsloadDic['ut'][index]
+
+            if (host in bhostsLoadDic) and ('Total' in bhostsLoadDic[host]) and ('ut' in bhostsLoadDic[host]['Total']) and (bhostsLoadDic[host]['Total']['ut'] != '-'):
+                ut = bhostsLoadDic[host]['Total']['ut']
+            else:
+                index = lsloadDic['HOST_NAME'].index(host)
+                ut = lsloadDic['ut'][index]
+
             ut = re.sub('%', '', ut)
 
             if not re.match('^[0-9]+$', ut):
@@ -1122,8 +1128,12 @@ class MainWindow(QMainWindow):
 
             # For "Mem" item.
             j = j+1
-            index = lsloadDic['HOST_NAME'].index(host)
-            mem = lsloadDic['mem'][index]
+
+            if (host in bhostsLoadDic) and ('Total' in bhostsLoadDic[host]) and ('mem' in bhostsLoadDic[host]['Total']) and (bhostsLoadDic[host]['Total']['mem'] != '-'):
+                mem = bhostsLoadDic[host]['Total']['mem']
+            else:
+                index = lsloadDic['HOST_NAME'].index(host)
+                mem = lsloadDic['mem'][index]
 
             if re.search('M', mem):
                 mem = re.sub('M', '', mem)
@@ -1169,8 +1179,12 @@ class MainWindow(QMainWindow):
 
             # For "Swp" item.
             j = j+1
-            index = lsloadDic['HOST_NAME'].index(host)
-            swp = lsloadDic['swp'][index]
+
+            if (host in bhostsLoadDic) and ('Total' in bhostsLoadDic[host]) and ('swp' in bhostsLoadDic[host]['Total']) and (bhostsLoadDic[host]['Total']['swp'] != '-'):
+                swp = bhostsLoadDic[host]['Total']['swp']
+            else:
+                index = lsloadDic['HOST_NAME'].index(host)
+                swp = lsloadDic['swp'][index]
 
             if re.search('M', swp):
                 swp = re.sub('M', '', swp)
@@ -1190,8 +1204,12 @@ class MainWindow(QMainWindow):
 
             # For "Tmp" item.
             j = j+1
-            index = lsloadDic['HOST_NAME'].index(host)
-            tmp = lsloadDic['tmp'][index]
+
+            if (host in bhostsLoadDic) and ('Total' in bhostsLoadDic[host]) and ('tmp' in bhostsLoadDic[host]['Total']) and (bhostsLoadDic[host]['Total']['tmp'] != '-'):
+                tmp = bhostsLoadDic[host]['Total']['tmp']
+            else:
+                index = lsloadDic['HOST_NAME'].index(host)
+                tmp = lsloadDic['tmp'][index]
 
             if re.search('M', tmp):
                 tmp = re.sub('M', '', tmp)

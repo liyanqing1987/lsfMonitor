@@ -83,6 +83,65 @@ def getBhostsInfo(command='bhosts -w'):
     bhostsDic = getCommandDict(command)
     return(bhostsDic)
 
+def getBhostsLoadInfo(command='bhosts -l'):
+    """
+    Get "CURRENT LOAD USED FOR SCHEDULING" information with command
+    ====
+    HOST  n212-206-212
+    STATUS           CPUF  JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV DISPATCH_WINDOW
+    ok              15.00     -     48      2      2      0      0      0      -
+    
+     CURRENT LOAD USED FOR SCHEDULING:
+                    r15s   r1m  r15m    ut    pg    io   ls    it   tmp   swp   mem  slots
+     Total           0.0   0.0   0.0    2%   0.0     8    0 14324 1667G 127.2G  683G     46
+     Reserved        0.0   0.0   0.0    0%   0.0     0    0     0    0M    0M  178G      -
+    ====
+    """
+    bhostsLoadDic = collections.OrderedDict()
+    loadInfoMark = False
+    hostname = ''
+    headList = []
+
+    (returnCode, stdout, stderr) = common.run_command(command)
+
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
+
+        if re.match('^\s*HOST\s+(.+?)\s*$', line):
+            myMatch = re.match('^\s*HOST\s+(.+?)\s*$', line)
+            hostname = myMatch.group(1)
+            bhostsLoadDic.setdefault(hostname, {})
+            loadInfoMark = False
+        elif re.match('^\s*CURRENT LOAD USED FOR SCHEDULING:\s*$', line):
+            loadInfoMark = True
+        elif loadInfoMark:
+            if re.match('^\s*$', line):
+                loadInfoMark = False
+            elif re.match('^\s*Total\s+(.+?)\s*$', line):
+                bhostsLoadDic[hostname].setdefault('Total', {}) 
+
+                myMatch = re.match('^\s*Total\s+(.+?)\s*$', line)
+                totalLoadString = myMatch.group(1)
+                totalLoadList = totalLoadString.split()
+
+                for (i, headName) in enumerate(headList):
+                    load = re.sub('\*', '', totalLoadList[i])
+                    bhostsLoadDic[hostname]['Total'].setdefault(headName, load) 
+            elif re.match('^\s*Reserved\s+(.+?)\s*$', line):
+                bhostsLoadDic[hostname].setdefault('Reserved', {}) 
+
+                myMatch = re.match('^\s*Reserved\s+(.+?)\s*$', line)
+                reservedLoadString = myMatch.group(1)
+                reservedLoadList = reservedLoadString.split()
+
+                for (i, headName) in enumerate(headList):
+                    load = re.sub('\*', '', reservedLoadList[i])
+                    bhostsLoadDic[hostname]['Reserved'].setdefault(headName, load) 
+            else:
+                headList = line.split()
+
+    return(bhostsLoadDic)
+
 def getLshostsInfo(command='lshosts -w'):
     """
     Get lshosts info with command 'lshosts'.
@@ -591,7 +650,7 @@ def getHostGroupMembers(hostGroupName):
     ====
     """
     hostList = []
-    command = 'bmgroup -r ' + str(hostGroupName)
+    command = 'bmgroup -w -r ' + str(hostGroupName)
     (returnCode, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -636,7 +695,7 @@ def getQueueHostInfo():
     hostsCompile= re.compile('^HOSTS:\s*(.*?)\s*$')
     queue = ''
 
-    command = 'bqueues -w -l'
+    command = 'bqueues -l'
     (returnCode, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
