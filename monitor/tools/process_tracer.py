@@ -3,7 +3,7 @@
 ################################
 # File Name   : process_tracer.py
 # Author      : ic_admin
-# Created On  : 2021-11-30 17:25:47
+# Created On  : 2021-11-30 00:00:00
 # Description : 
 ################################
 import os
@@ -176,7 +176,11 @@ class ProcessTracer(QMainWindow):
         self.genMainFrame()
 
         # Show main window
-        self.setWindowTitle('process_tracer')
+        if self.job:
+            self.setWindowTitle('Process Tracer (job:' + str(self.job) + ')')
+        elif self.pid:
+            self.setWindowTitle('Process Tracer (pid:' + str(self.pid) + ')')
+
         self.resize(1200, 300)
         pyqt5_common.centerWindow(self)
 
