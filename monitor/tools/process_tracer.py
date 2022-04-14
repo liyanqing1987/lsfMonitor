@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGrid
 from PyQt5.QtCore import QTimer
 
 if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = '/ic/software/cad_tools/it/lsfMonitor'
+    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
 
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common

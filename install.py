@@ -128,7 +128,7 @@ def updateTools():
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
     """
     expectedPython = os.path.abspath(sys.executable)
-    toolList = [str(CWD) + '/monitor/tools/get_license_product_feature_relationship.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py']
+    toolList = [str(CWD) + '/monitor/tools/check_issue_reason.py', str(CWD) + '/monitor/tools/get_license_product_feature_relationship.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py']
 
     for tool in toolList:
         with open(tool, 'r+') as TOOL:

@@ -65,9 +65,9 @@ def readArgs():
                         default='',
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
-                        default='',
+                        default='JOB',
                         choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'LICENSE'],
-                        help='Specify the current tab, default is "JOB" tab.')
+                        help='Specify current tab, default is "JOB" tab.')
 
     args = parser.parse_args()
 
@@ -220,6 +220,19 @@ class MainWindow(QMainWindow):
         setupMenu.addAction(freshAction)
         setupMenu.addAction(periodicFreshAction)
 
+        # Function
+        checkPendReasonAction = QAction('Check Pend reason', self)
+        checkPendReasonAction.triggered.connect(self.checkPendReason)
+        checkSlowReasonAction = QAction('Check Slow reason', self)
+        checkSlowReasonAction.triggered.connect(self.checkSlowReason)
+        checkFailReasonAction = QAction('Check Fail reason', self)
+        checkFailReasonAction.triggered.connect(self.checkFailReason)
+
+        functionMenu = menubar.addMenu('Function')
+        functionMenu.addAction(checkPendReasonAction)
+        functionMenu.addAction(checkSlowReasonAction)
+        functionMenu.addAction(checkFailReasonAction)
+
         # Help
         aboutAction = QAction('About lsfMonitor', self)
         aboutAction.triggered.connect(self.showAbout)
@@ -250,6 +263,27 @@ class MainWindow(QMainWindow):
             self.periodicFreshTimer.start(60000)
         else:
             self.periodicFreshTimer.stop()
+
+    def checkPendReason(self):
+        """
+        Call a separate script to check job pend reason.
+        """
+        self.myCheckIssueReason = CheckIssueReason('PEND')
+        self.myCheckIssueReason.start()
+
+    def checkSlowReason(self):
+        """
+        Call a separate script to check job slow reason.
+        """
+        self.myCheckIssueReason = CheckIssueReason('SLOW')
+        self.myCheckIssueReason.start()
+
+    def checkFailReason(self):
+        """
+        Call a separate script to check job fail reason.
+        """
+        self.myCheckIssueReason = CheckIssueReason('FAIL')
+        self.myCheckIssueReason.start()
 
     def showAbout(self):
         """
@@ -2185,6 +2219,19 @@ class MainWindow(QMainWindow):
         When window close, post-process.
         """
         print('Bye')
+
+
+class CheckIssueReason(QThread):
+    """
+    Start tool check_issue_reason.py to debug issue job.
+    """
+    def __init__(self, issue):
+        super(CheckIssueReason, self).__init__()
+        self.issue = issue
+
+    def run(self):
+        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/check_issue_reason.py -i ' + str(self.issue)
+        os.system(command)
 
 
 class ProcessTracer(QThread):

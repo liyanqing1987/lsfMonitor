@@ -247,6 +247,8 @@ def getLsfBjobsUfInfo(command):
                      'rusageMemCompile'           : re.compile('.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
                      'startedOnCompile'           : re.compile('(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
                      'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*'),
+                     'exitCodeCompile'            : re.compile('.*Exited with exit code (\d+)\..*'),
+                     'lsfSignalCompile'           : re.compile('.*Exited by LSF signal (\S+?)\..*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
                      'memCompile'                 : re.compile('.*\. MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
                      'swapCompile'                : re.compile('.*\; SWAP: (\d+(\.\d+)?) ([KMGT]bytes).*'),
@@ -294,6 +296,8 @@ def getLsfBjobsUfInfo(command):
                 myDic[job]['startedOn'] = ''
                 myDic[job]['startedTime'] = ''
                 myDic[job]['finishedTime'] = ''
+                myDic[job]['exitCode'] = ''
+                myDic[job]['lsfSignal'] = ''
                 myDic[job]['cpuTime'] = ''
                 myDic[job]['mem'] = ''
                 myDic[job]['swap'] = ''
@@ -417,6 +421,15 @@ def getLsfBjobsUfInfo(command):
                     if jobCompileDic['finishedTimeCompile'].match(line):
                         myMatch = jobCompileDic['finishedTimeCompile'].match(line)
                         myDic[job]['finishedTime'] = myMatch.group(1)
+
+                    if jobCompileDic['exitCodeCompile'].match(line):
+                        myMatch = jobCompileDic['exitCodeCompile'].match(line)
+                        myDic[job]['exitCode'] = myMatch.group(1)
+                        continue
+
+                    if jobCompileDic['lsfSignalCompile'].match(line):
+                        myMatch = jobCompileDic['lsfSignalCompile'].match(line)
+                        myDic[job]['lsfSignal'] = myMatch.group(1)
                         continue
 
                     if jobCompileDic['pidsCompile'].findall(line):
@@ -494,6 +507,8 @@ def getOpenlavaBjobsUfInfo(command):
                      'startedOnCompile'           : re.compile('.*[sS]tarted on ([0-9]+ Hosts/Processors )?([^;,]+).*'),
                      'startedTimeCompile'         : re.compile('(.*): (\[\d+\])?\s*[sS]tarted on.*'),
                      'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with).*'),
+                     'exitCodeCompile'            : re.compile('.*Exited with exit code (\d+)\..*'),
+                     'lsfSignalCompile'           : re.compile('.*Exited by LSF signal (\S+?)\..*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is ([1-9][0-9]*) seconds.*'),
                      'memCompile'                 : re.compile('.*MEM: ([1-9][0-9]*) Mbytes.*'),
                     }
@@ -533,6 +548,8 @@ def getOpenlavaBjobsUfInfo(command):
                 myDic[job]['startedOn'] = ''
                 myDic[job]['startedTime'] = ''
                 myDic[job]['finishedTime'] = ''
+                myDic[job]['exitCode'] = ''
+                myDic[job]['lsfSignal'] = ''
                 myDic[job]['cpuTime'] = ''
                 myDic[job]['mem'] = ''
                 myDic[job]['swap'] = ''
@@ -613,6 +630,14 @@ def getOpenlavaBjobsUfInfo(command):
                 if jobCompileDic['finishedTimeCompile'].match(line):
                     myMatch = jobCompileDic['finishedTimeCompile'].match(line)
                     myDic[job]['finishedTime'] = myMatch.group(1)
+
+                if jobCompileDic['exitCodeCompile'].match(line):
+                    myMatch = jobCompileDic['exitCodeCompile'].match(line)
+                    myDic[job]['exitCode'] = myMatch.group(1)
+
+                if jobCompileDic['lsfSignalCompile'].match(line):
+                    myMatch = jobCompileDic['lsfSignalCompile'].match(line)
+                    myDic[job]['lsfSignal'] = myMatch.group(1)
 
                 if jobCompileDic['cpuTimeCompile'].match(line):
                     myMatch = jobCompileDic['cpuTimeCompile'].match(line)
