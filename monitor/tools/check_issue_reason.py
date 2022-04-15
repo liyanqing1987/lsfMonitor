@@ -88,7 +88,7 @@ class MainWindow(QMainWindow):
 
         # Show main window
         self.setWindowTitle('Check Issue Reason')
-        self.resize(600, 400)
+        self.resize(600, 300)
         pyqt5_common.centerWindow(self)
 
     def processArgs(self):
@@ -186,19 +186,42 @@ class MainWindow(QMainWindow):
                 self.infoText.append('[Reason ' + str(i) + '] : ' + str(line))
  
                 if re.search('New job is waiting for scheduling',  line):
-                    self.infoText.append('                    任务分发中, 请继续等待')
+                    self.infoText.append('                    任务分发中, 请耐心等待')
                 elif re.search('Not enough job slot',  line):
-                    self.infoText.append('                    cpu需求不能满足, 看是否可以降低slot申请量.')
-                elif re.search('Not enough processors to meet the job\'s spanning requirement',  line):
-                    self.infoText.append('                    cpu需求不能满足, 看是否可以降低slot申请量.')
-                elif re.search('Job requirements for reserving resource \(mem\) not satisfied',  line):
-                    self.infoText.append('                    mem需求不能满足, 请继续等待, 如有必要申请专有队列.')
-                elif re.search('Job\'s requirements for resource reservation not satisfied \(Resource: mem\)',  line):
-                    self.infoText.append('                    mem需求不能满足, 请继续等待, 如有必要申请专有队列.')
-                elif re.search('User has reached the per-user job slot limit of the queue',  line):
-                    self.infoText.append('                    queue限制, 请继续等待队列资源.')
+                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+
+                    if jobDic[job]['processorsRequested']:
+                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
                 elif re.search('Job slot limit reached',  line):
-                    self.infoText.append('                    queue限制, 请继续等待队列资源.')
+                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+
+                    if jobDic[job]['processorsRequested']:
+                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                elif re.search('Not enough processors to meet the job\'s spanning requirement',  line):
+                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+
+                    if jobDic[job]['processorsRequested']:
+                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                elif re.search('Job requirements for reserving resource \(mem\) not satisfied',  line):
+                    self.infoText.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
+
+                    if jobDic[job]['requestedResources']:
+                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                elif re.search('Job\'s requirements for resource reservation not satisfied \(Resource: mem\)',  line):
+                    self.infoText.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
+
+                    if jobDic[job]['requestedResources']:
+                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                elif re.search('There are no suitable hosts for the job',  line):
+                    self.infoText.append('                    资源申请不能满足, 请检查资源申请条件是否过于苛刻.')
+
+                    if jobDic[job]['processorsRequested']:
+                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+
+                    if jobDic[job]['requestedResources']:
+                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                elif re.search('User has reached the per-user job slot limit of the queue',  line):
+                    self.infoText.append('                    queue限制, 请耐心等待队列资源.')
 
             self.infoText.append('')
             self.infoText.append('备注 : job PEND原因浮动变化, 仅了解PEND的核心瓶颈所在即可.')
@@ -235,8 +258,9 @@ class MainWindow(QMainWindow):
                     self.infoText.append('The issue should be from your command, please check your command log.')
                 else:
                     self.infoText.append('The job should be kill by system or LSF, please contact LSF administrator for further debug.')
-            elif jobDic[job]['lsfSignal']:
-                self.infoText.append('Job lsf signal is "' + str(jobDic[job]['lsfSignal']) + '".')
+            if jobDic[job]['termOwner']:
+                self.infoText.append('Job TERM_OWNER info just like below:')
+                self.infoText.append('    "' + str(jobDic[job]['termOwner']) + '"')
                 self.infoText.append('Please contact LSF administrator for further debug.')
         else:
             self.infoText.append('<font color="#FF0000">*Error*: Job is not finished!</font>')

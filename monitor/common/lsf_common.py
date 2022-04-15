@@ -242,6 +242,7 @@ def getLsfBjobsUfInfo(command):
                      'submittedFromCompile'       : re.compile('.*Submitted from host <([^>]+)>.*'),
                      'submittedTimeCompile'       : re.compile('(.*): Submitted from host.*'),
                      'cwdCompile'                 : re.compile('.*CWD <([^>]+)>.*'),
+                     'processorsRequestedCompile' : re.compile('.* (\d+) Task\(s\).*'),
                      'requestedResourcesCompile'  : re.compile('.*Requested Resources <(.+)>;.*'),
                      'spanHostsCompile'           : re.compile('.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                      'rusageMemCompile'           : re.compile('.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
@@ -249,6 +250,7 @@ def getLsfBjobsUfInfo(command):
                      'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*'),
                      'exitCodeCompile'            : re.compile('.*Exited with exit code (\d+)\..*'),
                      'lsfSignalCompile'           : re.compile('.*Exited by LSF signal (\S+?)\..*'),
+                     'termOwnerCompile'           : re.compile('.*TERM_OWNER: (.+?\.).*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
                      'memCompile'                 : re.compile('.*\. MEM: (\d+(\.\d+)?) ([KMGT]bytes).*'),
                      'swapCompile'                : re.compile('.*\; SWAP: (\d+(\.\d+)?) ([KMGT]bytes).*'),
@@ -289,7 +291,7 @@ def getLsfBjobsUfInfo(command):
                 myDic[job]['submittedFrom'] = ''
                 myDic[job]['submittedTime'] = ''
                 myDic[job]['cwd'] = ''
-                myDic[job]['processorsRequested'] = ''
+                myDic[job]['processorsRequested'] = '1'
                 myDic[job]['requestedResources'] = ''
                 myDic[job]['spanHosts'] = ''
                 myDic[job]['rusageMem'] = ''
@@ -298,6 +300,7 @@ def getLsfBjobsUfInfo(command):
                 myDic[job]['finishedTime'] = ''
                 myDic[job]['exitCode'] = ''
                 myDic[job]['lsfSignal'] = ''
+                myDic[job]['termOwner'] = ''
                 myDic[job]['cpuTime'] = ''
                 myDic[job]['mem'] = ''
                 myDic[job]['swap'] = ''
@@ -362,6 +365,10 @@ def getLsfBjobsUfInfo(command):
                         myMatch = jobCompileDic['cwdCompile'].match(line)
                         myDic[job]['cwd'] = myMatch.group(1)
 
+                    if jobCompileDic['processorsRequestedCompile'].match(line):
+                        myMatch = jobCompileDic['processorsRequestedCompile'].match(line)
+                        myDic[job]['processorsRequested'] = myMatch.group(1)
+
                     if jobCompileDic['requestedResourcesCompile'].match(line):
                         myMatch = jobCompileDic['requestedResourcesCompile'].match(line)
                         myDic[job]['requestedResources'] = myMatch.group(1)
@@ -387,7 +394,6 @@ def getLsfBjobsUfInfo(command):
                         startedHost = re.sub('>', '', startedHost)
                         startedHost = re.sub('\d+\*', '', startedHost)
                         myDic[job]['startedOn'] = startedHost
-                        myDic[job]['processorsRequested'] = myMatch.group(4)
                         continue
 
                     if jobCompileDic['cpuTimeCompile'].match(line):
@@ -425,12 +431,14 @@ def getLsfBjobsUfInfo(command):
                     if jobCompileDic['exitCodeCompile'].match(line):
                         myMatch = jobCompileDic['exitCodeCompile'].match(line)
                         myDic[job]['exitCode'] = myMatch.group(1)
-                        continue
 
                     if jobCompileDic['lsfSignalCompile'].match(line):
                         myMatch = jobCompileDic['lsfSignalCompile'].match(line)
                         myDic[job]['lsfSignal'] = myMatch.group(1)
-                        continue
+
+                    if jobCompileDic['termOwnerCompile'].match(line):
+                        myMatch = jobCompileDic['termOwnerCompile'].match(line)
+                        myDic[job]['termOwner'] = myMatch.group(1)
 
                     if jobCompileDic['pidsCompile'].findall(line):
                         myMatch = jobCompileDic['pidsCompile'].findall(line)
@@ -509,6 +517,7 @@ def getOpenlavaBjobsUfInfo(command):
                      'finishedTimeCompile'        : re.compile('(.*): (Done successfully|Exited with).*'),
                      'exitCodeCompile'            : re.compile('.*Exited with exit code (\d+)\..*'),
                      'lsfSignalCompile'           : re.compile('.*Exited by LSF signal (\S+?)\..*'),
+                     'termOwnerCompile'           : re.compile('.*TERM_OWNER: (.+?\.).*'),
                      'cpuTimeCompile'             : re.compile('.*The CPU time used is ([1-9][0-9]*) seconds.*'),
                      'memCompile'                 : re.compile('.*MEM: ([1-9][0-9]*) Mbytes.*'),
                     }
@@ -550,10 +559,12 @@ def getOpenlavaBjobsUfInfo(command):
                 myDic[job]['finishedTime'] = ''
                 myDic[job]['exitCode'] = ''
                 myDic[job]['lsfSignal'] = ''
+                myDic[job]['termOwner'] = ''
                 myDic[job]['cpuTime'] = ''
                 myDic[job]['mem'] = ''
                 myDic[job]['swap'] = ''
                 myDic[job]['runLimit'] = ''
+                myDic[job]['pids'] = []
                 myDic[job]['maxMem'] = ''
                 myDic[job]['avgMem'] = ''
                 myDic[job]['pendingReasons'] = []
@@ -638,6 +649,10 @@ def getOpenlavaBjobsUfInfo(command):
                 if jobCompileDic['lsfSignalCompile'].match(line):
                     myMatch = jobCompileDic['lsfSignalCompile'].match(line)
                     myDic[job]['lsfSignal'] = myMatch.group(1)
+
+                if jobCompileDic['termOwnerCompile'].match(line):
+                    myMatch = jobCompileDic['termOwnerCompile'].match(line)
+                    myDic[job]['termOwner'] = myMatch.group(1)
 
                 if jobCompileDic['cpuTimeCompile'].match(line):
                     myMatch = jobCompileDic['cpuTimeCompile'].match(line)

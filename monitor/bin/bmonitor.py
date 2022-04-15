@@ -65,7 +65,7 @@ def readArgs():
                         default='',
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
-                        default='JOB',
+                        default='JOBS',
                         choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'LICENSE'],
                         help='Specify current tab, default is "JOB" tab.')
 
@@ -268,21 +268,21 @@ class MainWindow(QMainWindow):
         """
         Call a separate script to check job pend reason.
         """
-        self.myCheckIssueReason = CheckIssueReason('PEND')
+        self.myCheckIssueReason = CheckIssueReason(issue='PEND')
         self.myCheckIssueReason.start()
 
     def checkSlowReason(self):
         """
         Call a separate script to check job slow reason.
         """
-        self.myCheckIssueReason = CheckIssueReason('SLOW')
+        self.myCheckIssueReason = CheckIssueReason(issue='SLOW')
         self.myCheckIssueReason.start()
 
     def checkFailReason(self):
         """
         Call a separate script to check job fail reason.
         """
-        self.myCheckIssueReason = CheckIssueReason('FAIL')
+        self.myCheckIssueReason = CheckIssueReason(issue='FAIL')
         self.myCheckIssueReason.start()
 
     def showAbout(self):
@@ -500,8 +500,10 @@ class MainWindow(QMainWindow):
             return
 
         # Get job info
-        print('* Getting LSF job information for "' + str(currentJob) + '", please wait a moment ...')
+        myShowMessage = ShowMessage('Info', '* Getting LSF job information for "' + str(currentJob) + '", please wait a moment ...')
+        myShowMessage.start()
         self.jobInfoDic = lsf_common.getBjobsUfInfo(command='bjobs -UF ' + str(currentJob))
+        myShowMessage.terminate()
 
         if self.jobInfoDic:
             # Update the related frames with the job info.
@@ -719,7 +721,7 @@ class MainWindow(QMainWindow):
         jobsTabStatusLabel = QLabel('Status', self.jobsTabFrame0)
         jobsTabStatusLabel.setStyleSheet("font-weight: bold;")
         self.jobsTabStatusCombo = QComboBox(self.jobsTabFrame0)
-        self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
+        self.setJobsTabStatusCombo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
 
         jobsTabQueueLabel = QLabel('       Queue', self.jobsTabFrame0)
         jobsTabQueueLabel.setStyleSheet("font-weight: bold;")
@@ -768,7 +770,7 @@ class MainWindow(QMainWindow):
         self.jobsTabTable.setSortingEnabled(True)
         self.jobsTabTable.setColumnCount(0)
         self.jobsTabTable.setColumnCount(11)
-        self.jobsTabTable.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Processers', 'Rusage (G)', 'Mem (G)', 'Command'])
+        self.jobsTabTable.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command'])
 
         self.jobsTabTable.setColumnWidth(0, 70)
         self.jobsTabTable.setColumnWidth(2, 70)
@@ -799,7 +801,7 @@ class MainWindow(QMainWindow):
             command = str(command) + ' -r'
         elif specifiedStatus == 'PEND':
             command = str(command) + ' -p'
-        elif specifiedStatus == 'ALL':
+        else:
             command = str(command) + ' -a'
 
         # Get specified host related jobs.
@@ -809,8 +811,20 @@ class MainWindow(QMainWindow):
             command = str(command) + ' -m ' + str(specifiedHost)
 
         # Run command to get expected jobs information.
-        print('* Loading LSF jobs information, please wait a moment ...')
-        jobDic = lsf_common.getBjobsUfInfo(command)
+        myShowMessage = ShowMessage('Info', '* Loading LSF jobs information, please wait a moment ...')
+        myShowMessage.start()
+        origJobDic = lsf_common.getBjobsUfInfo(command)
+        myShowMessage.terminate()
+
+        # Filter jobDic.
+        jobDic = {}
+
+        if (specifiedStatus == 'DONE') or (specifiedStatus == 'EXIT'):
+            for job in origJobDic.keys():
+                if origJobDic[job]['status'] == specifiedStatus:
+                    jobDic.setdefault(job, origJobDic[job])
+        else:
+            jobDic = origJobDic
 
         # Fill self.jobsTabTable items.
         self.jobsTabTable.setRowCount(0)
@@ -818,15 +832,18 @@ class MainWindow(QMainWindow):
         jobs = list(jobDic.keys())
 
         for i in range(len(jobs)):
+            # File "Job"
             job = jobs[i]
             j = 0
             self.jobsTabTable.setItem(i, j, QTableWidgetItem(job))
 
+            # File "User"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['user'])
             self.jobsTabTable.setItem(i, j, item)
 
+            # File "Status"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['status'])
@@ -836,21 +853,25 @@ class MainWindow(QMainWindow):
                 item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
 
+            # File "Queue"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['queue'])
             self.jobsTabTable.setItem(i, j, item)
 
+            # File "Host"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['startedOn'])
             self.jobsTabTable.setItem(i, j, item)
 
+            # File "Started"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['startedTime'])
             self.jobsTabTable.setItem(i, j, item)
 
+            # File "Project"
             j = j+1
 
             if str(jobDic[job]['project']) != '':
@@ -858,6 +879,7 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.DisplayRole, jobDic[job]['project'])
                 self.jobsTabTable.setItem(i, j, item)
 
+            # File "Slot"
             j = j+1
 
             if str(jobDic[job]['processorsRequested']) != '':
@@ -865,6 +887,7 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.DisplayRole, int(jobDic[job]['processorsRequested']))
                 self.jobsTabTable.setItem(i, j, item)
 
+            # File "Rusage"
             j = j+1
 
             if str(jobDic[job]['rusageMem']) != '':
@@ -873,6 +896,7 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.DisplayRole, rusageMemValue)
                 self.jobsTabTable.setItem(i, j, item)
 
+            # File "Mem"
             j = j+1
 
             if str(jobDic[job]['mem']) != '':
@@ -885,6 +909,7 @@ class MainWindow(QMainWindow):
                     item.setFont(QFont('song', 10, QFont.Bold))
                     item.setForeground(QBrush(Qt.red))
 
+            # File "Command"
             j = j+1
             item = QTableWidgetItem()
             item.setText(jobDic[job]['command'])
@@ -908,15 +933,17 @@ class MainWindow(QMainWindow):
                 jobStatus = self.jobsTabTable.item(currentRow, 2).text().strip()
 
                 if jobStatus == 'PEND':
-                    command = 'bjobs -UF ' + str(job)
-
-                    print('* Getting LSF job information for "' + str(job) + '", please wait a moment ...')
-                    jobDic = lsf_common.getBjobsUfInfo(command)
-                    jobPendingReasons = ''
-
-                    for line in jobDic[job]['pendingReasons']:
-                        jobPendingReasons = str(jobPendingReasons) + '\n' + str(line)
-                        QMessageBox.information(self, 'Pending reason for ' + str(job), jobPendingReasons)
+                    print('* Getting job pend reason for "' + str(job) + '", please wait a moment ...')
+                    self.myCheckIssueReason = CheckIssueReason(job=job, issue='PEND')
+                    self.myCheckIssueReason.start()
+                elif jobStatus == 'RUN':
+                    print('* Getting job process information for "' + str(job) + '", please wait a moment ...')
+                    self.myCheckIssueReason = CheckIssueReason(job=job, issue='SLOW')
+                    self.myCheckIssueReason.start()
+                elif (jobStatus == 'DONE') or (jobStatus == 'EXIT'):
+                    print('* Getting job fail reason for "' + str(job) + '", please wait a moment ...')
+                    self.myCheckIssueReason = CheckIssueReason(job=job, issue='FAIL')
+                    self.myCheckIssueReason.start()
 
     def setJobsTabStatusCombo(self, statusList):
         """
@@ -1285,7 +1312,7 @@ class MainWindow(QMainWindow):
             elif item.column() == 5:
                 if int(njobsNum) > 0:
                     self.jobsTabUserLine.setText('')
-                    self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
+                    self.setJobsTabStatusCombo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
                     self.setJobsTabQueueCombo()
 
                     hostList = copy.deepcopy(self.queueHostList)
@@ -1462,7 +1489,7 @@ class MainWindow(QMainWindow):
             elif item.column() == 1:
                 if (pendNum != '') and (int(pendNum) > 0):
                     self.jobsTabUserLine.setText('')
-                    self.setJobsTabStatusCombo(['PEND', 'RUN', 'ALL'])
+                    self.setJobsTabStatusCombo(['PEND', 'RUN', 'DONE', 'EXIT', 'ALL'])
 
                     if queue == 'ALL':
                         self.setJobsTabQueueCombo()
@@ -1479,7 +1506,7 @@ class MainWindow(QMainWindow):
             elif item.column() == 2:
                 if (runNum != '') and (int(runNum) > 0):
                     self.jobsTabUserLine.setText('')
-                    self.setJobsTabStatusCombo(['RUN', 'PEND', 'ALL'])
+                    self.setJobsTabStatusCombo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
 
                     if queue == 'ALL':
                         self.setJobsTabQueueCombo()
@@ -2225,12 +2252,17 @@ class CheckIssueReason(QThread):
     """
     Start tool check_issue_reason.py to debug issue job.
     """
-    def __init__(self, issue):
+    def __init__(self, job='', issue='PEND'):
         super(CheckIssueReason, self).__init__()
+        self.job = job
         self.issue = issue
 
     def run(self):
         command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/check_issue_reason.py -i ' + str(self.issue)
+
+        if self.job:
+            command = str(command) + ' -j ' + str(self.job)
+
         os.system(command)
 
 
