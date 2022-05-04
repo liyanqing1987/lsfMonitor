@@ -750,7 +750,7 @@ def getQueueHostInfo():
             myMatch = hostsCompile.match(line)
             hostsString = myMatch.group(1)
 
-            if re.search('all', hostsString):
+            if hostsString == 'all':
                 common.printWarning('*Warning* (getQueueHostInfo) : queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.')
                 queueHostDic[queue] = getHostList()
             else:
