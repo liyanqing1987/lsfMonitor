@@ -32,7 +32,9 @@ def getLicenseInfo():
     else:
         command = 'lmstat -a -i'
 
-    if config.lmstatBsubCommand:
+    if 'lmstatBsubCommand' in os.environ:
+        command = str(os.environ['lmstatBsubCommand']) + ' "' + str(command) + '"'
+    elif config.lmstatBsubCommand:
         command = str(config.lmstatBsubCommand) + ' "' + str(command) + '"'
 
     (returnCode, stdout, stderr) = common.run_command(command)
