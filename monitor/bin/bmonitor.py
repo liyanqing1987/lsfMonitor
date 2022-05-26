@@ -73,8 +73,7 @@ def readArgs():
 
     # Make sure specified job exists.
     if args.jobid:
-        if not args.tab:
-            args.tab = 'JOB'
+        args.tab = 'JOB'
 
         command = 'bjobs -w ' + str(args.jobid)
         jobDic = lsf_common.getBjobsInfo(command)
