@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 ################################
 # File Name   : get_license_product_feature_relationship.py
-# Author      : ic_admin
+# Author      : liyanqing
 # Created On  : 2021-11-30 17:25:47
 # Description : 
 ################################

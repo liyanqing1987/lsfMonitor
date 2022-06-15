@@ -59,8 +59,11 @@ def getLicenseInfo():
             licenseFileList = licenseFiles.split(':')
             licenseDic[licenseServer].setdefault('licenseFiles', licenseFileList)
             licenseDic[licenseServer].setdefault('status', 'down')
-        elif re.search(': UP ', line):
+        elif re.search('license server UP ', line):
             lmgrdStatus = 'up'
+            licenseDic[licenseServer].setdefault('status', lmgrdStatus)
+        elif re.search('license server DOWN', line):
+            lmgrdStatus = 'down'
             licenseDic[licenseServer].setdefault('status', lmgrdStatus)
         elif re.match('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$', line):
             myMatch = re.match('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$', line)
@@ -280,8 +283,8 @@ class GetProductFeatureRelationship():
                     productDic.setdefault(productId, productName)
                 elif (productMark == 2) and re.match('^\s*#\s*----.*$', line):
                     productMark = 0
-                elif (productMark == 0) and re.match('^\s*(INCREMENT|FEATURE)\s+(\S+)\s+.*$', line):
-                    myMatch = re.match('^\s*(INCREMENT|FEATURE)\s+(\S+)\s+.*$', line)
+                elif (productMark == 0) and re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line):
+                    myMatch = re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line)
                     feature = myMatch.group(2)
                 elif (productMark == 0) and re.match('^.*SN=RK:(.+?):.*$', line):
                     myMatch = re.match('^.*SN=RK:(.+?):.*$', line)
