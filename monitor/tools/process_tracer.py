@@ -34,7 +34,7 @@ def readArgs():
                         default='',
                         help='Specify the LSF jobid you want to trace on remote host.')
     parser.add_argument('-p', '--pid',
-                        default=[],
+                        default='',
                         help='Specify the pid you want to trace on local host.')
 
     args = parser.parse_args()
