@@ -63,8 +63,7 @@ def getLicenseInfo(specifiedFeature=''):
             licenseFiles = myMatch.group(2) 
             licenseFileList = licenseFiles.split(':')
             licenseDic[licenseServer].setdefault('licenseFiles', licenseFileList)
-            licenseDic[licenseServer].setdefault('status', 'down')
-        elif re.search('license server UP ', line):
+        elif re.search('license server UP', line):
             lmgrdStatus = 'up'
             licenseDic[licenseServer].setdefault('status', lmgrdStatus)
         elif re.search('license server DOWN', line):
@@ -154,14 +153,12 @@ def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
               
     return(newLicenseDic)
 
-def checkLongRuntime(line, secondThreshold=259200):
+def checkLongRuntime(startTime, secondThreshold=259200):
     """
     Runtime is more than secondThreshold (default is 3 days), return True.
     Runtime is less than secondThreshold (default is 3 days), return False.
     """
-    if re.match('^.* start ([A-Z][a-z]+ \d+/\d+ \d+:\d+)\s*(,.+)?$', line):
-        myMatch = re.match('^.* start ([A-Z][a-z]+ \d+/\d+ \d+:\d+)\s*(,.+)?$', line)
-        startTime = myMatch.group(1)
+    if startTime:
         currentYear = datetime.date.today().year
         startTime = str(currentYear) + ' ' + str(startTime)
         startSeconds = int(time.mktime(time.strptime(startTime, '%Y %a %m/%d %H:%M')))

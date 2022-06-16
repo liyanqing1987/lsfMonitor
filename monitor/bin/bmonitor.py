@@ -1906,6 +1906,7 @@ class MainWindow(QMainWindow):
         self.licenseTabExpiresLabel.setAlignment(Qt.AlignCenter)
 
         self.licenseTabFeatureTable = QTableWidget(self.licenseTab)
+        self.licenseTabFeatureTable.itemClicked.connect(self.licenseTabCheckClick)
         self.licenseTabExpiresTable = QTableWidget(self.licenseTab)
 
         # self.licenseTab - Grid
@@ -2151,7 +2152,6 @@ class MainWindow(QMainWindow):
             if 'feature' in licenseServerDic:
                 for feature in licenseServerDic['feature']:
                     licenseFeatureInfoLength += 1
-                    licenseFeatureInfoLength += len(licenseServerDic['feature'][feature]['in_use_info'])
 
         # Fill self.licenseTabFeatureTable items.
         self.licenseTabFeatureTable.setRowCount(0)
@@ -2176,16 +2176,23 @@ class MainWindow(QMainWindow):
                     in_use = licenseServerDic['feature'][feature]['in_use']
                     self.licenseTabFeatureTable.setItem(row, 3, QTableWidgetItem(in_use))
 
-                    if licenseServerDic['feature'][feature]['in_use_info']:
-                        for in_use_info in licenseServerDic['feature'][feature]['in_use_info']:
-                            row += 1
-                            item = QTableWidgetItem(in_use_info)
+    def licenseTabCheckClick(self, item=None):
+        """
+        If click the Job id, jump to the JOB tab and show the job information.
+        If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
+        """
+        if item is not None:
+            if item.column() == 3:
+                currentRow = self.licenseTabFeatureTable.currentRow()
+                inUseNum = int(self.licenseTabFeatureTable.item(currentRow, 3).text().strip())
 
-                            if license_common.checkLongRuntime(in_use_info):
-                                item.setForeground(QBrush(Qt.red))
+                if inUseNum > 0:
+                    licenseServer = self.licenseTabFeatureTable.item(currentRow, 0).text().strip()
+                    licenseFeature = self.licenseTabFeatureTable.item(currentRow, 1).text().strip()
 
-                            self.licenseTabFeatureTable.setSpan(row, 1, 1, 4)
-                            self.licenseTabFeatureTable.setItem(row, 1, item)
+                    print('* Getting license feature "' + str(licenseFeature) + '" usage on license server ' + str(licenseServer) + ' ...')
+                    self.myShowLicenseFeatureUsage = ShowLicenseFeatureUsage(server=licenseServer, feature=licenseFeature)
+                    self.myShowLicenseFeatureUsage.start()
 
     def genLicenseTabExpiresTable(self):
         self.licenseTabExpiresTable.setShowGrid(True)
@@ -2275,6 +2282,20 @@ class ProcessTracer(QThread):
 
     def run(self):
         command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer.py -j ' + str(self.job)
+        os.system(command)
+
+
+class ShowLicenseFeatureUsage(QThread):
+    """
+    Start tool process_tracer.py to trace job process.
+    """
+    def __init__(self, server, feature):
+        super(ShowLicenseFeatureUsage, self).__init__()
+        self.server = server
+        self.feature = feature
+
+    def run(self):
+        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/show_license_feature_usage.py -s ' + str(self.server) + ' -f ' + str(self.feature)
         os.system(command)
 
 
