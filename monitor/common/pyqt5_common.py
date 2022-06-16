@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QDesktopWidget
 from PyQt5.QtGui import QTextCursor
 
+
 def centerWindow(window):
     """
     Move the input GUI window into the center of the computer windows.
@@ -9,6 +10,7 @@ def centerWindow(window):
     cp = QDesktopWidget().availableGeometry().center()
     qr.moveCenter(cp)
     window.move(qr.topLeft())
+
 
 def textEditVisiblePosition(textEditItem, position='End'):
     """

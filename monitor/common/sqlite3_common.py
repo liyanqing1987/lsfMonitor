@@ -6,6 +6,7 @@ import sqlite3
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 
+
 def connectDbFile(dbFile, mode='read'):
     result = 'passed'
     conn = ''
@@ -30,6 +31,7 @@ def connectDbFile(dbFile, mode='read'):
 
     return(result, conn)
 
+
 def connectPreprocess(dbFile, orig_conn, mode='read'):
     if orig_conn == '':
         (result, conn) = connectDbFile(dbFile, mode)
@@ -40,6 +42,7 @@ def connectPreprocess(dbFile, orig_conn, mode='read'):
     curs = conn.cursor()
 
     return(result, conn, curs)
+
 
 def getSqlTableList(dbFile, orig_conn):
     """
@@ -66,6 +69,7 @@ def getSqlTableList(dbFile, orig_conn):
 
     return(tableList)
 
+
 def getSqlTableCount(dbFile, orig_conn, tableName):
     """
     How many lines of the database table.
@@ -90,6 +94,7 @@ def getSqlTableCount(dbFile, orig_conn, tableName):
 
     return(count)
 
+
 def getSqlTableKeyList(dbFile, orig_conn, tableName):
     """
     Get all of the tables from the specified db file.
@@ -111,6 +116,7 @@ def getSqlTableKeyList(dbFile, orig_conn, tableName):
         common.printError('*Error* (getSqlTableKeyList) : Failed on getting table key list on dbFile "' + str(dbFile) + '": ' + str(error))
 
     return(keyList)
+
 
 def getSqlTableData(dbFile, orig_conn, tableName, keyList=[], limit=0):
     """
@@ -152,11 +158,12 @@ def getSqlTableData(dbFile, orig_conn, tableName, keyList=[], limit=0):
                     if key in dataDic.keys():
                         dataDic[key].append(value)
                     else:
-                        dataDic[key]=[value,]
+                        dataDic[key] = [value, ]
     except Exception as error:
         common.printError('*Error* (getSqlTableData) : Failed on getting table info from table "' + str(tableName) + '" of dbFile "' + str(dbFile) + '": ' + str(error))
 
     return(dataDic)
+
 
 def deleteSqlTableRows(dbFile, orig_conn, tableName, rowId, beginLine, endLine, commit=True):
     """
@@ -177,6 +184,7 @@ def deleteSqlTableRows(dbFile, orig_conn, tableName, rowId, beginLine, endLine, 
     except Exception as error:
         common.printError('*Error* (dropSqlTable) : Failed on deleting table "' + str(tableName) + '" lines ' + str(beginLine) + '-' + str(endLine) + ': ' + str(error))
 
+
 def dropSqlTable(dbFile, orig_conn, tableName, commit=True):
     """
     Drop table if it exists.
@@ -195,6 +203,7 @@ def dropSqlTable(dbFile, orig_conn, tableName, commit=True):
                 conn.close()
     except Exception as error:
         common.printError('*Error* (dropSqlTable) : Failed on drop table "' + str(tableName) + '" from dbFile "' + str(dbFile) + '": ' + str(error))
+
 
 def createSqlTable(dbFile, orig_conn, tableName, initString, commit=True):
     """
@@ -215,6 +224,7 @@ def createSqlTable(dbFile, orig_conn, tableName, initString, commit=True):
     except Exception as error:
         common.printError('*Error* (createSqlTable) : Failed on creating table "' + str(tableName) + '" on db file "' + str(dbFile) + '": ' + str(error))
 
+
 def insertIntoSqlTable(dbFile, orig_conn, tableName, valueString, commit=True):
     """
     Insert new value into sql table.
@@ -233,6 +243,7 @@ def insertIntoSqlTable(dbFile, orig_conn, tableName, valueString, commit=True):
                 conn.close()
     except Exception as error:
         common.printError('*Error* (insertIntoSqlTable) : Failed on inserting specified values into table "' + str(tableName) + '" on db file "' + str(dbFile) + '": ' + str(error))
+
 
 def genSqlTableKeyString(keyList, keyTypeList=[], autoIncrement=False):
     """
@@ -257,6 +268,7 @@ def genSqlTableKeyString(keyList, keyTypeList=[], autoIncrement=False):
             keyString = str(keyString) + " '" + str(key) + "' " + str(keyType) + ","
 
     return(keyString)
+
 
 def genSqlTableValueString(valueList, autoIncrement=False):
     """

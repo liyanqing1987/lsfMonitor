@@ -13,6 +13,7 @@ sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from conf import config
 from common import sqlite3_common
 
+
 def readArgs():
     """
     Read in arguments.
@@ -52,6 +53,7 @@ def readArgs():
 
     return(args.database, args.tables, args.keys, args.number)
 
+
 def getLength(inputList):
     """
     Get the length of the longest item on the input list.
@@ -65,6 +67,7 @@ def getLength(inputList):
             length = itemLength
 
     return(length)
+
 
 def seedb(dbFile, tableList, keyList, number):
     print('DB FILE : ' + str(dbFile))
@@ -118,12 +121,14 @@ def seedb(dbFile, tableList, keyList, number):
 
             print('========')
 
+
 ################
 # Main Process #
 ################
 def main():
     (dbFile, tableList, keyList, number) = readArgs()
     seedb(dbFile, tableList, keyList, number)
+
 
 if __name__ == '__main__':
     main()

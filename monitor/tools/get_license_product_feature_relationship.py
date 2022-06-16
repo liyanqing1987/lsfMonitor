@@ -4,7 +4,7 @@
 # File Name   : get_license_product_feature_relationship.py
 # Author      : liyanqing
 # Created On  : 2021-11-30 17:25:47
-# Description : 
+# Description :
 ################################
 import os
 import sys
@@ -18,6 +18,7 @@ from common import license_common
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 CWD = os.getcwd()
+
 
 def readArgs():
     """
@@ -53,7 +54,7 @@ def readArgs():
     for vendor in args.vendors:
         if vendor not in validVendorList:
             print('*Error*: "' + str(vendor) + '": invalid vendor name.')
-            sys.exit(1) 
+            sys.exit(1)
 
     # Check output directory exists or not.
     args.outputFile = os.path.abspath(args.outputFile)
@@ -65,6 +66,7 @@ def readArgs():
 
     return(args.licenseFiles, args.vendors, args.outputFile)
 
+
 ################
 # Main Process #
 ################
@@ -72,6 +74,7 @@ def main():
     (licenseFileList, vendorList, outputFile) = readArgs()
     myGetProductFeatureRelationship = license_common.GetProductFeatureRelationship(licenseFileList, vendorList, outputFile)
     myGetProductFeatureRelationship.run()
+
 
 if __name__ == '__main__':
     main()

@@ -6,6 +6,7 @@ import collections
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 
+
 def getCommandDict(command):
     """
     Collect (common) LSF command info into a dict.
@@ -50,6 +51,7 @@ def getCommandDict(command):
 
     return(myDic)
 
+
 def getBjobsInfo(command='bjobs -u all -w'):
     """
     Get bjobs info with command 'bjobs'.
@@ -60,6 +62,7 @@ def getBjobsInfo(command='bjobs -u all -w'):
     """
     bjobsDic = getCommandDict(command)
     return(bjobsDic)
+
 
 def getBqueuesInfo(command='bqueues -w'):
     """
@@ -72,6 +75,7 @@ def getBqueuesInfo(command='bqueues -w'):
     bqueuesDic = getCommandDict(command)
     return(bqueuesDic)
 
+
 def getBhostsInfo(command='bhosts -w'):
     """
     Get bhosts info with command 'bhosts'.
@@ -82,6 +86,7 @@ def getBhostsInfo(command='bhosts -w'):
     """
     bhostsDic = getCommandDict(command)
     return(bhostsDic)
+
 
 def getBhostsLoadInfo(command='bhosts -l'):
     """
@@ -118,7 +123,7 @@ def getBhostsLoadInfo(command='bhosts -l'):
             if re.match('^\s*$', line):
                 loadInfoMark = False
             elif re.match('^\s*Total\s+(.+?)\s*$', line):
-                bhostsLoadDic[hostname].setdefault('Total', {}) 
+                bhostsLoadDic[hostname].setdefault('Total', {})
 
                 myMatch = re.match('^\s*Total\s+(.+?)\s*$', line)
                 totalLoadString = myMatch.group(1)
@@ -126,9 +131,9 @@ def getBhostsLoadInfo(command='bhosts -l'):
 
                 for (i, headName) in enumerate(headList):
                     load = re.sub('\*', '', totalLoadList[i])
-                    bhostsLoadDic[hostname]['Total'].setdefault(headName, load) 
+                    bhostsLoadDic[hostname]['Total'].setdefault(headName, load)
             elif re.match('^\s*Reserved\s+(.+?)\s*$', line):
-                bhostsLoadDic[hostname].setdefault('Reserved', {}) 
+                bhostsLoadDic[hostname].setdefault('Reserved', {})
 
                 myMatch = re.match('^\s*Reserved\s+(.+?)\s*$', line)
                 reservedLoadString = myMatch.group(1)
@@ -136,11 +141,12 @@ def getBhostsLoadInfo(command='bhosts -l'):
 
                 for (i, headName) in enumerate(headList):
                     load = re.sub('\*', '', reservedLoadList[i])
-                    bhostsLoadDic[hostname]['Reserved'].setdefault(headName, load) 
+                    bhostsLoadDic[hostname]['Reserved'].setdefault(headName, load)
             else:
                 headList = line.split()
 
     return(bhostsLoadDic)
+
 
 def getLshostsInfo(command='lshosts -w'):
     """
@@ -152,6 +158,7 @@ def getLshostsInfo(command='lshosts -w'):
     """
     lshostsDic = getCommandDict(command)
     return(lshostsDic)
+
 
 def getLsloadInfo(command='lsload -w'):
     """
@@ -165,6 +172,7 @@ def getLsloadInfo(command='lsload -w'):
 
     return(lsloadDic)
 
+
 def getBusersInfo(command='busers all'):
     """
     Get lsload info with command 'busers'.
@@ -176,6 +184,7 @@ def getBusersInfo(command='busers all'):
     busersDic = getCommandDict(command)
     return(busersDic)
 
+
 def getToolName():
     """
     Make sure it is lsf or openlava.
@@ -186,13 +195,14 @@ def getToolName():
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
-        if re.search('LSF', line): 
+        if re.search('LSF', line):
             return('lsf')
-        elif re.search('OpenLava', line) or re.search('openlava', line): 
+        elif re.search('OpenLava', line) or re.search('openlava', line):
             return('openlava')
 
     print('*Warning*: Not sure current cluster is LSF or Openlava.')
     return('')
+
 
 def getBjobsUfInfo(command='bjobs -u all -UF'):
     """
@@ -205,8 +215,9 @@ def getBjobsUfInfo(command='bjobs -u all -UF'):
         myDic = getLsfBjobsUfInfo(command)
     elif tool == 'openlava':
         myDic = getOpenlavaBjobsUfInfo(command)
- 
+
     return(myDic)
+
 
 def getLsfBjobsUfInfo(command):
     """
@@ -478,6 +489,7 @@ def getLsfBjobsUfInfo(command):
 
     return(myDic)
 
+
 def getOpenlavaBjobsUfInfo(command):
     """
     Parse job info which are from command 'bjobs -u all -UF'.
@@ -663,7 +675,8 @@ def getOpenlavaBjobsUfInfo(command):
                     myDic[job]['mem'] = myMatch.group(1)
 
     return(myDic)
- 
+
+
 def getHostList():
     """
     Get all of the hosts.
@@ -672,6 +685,7 @@ def getHostList():
     hostList = bhostsDic['HOST_NAME']
     return(hostList)
 
+
 def getQueueList():
     """
     Get all of the queues.
@@ -679,6 +693,7 @@ def getQueueList():
     bqueuesDic = getBqueuesInfo()
     queueList = bqueuesDic['QUEUE_NAME']
     return(queueList)
+
 
 def getHostGroupMembers(hostGroupName):
     """
@@ -704,6 +719,7 @@ def getHostGroupMembers(hostGroupName):
 
     return(hostList)
 
+
 def getUserGroupMembers(userGroupName):
     """
     Get user group members with bugroup.
@@ -726,13 +742,14 @@ def getUserGroupMembers(userGroupName):
 
     return(userList)
 
+
 def getQueueHostInfo():
     """
     Get hosts on (specified) queues.
     """
     queueHostDic = {}
     queueCompile = re.compile('^QUEUE:\s*(\S+)\s*$')
-    hostsCompile= re.compile('^HOSTS:\s*(.*?)\s*$')
+    hostsCompile = re.compile('^HOSTS:\s*(.*?)\s*$')
     queue = ''
 
     command = 'bqueues -l'
@@ -778,6 +795,7 @@ def getQueueHostInfo():
 
     return(queueHostDic)
 
+
 def getHostQueueInfo():
     """
     Get queues which (specified) host belongs to.
@@ -792,7 +810,7 @@ def getHostQueueInfo():
 
         for host in hostList:
             if host in hostQueueDic.keys():
-               hostQueueDic[host].append(queue)
+                hostQueueDic[host].append(queue)
             else:
                 hostQueueDic[host] = [queue, ]
 

@@ -39,6 +39,7 @@ if 'XDG_RUNTIME_DIR' not in os.environ:
 
     os.chmod(os.environ['XDG_RUNTIME_DIR'], stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
 
+
 def check_tool():
     """
     Make sure LSF or Openlava environment exists.
@@ -48,6 +49,7 @@ def check_tool():
     if tool == '':
         print('*Error*: Not find any LSF or Openlava environment!')
         sys.exit(1)
+
 
 def readArgs():
     """
@@ -131,11 +133,11 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.mainTab)
 
         # Define four sub-tabs (JOB/JOBS/HOSTS/QUEUES)
-        self.jobTab     = QWidget()
-        self.jobsTab    = QWidget()
-        self.hostsTab   = QWidget()
-        self.queuesTab  = QWidget()
-        self.loadTab    = QWidget()
+        self.jobTab = QWidget()
+        self.jobsTab = QWidget()
+        self.hostsTab = QWidget()
+        self.queuesTab = QWidget()
+        self.loadTab = QWidget()
         self.licenseTab = QWidget()
 
         # Add the sub-tabs into main Tab widget
@@ -185,12 +187,12 @@ class MainWindow(QMainWindow):
         Switch to the specified Tab.
         """
         tabDic = {
-                  'JOB'     : self.jobTab,
-                  'JOBS'    : self.jobsTab,
-                  'HOSTS'   : self.hostsTab,
-                  'QUEUES'  : self.queuesTab,
-                  'LOAD'    : self.loadTab,
-                  'LICENSE' : self.licenseTab,
+                  'JOB': self.jobTab,
+                  'JOBS': self.jobsTab,
+                  'HOSTS': self.hostsTab,
+                  'QUEUES': self.queuesTab,
+                  'LOAD': self.loadTab,
+                  'LICENSE': self.licenseTab,
                  }
 
         self.mainTab.setCurrentWidget(tabDic[specifiedTab])
@@ -297,18 +299,16 @@ class MainWindow(QMainWindow):
 
         QMessageBox.about(self, 'About lsfMonitor', aboutMessage)
 
-
-## Common sub-functions (begin) ##
+# Common sub-functions (begin) #
     def guiWarning(self, warningMessage):
         """
         Show the specified warning message on both of command line and GUI window.
         """
         common.printWarning(warningMessage)
         QMessageBox.warning(self, 'lsfMonitor Warning', warningMessage)
-## Common sub-functions (end) ##
+# Common sub-functions (end) #
 
-
-## For job TAB (begin) ## 
+# For job TAB (begin) #
     def genJobTab(self):
         """
         Generate the job tab on lsfMonitor GUI, show job informations.
@@ -611,10 +611,10 @@ class MainWindow(QMainWindow):
         runtimeList = []
         realMemList = []
 
-        jobRangeDic = common.getJobRangeDic([self.currentJob,])
+        jobRangeDic = common.getJobRangeDic([self.currentJob, ])
         jobRangeList = list(jobRangeDic.keys())
         jobRange = jobRangeList[0]
-        jobDbFile= str(config.dbPath) + '/monitor/job/' + str(jobRange) + '.db'
+        jobDbFile = str(config.dbPath) + '/monitor/job/' + str(jobRange) + '.db'
 
         if not os.path.exists(jobDbFile):
             common.printWarning('*Warning*: Job memory usage information is missing for "' + str(self.currentJob) + '".')
@@ -680,10 +680,9 @@ class MainWindow(QMainWindow):
         axes.plot(runtimeList, memList, 'ro-', color='red')
         axes.grid()
         self.jobMemFigureCanvas.draw()
-## For job TAB (end) ## 
+# For job TAB (end) #
 
-
-## For jobs TAB (start) ## 
+# For jobs TAB (start) #
     def genJobsTab(self):
         """
         Generate the jobs tab on lsfMonitor GUI, show jobs informations.
@@ -978,10 +977,9 @@ class MainWindow(QMainWindow):
 
         for host in hostList:
             self.jobsTabStartedOnCombo.addItem(host)
-## For jobs TAB (end) ## 
+# For jobs TAB (end) #
 
-
-## For hosts TAB (start) ## 
+# For hosts TAB (start) #
     def genHostsTab(self):
         """
         Generate the hosts tab on lsfMonitor GUI, show hosts informations.
@@ -1053,10 +1051,10 @@ class MainWindow(QMainWindow):
 
         print('* Loading LSF hosts information, please wait a moment ...')
 
-        bhostsDic  = lsf_common.getBhostsInfo()
-        bhostsLoadDic  = lsf_common.getBhostsLoadInfo()
+        bhostsDic = lsf_common.getBhostsInfo()
+        bhostsLoadDic = lsf_common.getBhostsLoadInfo()
         lshostsDic = lsf_common.getLshostsInfo()
-        lsloadDic  = lsf_common.getLsloadInfo()
+        lsloadDic = lsf_common.getLsloadInfo()
         hostQueueDic = lsf_common.getHostQueueInfo()
 
         # Get expected host list
@@ -1336,10 +1334,9 @@ class MainWindow(QMainWindow):
 
         for queue in queueList:
             self.hostsTabQueueCombo.addItem(queue)
-## For hosts TAB (end) ## 
+# For hosts TAB (end) #
 
-
-## For queues TAB (start) ## 
+# For queues TAB (start) #
     def genQueuesTab(self):
         """
         Generate the queues tab on lsfMonitor GUI, show queues informations.
@@ -1476,9 +1473,9 @@ class MainWindow(QMainWindow):
         """
         if item is not None:
             currentRow = self.queuesTabTable.currentRow()
-            queue      = self.queuesTabTable.item(currentRow, 0).text().strip()
-            pendNum    = self.queuesTabTable.item(currentRow, 1).text().strip()
-            runNum     = self.queuesTabTable.item(currentRow, 2).text().strip()
+            queue = self.queuesTabTable.item(currentRow, 0).text().strip()
+            pendNum = self.queuesTabTable.item(currentRow, 1).text().strip()
+            runNum = self.queuesTabTable.item(currentRow, 2).text().strip()
 
             if item.column() == 0:
                 print('* Checking queue "' + str(queue) + '".')
@@ -1628,9 +1625,9 @@ class MainWindow(QMainWindow):
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.queueJobNumFigureCanvas.draw()
-## For queues TAB (end) ## 
+# For queues TAB (end) #
 
-## For load TAB (start) ## 
+# For load TAB (start) #
     def genLoadTab(self):
         """
         Generate the load tab on lsfMonitor GUI, show host load (ut/mem) information.
@@ -1779,7 +1776,7 @@ class MainWindow(QMainWindow):
             common.printWarning('*Warning*: load database "' + str(loadDbFile) + '" is missing.')
         else:
             (loadDbFileConnectResult, loadDbConn) = sqlite3_common.connectDbFile(loadDbFile)
-          
+
             if loadDbFileConnectResult == 'failed':
                 common.printWarning('*Warning*: Failed on connecting load database file "' + str(loadDbFile) + '".')
             else:
@@ -1885,10 +1882,9 @@ class MainWindow(QMainWindow):
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.hostMemFigureCanvas.draw()
-## For load TAB (end) ## 
+# For load TAB (end) #
 
-
-## For license TAB (start) ## 
+# For license TAB (start) #
     def genLicenseTab(self):
         """
         Generate the license tab on lsfMonitor GUI, show host license usage information.
@@ -1899,10 +1895,10 @@ class MainWindow(QMainWindow):
         self.licenseTabFrame0.setFrameShape(QFrame.Box)
 
         self.licenseTabFeatureLabel = QLabel('Feature Information', self.licenseTab)
-        self.licenseTabFeatureLabel.setStyleSheet("font-weight: bold;") 
+        self.licenseTabFeatureLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabFeatureLabel.setAlignment(Qt.AlignCenter)
         self.licenseTabExpiresLabel = QLabel('Expires Information', self.licenseTab)
-        self.licenseTabExpiresLabel.setStyleSheet("font-weight: bold;") 
+        self.licenseTabExpiresLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabExpiresLabel.setAlignment(Qt.AlignCenter)
 
         self.licenseTabFeatureTable = QTableWidget(self.licenseTab)
@@ -1952,7 +1948,7 @@ class MainWindow(QMainWindow):
 
         self.licenseTabLicenseServerCombo.currentIndexChanged.connect(self.filterLicenseFeature)
 
-        # License Vendor 
+        # License Vendor
         licenseTabLicenseVendorLabel = QLabel('     Vendor', self.licenseTabFrame0)
         licenseTabLicenseVendorLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabLicenseVendorCombo = QComboBox(self.licenseTabFrame0)
@@ -1961,7 +1957,7 @@ class MainWindow(QMainWindow):
 
         self.licenseTabLicenseVendorCombo.activated.connect(self.updateLicenseTabLicenseProductCombo)
 
-        # License Product 
+        # License Product
         licenseTabLicenseProductLabel = QLabel('    Product', self.licenseTabFrame0)
         licenseTabLicenseProductLabel.setStyleSheet("font-weight: bold;")
         self.licenseTabLicenseProductCombo = QComboBox(self.licenseTabFrame0)
@@ -2058,7 +2054,7 @@ class MainWindow(QMainWindow):
         myShowMessage.start()
         self.licenseDic = license_common.getLicenseInfo()
         myShowMessage.terminate()
-     
+
         if not self.licenseDic:
             print('*Warning*: Not find any valid license information.')
 
@@ -2075,12 +2071,12 @@ class MainWindow(QMainWindow):
                             if (currentProduct == 'ALL') or (product == currentProduct):
                                 for feature in self.productFeatureRelationshipDic[vendor][product]:
                                     if feature not in vendorProductFeatureList:
-                                        vendorProductFeatureList.append(feature) 
+                                        vendorProductFeatureList.append(feature)
 
             # Fileter license feature with Server/Vendor/Product.
             filteredLicenseFeatureList = []
             currentServer = self.licenseTabLicenseServerCombo.currentText().strip()
-            
+
             for (licenseServer, licenseServerDic) in self.licenseDic.items():
                 if (currentServer == 'ALL') or (licenseServer == currentServer):
                     if 'feature' in licenseServerDic:
@@ -2096,10 +2092,10 @@ class MainWindow(QMainWindow):
             # Filter license feature with Feature line.
             expectedLicenseFeatureList = []
             specifiedLicenseFeatureList = self.licenseTabLicenseFeatureLine.text().strip().split()
- 
+
             if not specifiedLicenseFeatureList:
                 expectedLicenseFeatureList = filteredLicenseFeatureList
-            else:    
+            else:
                 expectedLicenseFeatureAbsoluteList = []
                 expectedLicenseFeatureRelativeList = []
 
@@ -2120,7 +2116,7 @@ class MainWindow(QMainWindow):
 
             currentServer = self.licenseTabLicenseServerCombo.currentText().strip()
             specifiedShow = self.licenseTabShowCombo.currentText().strip()
-            self.licenseDic = license_common.filterLicenseFeature(self.licenseDic, features=expectedLicenseFeatureList, servers=[currentServer,], mode=specifiedShow)
+            self.licenseDic = license_common.filterLicenseFeature(self.licenseDic, features=expectedLicenseFeatureList, servers=[currentServer, ], mode=specifiedShow)
 
             # Update self.licenseTabFeatureTable and self.licenseTabExpiresTable.
             self.genLicenseTabFeatureTable()
@@ -2131,7 +2127,7 @@ class MainWindow(QMainWindow):
         if update:
             print('* Loading license information, please wait a moment ...')
             self.licenseDic = license_common.getLicenseInfo()
-     
+
             if not self.licenseDic:
                 print('*Warning*: Not find any valid license information.')
 
@@ -2244,8 +2240,7 @@ class MainWindow(QMainWindow):
                         else:
                             item.setForeground(QBrush(Qt.red))
                         self.licenseTabExpiresTable.setItem(row, 3, item)
-## For license TAB (end) ## 
-
+# For license TAB (end) #
 
     def closeEvent(self, QCloseEvent):
         """
@@ -2323,6 +2318,7 @@ def main():
     mw = MainWindow(specifiedJob, specifiedUser, specifiedFeature, specifiedTab)
     mw.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()

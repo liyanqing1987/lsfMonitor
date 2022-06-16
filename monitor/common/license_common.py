@@ -59,8 +59,8 @@ def getLicenseInfo(specifiedFeature=''):
             if myMatch.group(1) != licenseHost:
                 print('*Error*: Not find "License file(s) ..." information for license server "' + str(licenseServer) + '".')
                 sys.exit(1)
-        
-            licenseFiles = myMatch.group(2) 
+
+            licenseFiles = myMatch.group(2)
             licenseFileList = licenseFiles.split(':')
             licenseDic[licenseServer].setdefault('licenseFiles', licenseFileList)
         elif re.search('license server UP', line):
@@ -90,12 +90,13 @@ def getLicenseInfo(specifiedFeature=''):
             feature = myMatch.group(1)
             version = myMatch.group(2)
             license = myMatch.group(3)
-            vendor  = myMatch.group(4)
+            vendor = myMatch.group(4)
             expires = myMatch.group(5)
             licenseDic[licenseServer]['expires'].setdefault(feature, [])
             licenseDic[licenseServer]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
-  
+
     return(licenseDic)
+
 
 def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
     """
@@ -144,14 +145,15 @@ def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
                             for featureDic in featureDicList:
                                 version = featureDic['version']
                                 license = featureDic['license']
-                                vendor  = featureDic['vendor']
+                                vendor = featureDic['vendor']
                                 expires = featureDic['expires']
-                           
+
                                 newLicenseDic[licenseServer].setdefault('expires', {})
                                 newLicenseDic[licenseServer]['expires'].setdefault(feature, [])
                                 newLicenseDic[licenseServer]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
-              
+
     return(newLicenseDic)
+
 
 def checkLongRuntime(startTime, secondThreshold=259200):
     """
@@ -172,6 +174,7 @@ def checkLongRuntime(startTime, secondThreshold=259200):
             return(True)
 
     return(False)
+
 
 def checkExpireDate(expireDate, secondThreshold=1209600):
     """
@@ -351,7 +354,7 @@ class GetProductFeatureRelationship():
                         elif re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString):
                             myMatch = re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString)
                             feature = myMatch.group(2)
-                            featureList.append(feature) 
+                            featureList.append(feature)
 
                     lineString = ''
                 elif re.match('^FEATURE\s+.*$', line) or re.match('^INCREMENT\s+.*$', line) or re.match('^PACKAGE\s+.*$', line):
@@ -372,7 +375,7 @@ class GetProductFeatureRelationship():
         Parse license file to get product-feature relationship.
         """
         for (i, licenseFile) in enumerate(self.licenseFileList):
-            vendor = self.vendorList[i] 
+            vendor = self.vendorList[i]
 
             print('>>> Parse ' + str(vendor) + ' license file "' + str(licenseFile) + '".')
 

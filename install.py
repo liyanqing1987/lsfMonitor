@@ -4,16 +4,17 @@ import stat
 
 CWD = os.getcwd()
 
+
 def checkPythonVersion():
     """
     Check python version.
     python3 is required, anaconda3 is better.
     """
     print('>>> Check python version.')
-    
+
     currentPython = sys.version_info[:2]
     requiredPython = (3, 5)
-    
+
     if currentPython < requiredPython:
         sys.stderr.write("""
 ==========================
@@ -27,6 +28,7 @@ but you're trying to install it on Python {}.{}.
         print('    Required python version : ' + str(requiredPython))
         print('    Current  python version : ' + str(currentPython))
 
+
 def genBmonitor():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor.
@@ -38,9 +40,9 @@ def genBmonitor():
 
     try:
         with open(bmonitor, 'w') as BM:
-             pythonPath = os.path.dirname(os.path.abspath(sys.executable))
+            pythonPath = os.path.dirname(os.path.abspath(sys.executable))
 
-             BM.write("""#!/bin/bash
+            BM.write("""#!/bin/bash
 
 # Set python3 path.
 export PATH=""" + str(pythonPath) + """:$PATH
@@ -57,6 +59,7 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bmonitor.py $@
         print('*Error*: Failed on generating script "' + str(bmonitor) + '": ' + str(err))
         sys.exit(1)
 
+
 def genBsample():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample.
@@ -68,9 +71,9 @@ def genBsample():
 
     try:
         with open(bsample, 'w') as BS:
-             pythonPath = os.path.dirname(os.path.abspath(sys.executable))
+            pythonPath = os.path.dirname(os.path.abspath(sys.executable))
 
-             BS.write("""#!/bin/bash
+            BS.write("""#!/bin/bash
 
 # Set python3 path.
 export PATH=""" + str(pythonPath) + """:$PATH
@@ -87,6 +90,7 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
         print('*Error*: Failed on generating script "' + str(bsample) + '": ' + str(err))
         sys.exit(1)
 
+
 def genConfigFile():
     """
     Generate config file <LSFMONITOR_INSTALL_PATH>/monitor/conf/config.py.
@@ -95,7 +99,7 @@ def genConfigFile():
 
     print('')
     print('>>> Generate config file "' + str(configFile) + '".')
-    
+
     if os.path.exists(configFile):
         print('*Warning*: config file "' + str(configFile) + '" already exists, will not update it.')
     else:
@@ -123,6 +127,7 @@ productFeatureRelationshipFile = "''' + str(defaultProductFeatureRelationshipFil
             print('*Error*: Failed on opening config file "' + str(configFile) + '" for write: ' + str(error))
             sys.exit(1)
 
+
 def updateTools():
     """
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
@@ -138,6 +143,7 @@ def updateTools():
             lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
             TOOL.write(lines)
 
+
 ################
 # Main Process #
 ################
@@ -150,6 +156,7 @@ def main():
 
     print('')
     print('Done, Please enjoy it.')
+
 
 if __name__ == '__main__':
     main()

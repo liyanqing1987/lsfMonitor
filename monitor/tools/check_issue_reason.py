@@ -4,7 +4,7 @@
 # File Name   : check_issue_reason.py
 # Author      : liyanqing
 # Created On  : 2022-04-13 00:00:00
-# Description : 
+# Description :
 ################################
 import os
 import re
@@ -22,6 +22,7 @@ from common import lsf_common
 from common import pyqt5_common
 
 os.environ['PYTHONUNBUFFERED'] = '1'
+
 
 def read_args():
     """
@@ -97,7 +98,7 @@ class MainWindow(QMainWindow):
         """
         if self.job:
             self.jobLine.setText(self.job)
-            self.checkIssue()    
+            self.checkIssue()
 
     def genSelectFrame(self):
         # self.selectFrame
@@ -184,7 +185,7 @@ class MainWindow(QMainWindow):
         else:
             for (i, line) in enumerate(jobDic[job]['pendingReasons']):
                 self.infoText.append('[Reason ' + str(i) + '] : ' + str(line))
- 
+
                 if re.search('New job is waiting for scheduling',  line):
                     self.infoText.append('                    任务分发中, 请耐心等待')
                 elif re.search('Not enough job slot',  line):
@@ -288,6 +289,7 @@ def main():
     mw = MainWindow(job, issue)
     mw.show()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

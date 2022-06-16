@@ -4,7 +4,7 @@
 # File Name   : process_tracer.py
 # Author      : liyanqing
 # Created On  : 2021-11-30 00:00:00
-# Description : 
+# Description :
 ################################
 import os
 import re
@@ -23,6 +23,7 @@ from common import lsf_common
 from common import pyqt5_common
 
 os.environ['PYTHONUNBUFFERED'] = '1'
+
 
 def readArgs():
     """
@@ -67,7 +68,7 @@ class ProcessTracer(QMainWindow):
     def checkJob(self, job):
         command = 'bjobs -UF ' + str(job)
         jobDic = lsf_common.getLsfBjobsUfInfo(command)
-   
+
         if jobDic[job]['status'] != 'RUN':
             common.printError('*Error*: Job "' + str(job) + '" is not running, cannot get process status.')
             sys.exit(1)
@@ -75,9 +76,9 @@ class ProcessTracer(QMainWindow):
             if not jobDic[job]['pids']:
                 common.printError('*Error*: Not find PIDs information for job "' + str(job) + '".')
                 sys.exit(1)
-    
+
         return(jobDic, jobDic[job]['pids'])
-    
+
     def checkPid(self, pid):
         pidList = []
         command = 'pstree -p ' + str(pid)
@@ -101,13 +102,13 @@ class ProcessTracer(QMainWindow):
 
     def getProcessInfo(self):
         processDic = {
-                      'user' : [],
-                      'pid' : [],
-                      'cpu' : [],
-                      'mem' : [],
-                      'stat' : [],
-                      'started' : [],
-                      'command' : [],
+                      'user': [],
+                      'pid': [],
+                      'cpu': [],
+                      'mem': [],
+                      'stat': [],
+                      'started': [],
+                      'command': [],
                      }
 
         command = 'ps -o ruser=userForLongName -o pid,%cpu,%mem,stat,start,command -f' + ','.join(self.pidList)
@@ -123,11 +124,11 @@ class ProcessTracer(QMainWindow):
 
             if re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line):
                 myMatch = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
-                user    = myMatch.group(1)
-                pid     = myMatch.group(2)
-                cpu     = myMatch.group(3)
-                mem     = myMatch.group(4)
-                stat    = myMatch.group(5)
+                user = myMatch.group(1)
+                pid = myMatch.group(2)
+                cpu = myMatch.group(3)
+                mem = myMatch.group(4)
+                stat = myMatch.group(5)
                 started = myMatch.group(6)
                 command = myMatch.group(7)
 
@@ -164,7 +165,7 @@ class ProcessTracer(QMainWindow):
         # Add mainTab
         self.mainTab = QTabWidget(self)
         self.setCentralWidget(self.mainTab)
-       
+
         self.mainFrame = QFrame(self.mainTab)
 
         # Grid
@@ -269,9 +270,9 @@ class ProcessTracer(QMainWindow):
                 self.mainTable.setItem(row, column, item)
 
     def mainTabCheckClick(self, item=None):
-        if item != None:
+        if item is not None:
             if item.column() == 1:
-                currentRow = self.mainTable.currentRow() 
+                currentRow = self.mainTable.currentRow()
                 pid = self.mainTable.item(currentRow, 1).text()
 
                 command = 'xterm -e "strace -tt -p ' + str(pid) + '"'
@@ -282,6 +283,7 @@ class ProcessTracer(QMainWindow):
 
                 os.system(command)
 
+
 ################
 # Main Process #
 ################
@@ -291,6 +293,7 @@ def main():
     myProcessTracer = ProcessTracer(job, pid)
     myProcessTracer.show()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

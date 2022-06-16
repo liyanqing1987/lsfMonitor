@@ -4,14 +4,13 @@
 # File Name   : process_tracer.py
 # Author      : liyanqing
 # Created On  : 2021-11-30 17:25:47
-# Description : 
+# Description :
 ################################
 import os
-import re
 import sys
 import argparse
 
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QMessageBox, QLabel
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QLabel
 from PyQt5.QtCore import Qt
 
 if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
@@ -21,6 +20,7 @@ sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import pyqt5_common
 
 os.environ['PYTHONUNBUFFERED'] = '1'
+
 
 def readArgs():
     """
@@ -53,7 +53,7 @@ class ShowMessage(QMainWindow):
         # Add mainTab
         self.mainTab = QTabWidget(self)
         self.setCentralWidget(self.mainTab)
-       
+
         self.mainFrame = QFrame(self.mainTab)
 
         # Grid
@@ -89,6 +89,7 @@ def main():
     myShowMessage = ShowMessage(title, message)
     myShowMessage.show()
     sys.exit(app.exec_())
+
 
 if __name__ == '__main__':
     main()

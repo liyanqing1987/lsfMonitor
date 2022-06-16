@@ -13,7 +13,8 @@ from common import common
 from common import lsf_common
 from common import sqlite3_common
 
-os.environ["PYTHONUNBUFFERED"]="1"
+os.environ["PYTHONUNBUFFERED"] = '1'
+
 
 def readArgs():
     """
@@ -65,12 +66,13 @@ class Sampling:
         self.interval = interval
         self.dbPath = str(config.dbPath) + '/monitor'
         jobDbPath = str(self.dbPath) + '/job'
-    
+
         if not os.path.exists(jobDbPath):
             try:
                 os.system('mkdir -p ' + str(jobDbPath))
-            except:
+            except Exception as error:
                 common.printError('*Error*: Failed on creating sqlite job db directory "' + str(jobDbPath) + '".')
+                common.printError('         ' + str(error))
                 sys.exit(1)
 
     def getDateInfo(self):
@@ -103,7 +105,7 @@ class Sampling:
                 jobTableList = []
 
             for job in jobRangeDic[jobRange]:
-                jobTableName='job_' + str(job)
+                jobTableName = 'job_' + str(job)
 
                 print('    Sampling for job "' + str(job) + '" ...')
 
@@ -149,7 +151,7 @@ class Sampling:
                 return
 
             for job in jobRangeDic[jobRange]:
-                jobTableName='job_' + str(job)
+                jobTableName = 'job_' + str(job)
 
                 if jobSqlDic[job]['drop']:
                     sqlite3_common.dropSqlTable(jobDbFile, jobDbConn, jobTableName, commit=False)
@@ -472,9 +474,9 @@ class Sampling:
             p.join()
 
             if self.interval == 0:
-                 break
+                break
             elif self.interval > 0:
-                 time.sleep(self.interval)
+                time.sleep(self.interval)
 
 
 #################
@@ -484,6 +486,7 @@ def main():
     (job, queue, host, load, user, interval) = readArgs()
     mySampling = Sampling(job, queue, host, load, user, interval)
     mySampling.sampling()
+
 
 if __name__ == '__main__':
     main()
