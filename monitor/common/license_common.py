@@ -12,7 +12,7 @@ from conf import config
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 
-def getLicenseInfo():
+def getLicenseInfo(specifiedFeature=''):
     """
     Get EDA liecnse feature usage and expires information.
     Save it into a dict.
@@ -24,6 +24,7 @@ def getLicenseInfo():
     feature = ''
     expiresMark = False
 
+    # Get lmstat command.
     if config.lmstatPath:
         lmstat = str(config.lmstatPath) + '/lmstat'
 
@@ -32,6 +33,9 @@ def getLicenseInfo():
     else:
         command = 'lmstat -a -i'
 
+    if specifiedFeature:
+        command = str(command) + ' ' + str(specifiedFeature)
+
     if 'lmstatBsubCommand' in os.environ:
         command = str(os.environ['lmstatBsubCommand']) + ' "' + str(command) + '"'
     elif config.lmstatBsubCommand:
@@ -39,6 +43,7 @@ def getLicenseInfo():
 
     (returnCode, stdout, stderr) = common.run_command(command)
 
+    # Parse lmstat output message.
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
