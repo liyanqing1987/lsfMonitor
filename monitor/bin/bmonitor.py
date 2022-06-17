@@ -833,40 +833,38 @@ class MainWindow(QMainWindow):
             # File "Job"
             job = jobs[i]
             j = 0
-            self.jobsTabTable.setItem(i, j, QTableWidgetItem(job))
+            item = QTableWidgetItem(job)
+            item.setFont(QFont('song', 9, QFont.Bold))
+            self.jobsTabTable.setItem(i, j, item)
 
             # File "User"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['user'])
+            item = QTableWidgetItem(jobDic[job]['user'])
             self.jobsTabTable.setItem(i, j, item)
 
             # File "Status"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['status'])
-            self.jobsTabTable.setItem(i, j, item)
+            item = QTableWidgetItem(jobDic[job]['status'])
+            item.setFont(QFont('song', 9, QFont.Bold))
 
             if jobDic[job]['status'] == 'PEND':
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
+            self.jobsTabTable.setItem(i, j, item)
 
             # File "Queue"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['queue'])
+            item = QTableWidgetItem(jobDic[job]['queue'])
             self.jobsTabTable.setItem(i, j, item)
 
             # File "Host"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['startedOn'])
+            item = QTableWidgetItem(jobDic[job]['startedOn'])
             self.jobsTabTable.setItem(i, j, item)
 
             # File "Started"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['startedTime'])
+            item = QTableWidgetItem(jobDic[job]['startedTime'])
             self.jobsTabTable.setItem(i, j, item)
 
             # File "Project"
@@ -904,13 +902,11 @@ class MainWindow(QMainWindow):
                 self.jobsTabTable.setItem(i, j, item)
 
                 if ((not jobDic[job]['rusageMem']) and (memValue > 0)) or (jobDic[job]['rusageMem'] and (memValue > rusageMemValue)):
-                    item.setFont(QFont('song', 10, QFont.Bold))
                     item.setForeground(QBrush(Qt.red))
 
             # File "Command"
             j = j+1
-            item = QTableWidgetItem()
-            item.setText(jobDic[job]['command'])
+            item = QTableWidgetItem(jobDic[job]['command'])
             self.jobsTabTable.setItem(i, j, item)
 
     def jobsTabCheckClick(self, item=None):
@@ -1078,7 +1074,9 @@ class MainWindow(QMainWindow):
 
             # For "Host" item.
             j = 0
-            self.hostsTabTable.setItem(i, j, QTableWidgetItem(host))
+            item = QTableWidgetItem(host)
+            item.setFont(QFont('song', 9, QFont.Bold))
+            self.hostsTabTable.setItem(i, j, item)
 
             # For "Status" item.
             j = j+1
@@ -1087,7 +1085,6 @@ class MainWindow(QMainWindow):
             item = QTableWidgetItem(status)
 
             if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
 
             self.hostsTabTable.setItem(i, j, item)
@@ -1137,6 +1134,7 @@ class MainWindow(QMainWindow):
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(njobs))
+            item.setFont(QFont('song', 9, QFont.Bold))
             self.hostsTabTable.setItem(i, j, item)
 
             # For "Ut" item.
@@ -1158,7 +1156,6 @@ class MainWindow(QMainWindow):
             item.setData(Qt.DisplayRole, int(ut))
 
             if int(ut) > 90:
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
 
             self.hostsTabTable.setItem(i, j, item)
@@ -1209,7 +1206,6 @@ class MainWindow(QMainWindow):
             item.setData(Qt.DisplayRole, int(float(mem)))
 
             if (maxmem and (float(mem)/float(maxmem) < 0.1)):
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
 
             self.hostsTabTable.setItem(i, j, item)
@@ -1285,7 +1281,6 @@ class MainWindow(QMainWindow):
             item.setData(Qt.DisplayRole, int(float(tmp)))
 
             if int(float(tmp)) == 0:
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
 
             self.hostsTabTable.setItem(i, j, item)
@@ -1427,10 +1422,11 @@ class MainWindow(QMainWindow):
                 pendSum += int(pend)
 
             item = QTableWidgetItem(pend)
+            item.setFont(QFont('song', 9, QFont.Bold))
 
             if int(pend) > 0:
-                item.setFont(QFont('song', 10, QFont.Bold))
                 item.setForeground(QBrush(Qt.red))
+
             self.queuesTabTable.setItem(i, j, item)
 
             # For "RUN" item.
@@ -1443,6 +1439,7 @@ class MainWindow(QMainWindow):
                 runSum += int(run)
 
             item = QTableWidgetItem(run)
+            item.setFont(QFont('song', 9, QFont.Bold))
             self.queuesTabTable.setItem(i, j, item)
 
     def genQueuesTabFrame0(self):
@@ -1736,12 +1733,7 @@ class MainWindow(QMainWindow):
         """
         self.loadTabDateCombo.clear()
 
-        dateList = [
-                    'Last Day',
-                    'Last Week',
-                    'Last Month',
-                    'Last Year',
-                   ]
+        dateList = ['Last Day', 'Last Week', 'Last Month', 'Last Year']
 
         for date in dateList:
             self.loadTabDateCombo.addItem(date)
@@ -2162,15 +2154,17 @@ class MainWindow(QMainWindow):
                     self.licenseTabFeatureTable.setItem(row, 0, QTableWidgetItem(licenseServer))
 
                     item = QTableWidgetItem(feature)
-                    item.setFont(QFont('song', 10, QFont.Bold))
                     item.setForeground(QBrush(Qt.blue))
                     self.licenseTabFeatureTable.setItem(row, 1, item)
 
                     issued = licenseServerDic['feature'][feature]['issued']
-                    self.licenseTabFeatureTable.setItem(row, 2, QTableWidgetItem(issued))
+                    item = QTableWidgetItem(issued)
+                    self.licenseTabFeatureTable.setItem(row, 2, item)
 
                     in_use = licenseServerDic['feature'][feature]['in_use']
-                    self.licenseTabFeatureTable.setItem(row, 3, QTableWidgetItem(in_use))
+                    item = QTableWidgetItem(in_use)
+                    item.setFont(QFont('song', 9, QFont.Bold))
+                    self.licenseTabFeatureTable.setItem(row, 3, item)
 
     def licenseTabCheckClick(self, item=None):
         """
@@ -2198,7 +2192,7 @@ class MainWindow(QMainWindow):
 
         self.licenseTabExpiresTable.setColumnWidth(0, 160)
         self.licenseTabExpiresTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.licenseTabExpiresTable.setColumnWidth(2, 50)
+        self.licenseTabExpiresTable.setColumnWidth(2, 40)
         self.licenseTabExpiresTable.setColumnWidth(3, 100)
 
         # Get license feature information length.
@@ -2223,7 +2217,6 @@ class MainWindow(QMainWindow):
                         self.licenseTabExpiresTable.setItem(row, 0, QTableWidgetItem(licenseServer))
 
                         item = QTableWidgetItem(feature)
-                        item.setFont(QFont('song', 10, QFont.Bold))
                         item.setForeground(QBrush(Qt.blue))
                         self.licenseTabExpiresTable.setItem(row, 1, item)
 
@@ -2233,6 +2226,7 @@ class MainWindow(QMainWindow):
                         expires = expiresDic['expires']
                         item = QTableWidgetItem(expires)
                         expiresMark = license_common.checkExpireDate(expires)
+
                         if expiresMark == 0:
                             pass
                         elif expiresMark == -1:
