@@ -52,219 +52,219 @@ class MainWindow(QMainWindow):
         self.job = job
         self.issue = issue
 
-        self.initUI()
-        self.processArgs()
+        self.init_ui()
+        self.process_args()
 
-    def initUI(self):
+    def init_ui(self):
         """
         Main process, draw the main graphic frame.
         """
         # Define main Tab widget
-        self.mainTab = QTabWidget(self)
-        self.setCentralWidget(self.mainTab)
+        self.main_tab = QTabWidget(self)
+        self.setCentralWidget(self.main_tab)
 
         # Defaint sub-frames
-        self.selectFrame = QFrame(self.mainTab)
-        self.infoFrame = QFrame(self.mainTab)
+        self.select_frame = QFrame(self.main_tab)
+        self.info_frame = QFrame(self.main_tab)
 
-        self.selectFrame.setFrameShadow(QFrame.Raised)
-        self.selectFrame.setFrameShape(QFrame.Box)
-        self.infoFrame.setFrameShadow(QFrame.Raised)
-        self.infoFrame.setFrameShape(QFrame.Box)
+        self.select_frame.setFrameShadow(QFrame.Raised)
+        self.select_frame.setFrameShape(QFrame.Box)
+        self.info_frame.setFrameShadow(QFrame.Raised)
+        self.info_frame.setFrameShape(QFrame.Box)
 
         # Grid
-        mainGrid = QGridLayout()
+        main_grid = QGridLayout()
 
-        mainGrid.addWidget(self.selectFrame, 0, 0)
-        mainGrid.addWidget(self.infoFrame, 1, 0)
+        main_grid.addWidget(self.select_frame, 0, 0)
+        main_grid.addWidget(self.info_frame, 1, 0)
 
-        mainGrid.setRowStretch(0, 1)
-        mainGrid.setRowStretch(1, 20)
+        main_grid.setRowStretch(0, 1)
+        main_grid.setRowStretch(1, 20)
 
-        self.mainTab.setLayout(mainGrid)
+        self.main_tab.setLayout(main_grid)
 
-        # Generate mainTable
-        self.genSelectFrame()
-        self.genInfoFrame()
+        # Generate main_table
+        self.gen_select_frame()
+        self.gen_info_frame()
 
         # Show main window
         self.setWindowTitle('Check Issue Reason')
         self.resize(600, 300)
-        pyqt5_common.centerWindow(self)
+        pyqt5_common.center_window(self)
 
-    def processArgs(self):
+    def process_args(self):
         """
         Process argument if user specified jobid.
         """
         if self.job:
-            self.jobLine.setText(self.job)
-            self.checkIssue()
+            self.job_line.setText(self.job)
+            self.check_issue()
 
-    def genSelectFrame(self):
-        # self.selectFrame
-        jobLabel = QLabel(self.selectFrame)
-        jobLabel.setText('Job')
+    def gen_select_frame(self):
+        # self.select_frame
+        job_label = QLabel(self.select_frame)
+        job_label.setText('Job')
 
-        self.jobLine = QLineEdit()
+        self.job_line = QLineEdit()
 
-        issueLabel = QLabel(self.selectFrame)
-        issueLabel.setText('Issue')
+        issue_label = QLabel(self.select_frame)
+        issue_label.setText('Issue')
 
-        self.issueCombo = QComboBox(self.selectFrame)
-        self.setIssueCombo()
+        self.issue_combo = QComboBox(self.select_frame)
+        self.set_issue_combo()
 
-        checkButton = QPushButton('Check', self.selectFrame)
-        checkButton.clicked.connect(self.checkIssue)
+        check_button = QPushButton('Check', self.select_frame)
+        check_button.clicked.connect(self.check_issue)
 
-        emptyLabel = QLabel(self.selectFrame)
+        empty_label = QLabel(self.select_frame)
 
-        # self.selectFrame - Grid
-        selectFrameGrid = QGridLayout()
+        # self.select_frame - Grid
+        select_frame_grid = QGridLayout()
 
-        selectFrameGrid.addWidget(jobLabel, 0, 0)
-        selectFrameGrid.addWidget(self.jobLine, 0, 1)
-        selectFrameGrid.addWidget(emptyLabel, 0, 2)
-        selectFrameGrid.addWidget(issueLabel, 0, 3)
-        selectFrameGrid.addWidget(self.issueCombo, 0, 4)
-        selectFrameGrid.addWidget(emptyLabel, 0, 5)
-        selectFrameGrid.addWidget(checkButton, 0, 6)
+        select_frame_grid.addWidget(job_label, 0, 0)
+        select_frame_grid.addWidget(self.job_line, 0, 1)
+        select_frame_grid.addWidget(empty_label, 0, 2)
+        select_frame_grid.addWidget(issue_label, 0, 3)
+        select_frame_grid.addWidget(self.issue_combo, 0, 4)
+        select_frame_grid.addWidget(empty_label, 0, 5)
+        select_frame_grid.addWidget(check_button, 0, 6)
 
-        selectFrameGrid.setColumnStretch(0, 1)
-        selectFrameGrid.setColumnStretch(1, 3)
-        selectFrameGrid.setColumnStretch(2, 3)
-        selectFrameGrid.setColumnStretch(3, 1)
-        selectFrameGrid.setColumnStretch(4, 3)
-        selectFrameGrid.setColumnStretch(5, 3)
-        selectFrameGrid.setColumnStretch(6, 1)
+        select_frame_grid.setColumnStretch(0, 1)
+        select_frame_grid.setColumnStretch(1, 3)
+        select_frame_grid.setColumnStretch(2, 3)
+        select_frame_grid.setColumnStretch(3, 1)
+        select_frame_grid.setColumnStretch(4, 3)
+        select_frame_grid.setColumnStretch(5, 3)
+        select_frame_grid.setColumnStretch(6, 1)
 
-        self.selectFrame.setLayout(selectFrameGrid)
+        self.select_frame.setLayout(select_frame_grid)
 
-    def genInfoFrame(self):
-        # self.infoFrame
-        self.infoText = QTextEdit(self.infoFrame)
+    def gen_info_frame(self):
+        # self.info_frame
+        self.info_text = QTextEdit(self.info_frame)
 
-        # self.infoFrame - Grid
-        infoFrameGrid = QGridLayout()
-        infoFrameGrid.addWidget(self.infoText, 0, 0)
-        self.infoFrame.setLayout(infoFrameGrid)
+        # self.info_frame - Grid
+        info_frame_grid = QGridLayout()
+        info_frame_grid.addWidget(self.info_text, 0, 0)
+        self.info_frame.setLayout(info_frame_grid)
 
-    def setIssueCombo(self):
-        self.issueCombo.addItem(self.issue)
+    def set_issue_combo(self):
+        self.issue_combo.addItem(self.issue)
 
-        issueList = ['PEND', 'SLOW', 'FAIL']
+        issue_list = ['PEND', 'SLOW', 'FAIL']
 
-        for issue in issueList:
+        for issue in issue_list:
             if issue != self.issue:
-                self.issueCombo.addItem(issue)
+                self.issue_combo.addItem(issue)
 
-    def checkIssue(self):
-        self.infoText.clear()
-        job = self.jobLine.text().strip()
+    def check_issue(self):
+        self.info_text.clear()
+        job = self.job_line.text().strip()
 
         if not job:
-            self.infoText.append('<font color="#FF0000">*Error*: Please specify "Job" first.</font>')
+            self.info_text.append('<font color="#FF0000">*Error*: Please specify "Job" first.</font>')
         else:
             command = 'bjobs -UF ' + str(job)
-            jobDic = lsf_common.getBjobsUfInfo(command)
+            job_dic = lsf_common.get_bjobs_uf_info(command)
 
-            if job not in jobDic:
-                self.infoText.append('<font color="#FF0000">*Error*: "' + str(job) + '": No such job.</font>')
+            if job not in job_dic:
+                self.info_text.append('<font color="#FF0000">*Error*: "' + str(job) + '": No such job.</font>')
             else:
-                if self.issueCombo.currentText().strip() == 'PEND':
-                    self.checkPendIssue(job, jobDic)
-                elif self.issueCombo.currentText().strip() == 'SLOW':
-                    self.checkSlowIssue(job, jobDic)
-                elif self.issueCombo.currentText().strip() == 'FAIL':
-                    self.checkFailIssue(job, jobDic)
+                if self.issue_combo.currentText().strip() == 'PEND':
+                    self.check_pend_issue(job, job_dic)
+                elif self.issue_combo.currentText().strip() == 'SLOW':
+                    self.check_slow_issue(job, job_dic)
+                elif self.issue_combo.currentText().strip() == 'FAIL':
+                    self.check_fail_issue(job, job_dic)
 
-    def checkPendIssue(self, job, jobDic):
-        self.infoText.clear()
+    def check_pend_issue(self, job, job_dic):
+        self.info_text.clear()
 
-        if jobDic[job]['status'] != 'PEND':
-            self.infoText.append('<font color="#FF0000">*Error*: Job status is "' + str(jobDic[job]['status']) + '"!</font>')
+        if job_dic[job]['status'] != 'PEND':
+            self.info_text.append('<font color="#FF0000">*Error*: Job status is "' + str(job_dic[job]['status']) + '"!</font>')
         else:
-            for (i, line) in enumerate(jobDic[job]['pendingReasons']):
-                self.infoText.append('[Reason ' + str(i) + '] : ' + str(line))
+            for (i, line) in enumerate(job_dic[job]['pending_reasons']):
+                self.info_text.append('[Reason ' + str(i) + '] : ' + str(line))
 
                 if re.search('New job is waiting for scheduling',  line):
-                    self.infoText.append('                    任务分发中, 请耐心等待')
+                    self.info_text.append('                    任务分发中, 请耐心等待')
                 elif re.search('Not enough job slot',  line):
-                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+                    self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
-                    if jobDic[job]['processorsRequested']:
-                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                    if job_dic[job]['processors_requested']:
+                        self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
                 elif re.search('Job slot limit reached',  line):
-                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+                    self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
-                    if jobDic[job]['processorsRequested']:
-                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                    if job_dic[job]['processors_requested']:
+                        self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
                 elif re.search('Not enough processors to meet the job\'s spanning requirement',  line):
-                    self.infoText.append('                    cpu需求不能满足, 请耐心等待队列资源.')
+                    self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
-                    if jobDic[job]['processorsRequested']:
-                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                    if job_dic[job]['processors_requested']:
+                        self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
                 elif re.search('Job requirements for reserving resource \(mem\) not satisfied',  line):
-                    self.infoText.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
+                    self.info_text.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
 
-                    if jobDic[job]['requestedResources']:
-                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                    if job_dic[job]['requested_resources']:
+                        self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
                 elif re.search('Job\'s requirements for resource reservation not satisfied \(Resource: mem\)',  line):
-                    self.infoText.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
+                    self.info_text.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
 
-                    if jobDic[job]['requestedResources']:
-                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                    if job_dic[job]['requested_resources']:
+                        self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
                 elif re.search('There are no suitable hosts for the job',  line):
-                    self.infoText.append('                    资源申请不能满足, 请检查资源申请条件是否过于苛刻.')
+                    self.info_text.append('                    资源申请不能满足, 请检查资源申请条件是否过于苛刻.')
 
-                    if jobDic[job]['processorsRequested']:
-                        self.infoText.append('                    cpu : ' + str(jobDic[job]['processorsRequested']) + ' slot(s)')
+                    if job_dic[job]['processors_requested']:
+                        self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
 
-                    if jobDic[job]['requestedResources']:
-                        self.infoText.append('                    mem : ' + str(jobDic[job]['requestedResources']))
+                    if job_dic[job]['requested_resources']:
+                        self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
                 elif re.search('User has reached the per-user job slot limit of the queue',  line):
-                    self.infoText.append('                    queue限制, 请耐心等待队列资源.')
+                    self.info_text.append('                    queue限制, 请耐心等待队列资源.')
 
-            self.infoText.append('')
-            self.infoText.append('备注 : job PEND原因浮动变化, 仅了解PEND的核心瓶颈所在即可.')
+            self.info_text.append('')
+            self.info_text.append('备注 : job PEND原因浮动变化, 仅了解PEND的核心瓶颈所在即可.')
 
-    def checkSlowIssue(self, job, jobDic):
-        if jobDic[job]['status'] != 'RUN':
-            self.infoText.append('<font color="#FF0000">*Error*: Job status is "' + str(jobDic[job]['status']) + '"!</font>')
+    def check_slow_issue(self, job, job_dic):
+        if job_dic[job]['status'] != 'RUN':
+            self.info_text.append('<font color="#FF0000">*Error*: Job status is "' + str(job_dic[job]['status']) + '"!</font>')
         else:
-            self.infoText.clear()
-            self.infoText.append('Step 1: Check "STAT" on Process Tracer.')
-            self.infoText.append('            STAT "R" means "RUN".')
-            self.infoText.append('            STAT "S" means "SLEEP".')
-            self.infoText.append('Step 2: If there is "R" STAT on any process.')
-            self.infoText.append('            Process status is ok, Please check EDA tool setting.')
-            self.infoText.append('Step 3: If all STAT are "S".')
-            self.infoText.append('            Find key command, click command pid on Process Tracer.')
-            self.infoText.append('            Check what EDA tool is doing with strace terminal.')
+            self.info_text.clear()
+            self.info_text.append('Step 1: Check "STAT" on Process Tracer.')
+            self.info_text.append('            STAT "R" means "RUN".')
+            self.info_text.append('            STAT "S" means "SLEEP".')
+            self.info_text.append('Step 2: If there is "R" STAT on any process.')
+            self.info_text.append('            Process status is ok, Please check EDA tool setting.')
+            self.info_text.append('Step 3: If all STAT are "S".')
+            self.info_text.append('            Find key command, click command pid on Process Tracer.')
+            self.info_text.append('            Check what EDA tool is doing with strace terminal.')
 
-            self.myProcessTracer = ProcessTracer(job)
-            self.myProcessTracer.start()
+            self.my_process_tracer = ProcessTracer(job)
+            self.my_process_tracer.start()
 
-    def checkFailIssue(self, job, jobDic):
-        self.infoText.clear()
-        self.infoText.append('Status : ' + str(jobDic[job]['status']))
+    def check_fail_issue(self, job, job_dic):
+        self.info_text.clear()
+        self.info_text.append('Status : ' + str(job_dic[job]['status']))
 
-        if jobDic[job]['status'] == 'DONE':
-            self.infoText.append('Job done sucessfully.')
-            self.infoText.append('The issue should be from your command, please check your command log.')
-        elif jobDic[job]['status'] == 'EXIT':
-            if jobDic[job]['exitCode']:
-                self.infoText.append('Job exit code is "' + str(jobDic[job]['exitCode']) + '".')
+        if job_dic[job]['status'] == 'DONE':
+            self.info_text.append('Job done sucessfully.')
+            self.info_text.append('The issue should be from your command, please check your command log.')
+        elif job_dic[job]['status'] == 'EXIT':
+            if job_dic[job]['exit_code']:
+                self.info_text.append('Job exit code is "' + str(job_dic[job]['exit_code']) + '".')
 
-                if int(jobDic[job]['exitCode']) <= 127:
-                    self.infoText.append('The issue should be from your command, please check your command log.')
+                if int(job_dic[job]['exit_code']) <= 127:
+                    self.info_text.append('The issue should be from your command, please check your command log.')
                 else:
-                    self.infoText.append('The job should be kill by system or LSF, please contact LSF administrator for further debug.')
-            if jobDic[job]['termOwner']:
-                self.infoText.append('Job TERM_OWNER info just like below:')
-                self.infoText.append('    "' + str(jobDic[job]['termOwner']) + '"')
-                self.infoText.append('Please contact LSF administrator for further debug.')
+                    self.info_text.append('The job should be kill by system or LSF, please contact LSF administrator for further debug.')
+            if job_dic[job]['term_owner']:
+                self.info_text.append('Job TERM_OWNER info just like below:')
+                self.info_text.append('    "' + str(job_dic[job]['term_owner']) + '"')
+                self.info_text.append('Please contact LSF administrator for further debug.')
         else:
-            self.infoText.append('<font color="#FF0000">*Error*: Job is not finished!</font>')
+            self.info_text.append('<font color="#FF0000">*Error*: Job is not finished!</font>')
 
 
 class ProcessTracer(QThread):

@@ -16,7 +16,7 @@ from common import sqlite3_common
 os.environ["PYTHONUNBUFFERED"] = '1'
 
 
-def readArgs():
+def read_args():
     """
     Read arguments.
     """
@@ -45,7 +45,7 @@ def readArgs():
     args = parser.parse_args()
 
     if args.interval < 0:
-        common.printError('*Error*: interval "' + str(args.interval) + '": Cannot be less than "0".')
+        common.print_error('*Error*: interval "' + str(args.interval) + '": Cannot be less than "0".')
         sys.exit(1)
 
     return(args.job, args.queue, args.host, args.load, args.user, args.interval)
@@ -56,419 +56,419 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, jobSampling, queueSampling, hostSampling, loadSampling, userSampling, interval):
-        self.jobSampling = jobSampling
-        self.queueSampling = queueSampling
-        self.hostSampling = hostSampling
-        self.loadSampling = loadSampling
-        self.userSampling = userSampling
+    def __init__(self, job_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, interval):
+        self.job_sampling = job_sampling
+        self.queue_sampling = queue_sampling
+        self.host_sampling = host_sampling
+        self.load_sampling = load_sampling
+        self.user_sampling = user_sampling
 
         self.interval = interval
-        self.dbPath = str(config.dbPath) + '/monitor'
-        jobDbPath = str(self.dbPath) + '/job'
+        self.db_path = str(config.db_path) + '/monitor'
+        job_db_path = str(self.db_path) + '/job'
 
-        if not os.path.exists(jobDbPath):
+        if not os.path.exists(job_db_path):
             try:
-                os.system('mkdir -p ' + str(jobDbPath))
+                os.system('mkdir -p ' + str(job_db_path))
             except Exception as error:
-                common.printError('*Error*: Failed on creating sqlite job db directory "' + str(jobDbPath) + '".')
-                common.printError('         ' + str(error))
+                common.print_error('*Error*: Failed on creating sqlite job db directory "' + str(job_db_path) + '".')
+                common.print_error('         ' + str(error))
                 sys.exit(1)
 
-    def getDateInfo(self):
-        self.sampleTime = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
-        self.currentSeconds = int(time.time())
+    def get_date_info(self):
+        self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
+        self.current_seconds = int(time.time())
 
-    def sampleJobInfo(self):
+    def sample_job_info(self):
         """
         Sample job info, especially the memory usage info.
         """
-        self.getDateInfo()
+        self.get_date_info()
 
         print('>>> Sampling job info ...')
 
         command = 'bjobs -u all -r -UF'
-        bjobsDic = lsf_common.getBjobsUfInfo(command)
-        jobList = list(bjobsDic.keys())
-        jobRangeDic = common.getJobRangeDic(jobList)
-        jobSqlDic = {}
+        bjobs_dic = lsf_common.get_bjobs_uf_info(command)
+        job_list = list(bjobs_dic.keys())
+        job_range_dic = common.get_job_range_dic(job_list)
+        job_sql_dic = {}
 
-        keyList = ['sampleTime', 'mem']
+        key_list = ['sample_time', 'mem']
 
-        for jobRange in jobRangeDic.keys():
-            jobDbFile = str(self.dbPath) + '/job/' + str(jobRange) + '.db'
-            (result, jobDbConn) = sqlite3_common.connectDbFile(jobDbFile, mode='read')
+        for job_range in job_range_dic.keys():
+            job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
+            (result, job_db_conn) = sqlite3_common.connect_db_file(job_db_file, mode='read')
 
             if result == 'passed':
-                jobTableList = sqlite3_common.getSqlTableList(jobDbFile, jobDbConn)
+                job_table_list = sqlite3_common.get_sql_table_list(job_db_file, job_db_conn)
             else:
-                jobTableList = []
+                job_table_list = []
 
-            for job in jobRangeDic[jobRange]:
-                jobTableName = 'job_' + str(job)
+            for job in job_range_dic[job_range]:
+                job_table_name = 'job_' + str(job)
 
                 print('    Sampling for job "' + str(job) + '" ...')
 
-                jobSqlDic[job] = {
-                                  'drop': False,
-                                  'keyString': '',
-                                  'valueString': '',
-                                 }
+                job_sql_dic[job] = {
+                                    'drop': False,
+                                    'key_string': '',
+                                    'value_string': '',
+                                   }
 
-                # If job table (with old data) has been on the jobDbFile, drop it.
-                if jobTableName in jobTableList:
-                    dataDic = sqlite3_common.getSqlTableData(jobDbFile, jobDbConn, jobTableName, ['sampleTime'])
+                # If job table (with old data) has been on the job_db_file, drop it.
+                if job_table_name in job_table_list:
+                    data_dic = sqlite3_common.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_time'])
 
-                    if dataDic:
-                        if len(dataDic['sampleTime']) > 0:
-                            lastSampleTime = dataDic['sampleTime'][-1]
-                            lastSeconds = int(time.mktime(datetime.datetime.strptime(str(lastSampleTime), "%Y%m%d_%H%M%S").timetuple()))
+                    if data_dic:
+                        if len(data_dic['sample_time']) > 0:
+                            last_sample_time = data_dic['sample_time'][-1]
+                            last_seconds = int(time.mktime(datetime.datetime.strptime(str(last_sample_time), "%Y%m%d_%H%M%S").timetuple()))
 
-                            if self.currentSeconds-lastSeconds > 3600:
-                                common.printWarning('    *Warning*: table "' + str(jobTableName) + '" already existed even one hour ago, will drop it.')
-                                jobSqlDic[job]['drop'] = True
-                                jobTableList.remove(jobTableName)
+                            if self.current_seconds-last_seconds > 3600:
+                                common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
+                                job_sql_dic[job]['drop'] = True
+                                job_table_list.remove(job_table_name)
 
-                # If job table is not on the jobDbFile, create it.
-                if jobTableName not in jobTableList:
-                    keyString = sqlite3_common.genSqlTableKeyString(keyList)
-                    jobSqlDic[job]['keyString'] = keyString
+                # If job table is not on the job_db_file, create it.
+                if job_table_name not in job_table_list:
+                    key_string = sqlite3_common.gen_sql_table_key_string(key_list)
+                    job_sql_dic[job]['key_string'] = key_string
 
                 # Insert sql table value.
-                valueList = [self.sampleTime, bjobsDic[job]['mem']]
-                valueString = sqlite3_common.genSqlTableValueString(valueList)
-                jobSqlDic[job]['valueString'] = valueString
+                value_list = [self.sample_time, bjobs_dic[job]['mem']]
+                value_string = sqlite3_common.gen_sql_table_value_string(value_list)
+                job_sql_dic[job]['value_string'] = value_string
 
             if result == 'passed':
-                jobDbConn.commit()
-                jobDbConn.close()
+                job_db_conn.commit()
+                job_db_conn.close()
 
-        for jobRange in jobRangeDic.keys():
-            jobDbFile = str(self.dbPath) + '/job/' + str(jobRange) + '.db'
-            (result, jobDbConn) = sqlite3_common.connectDbFile(jobDbFile, mode='write')
+        for job_range in job_range_dic.keys():
+            job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
+            (result, job_db_conn) = sqlite3_common.connect_db_file(job_db_file, mode='write')
 
             if result != 'passed':
                 return
 
-            for job in jobRangeDic[jobRange]:
-                jobTableName = 'job_' + str(job)
+            for job in job_range_dic[job_range]:
+                job_table_name = 'job_' + str(job)
 
-                if jobSqlDic[job]['drop']:
-                    sqlite3_common.dropSqlTable(jobDbFile, jobDbConn, jobTableName, commit=False)
+                if job_sql_dic[job]['drop']:
+                    sqlite3_common.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
 
-                if jobSqlDic[job]['keyString'] != '':
-                    sqlite3_common.createSqlTable(jobDbFile, jobDbConn, jobTableName, jobSqlDic[job]['keyString'], commit=False)
+                if job_sql_dic[job]['key_string'] != '':
+                    sqlite3_common.create_sql_table(job_db_file, job_db_conn, job_table_name, job_sql_dic[job]['key_string'], commit=False)
 
-                if jobSqlDic[job]['valueString'] != '':
-                    sqlite3_common.insertIntoSqlTable(jobDbFile, jobDbConn, jobTableName, jobSqlDic[job]['valueString'], commit=False)
+                if job_sql_dic[job]['value_string'] != '':
+                    sqlite3_common.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, job_sql_dic[job]['value_string'], commit=False)
 
-            jobDbConn.commit()
-            jobDbConn.close()
+            job_db_conn.commit()
+            job_db_conn.close()
 
         print('    Committing the update to sqlite3 ...')
-        print('    Done (' + str(len(jobList)) + ' jobs).')
+        print('    Done (' + str(len(job_list)) + ' jobs).')
 
-    def sampleQueueInfo(self):
+    def sample_queue_info(self):
         """
         Sample queue info and save it into sqlite db.
         """
-        self.getDateInfo()
-        queueDbFile = str(self.dbPath) + '/queue.db'
-        (result, queueDbConn) = sqlite3_common.connectDbFile(queueDbFile, mode='write')
+        self.get_date_info()
+        queue_db_file = str(self.db_path) + '/queue.db'
+        (result, queue_db_conn) = sqlite3_common.connect_db_file(queue_db_file, mode='write')
 
         if result != 'passed':
             return
 
-        print('>>> Sampling queue info into ' + str(queueDbFile) + ' ...')
+        print('>>> Sampling queue info into ' + str(queue_db_file) + ' ...')
 
-        queueTableList = sqlite3_common.getSqlTableList(queueDbFile, queueDbConn)
-        bqueuesDic = lsf_common.getBqueuesInfo()
-        queueList = bqueuesDic['QUEUE_NAME']
-        queueList.append('ALL')
-        queueSqlDic = {}
+        queue_table_list = sqlite3_common.get_sql_table_list(queue_db_file, queue_db_conn)
+        bqueues_dic = lsf_common.get_bqueues_info()
+        queue_list = bqueues_dic['QUEUE_NAME']
+        queue_list.append('ALL')
+        queue_sql_dic = {}
 
-        keyList = ['sampleTime', 'NJOBS', 'PEND', 'RUN', 'SUSP']
+        key_list = ['sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
 
-        for i in range(len(queueList)):
-            queue = queueList[i]
-            queueSqlDic[queue] = {
-                                  'keyString': '',
-                                  'valueString': '',
-                                 }
-            queueTableName = 'queue_' + str(queue)
+        for i in range(len(queue_list)):
+            queue = queue_list[i]
+            queue_sql_dic[queue] = {
+                                    'key_string': '',
+                                    'value_string': '',
+                                   }
+            queue_table_name = 'queue_' + str(queue)
 
             print('    Sampling for queue "' + str(queue) + '" ...')
 
             # Generate sql table.
-            if queueTableName not in queueTableList:
-                keyString = sqlite3_common.genSqlTableKeyString(keyList)
-                queueSqlDic[queue]['keyString'] = keyString
+            if queue_table_name not in queue_table_list:
+                key_string = sqlite3_common.gen_sql_table_key_string(key_list)
+                queue_sql_dic[queue]['key_string'] = key_string
 
             # Insert sql table value.
             if queue == 'ALL':
-                valueList = [self.sampleTime, sum([int(i) for i in bqueuesDic['NJOBS']]), sum([int(i) for i in bqueuesDic['PEND']]), sum([int(i) for i in bqueuesDic['RUN']]), sum([int(i) for i in bqueuesDic['SUSP']])]
+                value_list = [self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
             else:
-                valueList = [self.sampleTime, bqueuesDic['NJOBS'][i], bqueuesDic['PEND'][i], bqueuesDic['RUN'][i], bqueuesDic['SUSP'][i]]
+                value_list = [self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
 
-            valueString = sqlite3_common.genSqlTableValueString(valueList)
-            queueSqlDic[queue]['valueString'] = valueString
+            value_string = sqlite3_common.gen_sql_table_value_string(value_list)
+            queue_sql_dic[queue]['value_string'] = value_string
 
-        for queue in queueList:
-            queueTableName = 'queue_' + str(queue)
+        for queue in queue_list:
+            queue_table_name = 'queue_' + str(queue)
 
-            if queueSqlDic[queue]['keyString'] != '':
-                sqlite3_common.createSqlTable(queueDbFile, queueDbConn, queueTableName, queueSqlDic[queue]['keyString'], commit=False)
+            if queue_sql_dic[queue]['key_string'] != '':
+                sqlite3_common.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, queue_sql_dic[queue]['key_string'], commit=False)
 
-            if queueSqlDic[queue]['valueString'] != '':
-                sqlite3_common.insertIntoSqlTable(queueDbFile, queueDbConn, queueTableName, queueSqlDic[queue]['valueString'], commit=False)
+            if queue_sql_dic[queue]['value_string'] != '':
+                sqlite3_common.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, queue_sql_dic[queue]['value_string'], commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
         # Clean up queue database, only keep 10000 items.
-        for queue in queueList:
-            queueTableName = 'queue_' + str(queue)
-            queueTableCount = int(sqlite3_common.getSqlTableCount(queueDbFile, queueDbConn, queueTableName))
+        for queue in queue_list:
+            queue_table_name = 'queue_' + str(queue)
+            queue_table_count = int(sqlite3_common.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name))
 
-            if queueTableCount != 'N/A':
-                if int(queueTableCount) > 10000:
-                    rowId = 'sampleTime'
-                    beginLine = 0
-                    endLine = int(queueTableCount) - 10000
+            if queue_table_count != 'N/A':
+                if int(queue_table_count) > 10000:
+                    row_id = 'sample_time'
+                    begin_line = 0
+                    end_line = int(queue_table_count) - 10000
 
-                    print('    Deleting database "' + str(queueDbFile) + '" table "' + str(queueTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                    sqlite3_common.deleteSqlTableRows(queueDbFile, queueDbConn, queueTableName, rowId, beginLine, endLine)
+                    sqlite3_common.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
 
-        queueDbConn.commit()
-        queueDbConn.close()
+        queue_db_conn.commit()
+        queue_db_conn.close()
 
-    def sampleHostInfo(self):
+    def sample_host_info(self):
         """
         Sample host info and save it into sqlite db.
         """
-        self.getDateInfo()
-        hostDbFile = str(self.dbPath) + '/host.db'
-        (result, hostDbConn) = sqlite3_common.connectDbFile(hostDbFile, mode='write')
+        self.get_date_info()
+        host_db_file = str(self.db_path) + '/host.db'
+        (result, host_db_conn) = sqlite3_common.connect_db_file(host_db_file, mode='write')
 
         if result != 'passed':
             return
 
-        print('>>> Sampling host info into ' + str(hostDbFile) + ' ...')
+        print('>>> Sampling host info into ' + str(host_db_file) + ' ...')
 
-        hostTableList = sqlite3_common.getSqlTableList(hostDbFile, hostDbConn)
-        bhostsDic = lsf_common.getBhostsInfo()
-        hostList = bhostsDic['HOST_NAME']
-        hostSqlDic = {}
+        host_table_list = sqlite3_common.get_sql_table_list(host_db_file, host_db_conn)
+        bhosts_dic = lsf_common.get_bhosts_info()
+        host_list = bhosts_dic['HOST_NAME']
+        host_sql_dic = {}
 
-        keyList = ['sampleTime', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
+        key_list = ['sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
 
-        for i in range(len(hostList)):
-            host = hostList[i]
-            hostSqlDic[host] = {
-                                'keyString': '',
-                                'valueString': '',
-                               }
-            hostTableName = 'host_' + str(host)
+        for i in range(len(host_list)):
+            host = host_list[i]
+            host_sql_dic[host] = {
+                                  'key_string': '',
+                                  'value_string': '',
+                                 }
+            host_table_name = 'host_' + str(host)
 
             print('    Sampling for host "' + str(host) + '" ...')
 
             # Generate sql table.
-            if hostTableName not in hostTableList:
-                keyString = sqlite3_common.genSqlTableKeyString(keyList)
-                hostSqlDic[host]['keyString'] = keyString
+            if host_table_name not in host_table_list:
+                key_string = sqlite3_common.gen_sql_table_key_string(key_list)
+                host_sql_dic[host]['key_string'] = key_string
 
             # Insert sql table value.
-            valueList = [self.sampleTime, bhostsDic['NJOBS'][i], bhostsDic['RUN'][i], bhostsDic['SSUSP'][i], bhostsDic['USUSP'][i]]
-            valueString = sqlite3_common.genSqlTableValueString(valueList)
-            hostSqlDic[host]['valueString'] = valueString
+            value_list = [self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
+            value_string = sqlite3_common.gen_sql_table_value_string(value_list)
+            host_sql_dic[host]['value_string'] = value_string
 
-        for host in hostList:
-            hostTableName = 'host_' + str(host)
+        for host in host_list:
+            host_table_name = 'host_' + str(host)
 
-            if hostSqlDic[host]['keyString'] != '':
-                sqlite3_common.createSqlTable(hostDbFile, hostDbConn, hostTableName, hostSqlDic[host]['keyString'], commit=False)
+            if host_sql_dic[host]['key_string'] != '':
+                sqlite3_common.create_sql_table(host_db_file, host_db_conn, host_table_name, host_sql_dic[host]['key_string'], commit=False)
 
-            if hostSqlDic[host]['valueString'] != '':
-                sqlite3_common.insertIntoSqlTable(hostDbFile, hostDbConn, hostTableName, hostSqlDic[host]['valueString'], commit=False)
+            if host_sql_dic[host]['value_string'] != '':
+                sqlite3_common.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, host_sql_dic[host]['value_string'], commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
         # Clean up host database, only keep 10000 items.
-        for host in hostList:
-            hostTableName = 'host_' + str(host)
-            hostTableCount = int(sqlite3_common.getSqlTableCount(hostDbFile, hostDbConn, hostTableName))
+        for host in host_list:
+            host_table_name = 'host_' + str(host)
+            host_table_count = int(sqlite3_common.get_sql_table_count(host_db_file, host_db_conn, host_table_name))
 
-            if hostTableCount != 'N/A':
-                if int(hostTableCount) > 10000:
-                    rowId = 'sampleTime'
-                    beginLine = 0
-                    endLine = int(hostTableCount) - 10000
+            if host_table_count != 'N/A':
+                if int(host_table_count) > 10000:
+                    row_id = 'sample_time'
+                    begin_line = 0
+                    end_line = int(host_table_count) - 10000
 
-                    print('    Deleting database "' + str(hostDbFile) + '" table "' + str(hostTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                    sqlite3_common.deleteSqlTableRows(hostDbFile, hostDbConn, hostTableName, rowId, beginLine, endLine)
+                    sqlite3_common.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
 
-        hostDbConn.commit()
-        hostDbConn.close()
+        host_db_conn.commit()
+        host_db_conn.close()
 
-    def sampleLoadInfo(self):
+    def sample_load_info(self):
         """
         Sample host load info and save it into sqlite db.
         """
-        self.getDateInfo()
-        loadDbFile = str(self.dbPath) + '/load.db'
-        (result, loadDbConn) = sqlite3_common.connectDbFile(loadDbFile, mode='write')
+        self.get_date_info()
+        load_db_file = str(self.db_path) + '/load.db'
+        (result, load_db_conn) = sqlite3_common.connect_db_file(load_db_file, mode='write')
 
         if result != 'passed':
             return
 
-        print('>>> Sampling host load info into ' + str(loadDbFile) + ' ...')
+        print('>>> Sampling host load info into ' + str(load_db_file) + ' ...')
 
-        loadTableList = sqlite3_common.getSqlTableList(loadDbFile, loadDbConn)
-        lsloadDic = lsf_common.getLsloadInfo()
-        hostList = lsloadDic['HOST_NAME']
-        loadSqlDic = {}
+        load_table_list = sqlite3_common.get_sql_table_list(load_db_file, load_db_conn)
+        lsload_dic = lsf_common.get_lsload_info()
+        host_list = lsload_dic['HOST_NAME']
+        load_sql_dic = {}
 
-        keyList = ['sampleTime', 'ut', 'tmp', 'swp', 'mem']
+        key_list = ['sample_time', 'ut', 'tmp', 'swp', 'mem']
 
-        for i in range(len(hostList)):
-            host = hostList[i]
-            loadSqlDic[host] = {
-                                'keyString': '',
-                                'valueString': '',
-                               }
-            loadTableName = 'load_' + str(host)
+        for i in range(len(host_list)):
+            host = host_list[i]
+            load_sql_dic[host] = {
+                                  'key_string': '',
+                                  'value_string': '',
+                                 }
+            load_table_name = 'load_' + str(host)
 
             print('    Sampling for host "' + str(host) + '" ...')
 
             # Generate sql table.
-            if loadTableName not in loadTableList:
-                keyString = sqlite3_common.genSqlTableKeyString(keyList)
-                loadSqlDic[host]['keyString'] = keyString
+            if load_table_name not in load_table_list:
+                key_string = sqlite3_common.gen_sql_table_key_string(key_list)
+                load_sql_dic[host]['key_string'] = key_string
 
             # Insert sql table value.
-            valueList = [self.sampleTime, lsloadDic['ut'][i], lsloadDic['tmp'][i], lsloadDic['swp'][i], lsloadDic['mem'][i]]
-            valueString = sqlite3_common.genSqlTableValueString(valueList)
-            loadSqlDic[host]['valueString'] = valueString
+            value_list = [self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
+            value_string = sqlite3_common.gen_sql_table_value_string(value_list)
+            load_sql_dic[host]['value_string'] = value_string
 
-        for host in hostList:
-            loadTableName = 'load_' + str(host)
+        for host in host_list:
+            load_table_name = 'load_' + str(host)
 
-            if loadSqlDic[host]['keyString'] != '':
-                sqlite3_common.createSqlTable(loadDbFile, loadDbConn, loadTableName, loadSqlDic[host]['keyString'], commit=False)
+            if load_sql_dic[host]['key_string'] != '':
+                sqlite3_common.create_sql_table(load_db_file, load_db_conn, load_table_name, load_sql_dic[host]['key_string'], commit=False)
 
-            if loadSqlDic[host]['valueString'] != '':
-                sqlite3_common.insertIntoSqlTable(loadDbFile, loadDbConn, loadTableName, loadSqlDic[host]['valueString'], commit=False)
+            if load_sql_dic[host]['value_string'] != '':
+                sqlite3_common.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, load_sql_dic[host]['value_string'], commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
         # Clean up load database, only keep 10000 items.
-        for host in hostList:
-            loadTableName = 'load_' + str(host)
-            loadTableCount = int(sqlite3_common.getSqlTableCount(loadDbFile, loadDbConn, loadTableName))
+        for host in host_list:
+            load_table_name = 'load_' + str(host)
+            load_table_count = int(sqlite3_common.get_sql_table_count(load_db_file, load_db_conn, load_table_name))
 
-            if loadTableCount != 'N/A':
-                if int(loadTableCount) > 10000:
-                    rowId = 'sampleTime'
-                    beginLine = 0
-                    endLine = int(loadTableCount) - 10000
+            if load_table_count != 'N/A':
+                if int(load_table_count) > 10000:
+                    row_id = 'sample_time'
+                    begin_line = 0
+                    end_line = int(load_table_count) - 10000
 
-                    print('    Deleting database "' + str(loadDbFile) + '" table "' + str(loadTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                    sqlite3_common.deleteSqlTableRows(loadDbFile, loadDbConn, loadTableName, rowId, beginLine, endLine)
+                    sqlite3_common.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
 
-        loadDbConn.commit()
-        loadDbConn.close()
+        load_db_conn.commit()
+        load_db_conn.close()
 
-    def sampleUserInfo(self):
+    def sample_user_info(self):
         """
         Sample user info and save it into sqlite db.
         """
-        self.getDateInfo()
-        userDbFile = str(self.dbPath) + '/user.db'
-        (result, userDbConn) = sqlite3_common.connectDbFile(userDbFile, mode='write')
+        self.get_date_info()
+        user_db_file = str(self.db_path) + '/user.db'
+        (result, user_db_conn) = sqlite3_common.connect_db_file(user_db_file, mode='write')
 
         if result != 'passed':
             return
 
-        print('>>> Sampling user info into ' + str(userDbFile) + ' ...')
+        print('>>> Sampling user info into ' + str(user_db_file) + ' ...')
 
-        userTableList = sqlite3_common.getSqlTableList(userDbFile, userDbConn)
-        busersDic = lsf_common.getBusersInfo()
-        userList = busersDic['USER/GROUP']
-        userSqlDic = {}
+        user_table_list = sqlite3_common.get_sql_table_list(user_db_file, user_db_conn)
+        busers_dic = lsf_common.get_busers_info()
+        user_list = busers_dic['USER/GROUP']
+        user_sql_dic = {}
 
-        keyList = ['sampleTime', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
+        key_list = ['sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
 
-        for i in range(len(userList)):
-            user = userList[i]
-            userSqlDic[user] = {
-                                'keyString': '',
-                                'valueString': '',
-                               }
-            userTableName = 'user_' + str(user)
+        for i in range(len(user_list)):
+            user = user_list[i]
+            user_sql_dic[user] = {
+                                  'key_string': '',
+                                  'value_string': '',
+                                 }
+            user_table_name = 'user_' + str(user)
 
             print('    Sampling for user "' + str(user) + '" ...')
 
             # Generate sql table.
-            if userTableName not in userTableList:
-                keyString = sqlite3_common.genSqlTableKeyString(keyList)
-                userSqlDic[user]['keyString'] = keyString
+            if user_table_name not in user_table_list:
+                key_string = sqlite3_common.gen_sql_table_key_string(key_list)
+                user_sql_dic[user]['key_string'] = key_string
 
             # Insert sql table value.
-            valueList = [self.sampleTime, busersDic['NJOBS'][i], busersDic['PEND'][i], busersDic['RUN'][i], busersDic['SSUSP'][i], busersDic['USUSP'][i]]
-            valueString = sqlite3_common.genSqlTableValueString(valueList)
-            userSqlDic[user]['valueString'] = valueString
+            value_list = [self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
+            value_string = sqlite3_common.gen_sql_table_value_string(value_list)
+            user_sql_dic[user]['value_string'] = value_string
 
-        for user in userList:
-            userTableName = 'user_' + str(user)
+        for user in user_list:
+            user_table_name = 'user_' + str(user)
 
-            if userSqlDic[user]['keyString'] != '':
-                sqlite3_common.createSqlTable(userDbFile, userDbConn, userTableName, userSqlDic[user]['keyString'], commit=False)
+            if user_sql_dic[user]['key_string'] != '':
+                sqlite3_common.create_sql_table(user_db_file, user_db_conn, user_table_name, user_sql_dic[user]['key_string'], commit=False)
 
-            if userSqlDic[user]['valueString'] != '':
-                sqlite3_common.insertIntoSqlTable(userDbFile, userDbConn, userTableName, userSqlDic[user]['valueString'], commit=False)
+            if user_sql_dic[user]['value_string'] != '':
+                sqlite3_common.insert_into_sql_table(user_db_file, user_db_conn, user_table_name, user_sql_dic[user]['value_string'], commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
         # Clean up user database, only keep 10000 items.
-        for user in userList:
-            userTableName = 'user_' + str(user)
-            userTableCount = int(sqlite3_common.getSqlTableCount(userDbFile, userDbConn, userTableName))
+        for user in user_list:
+            user_table_name = 'user_' + str(user)
+            user_table_count = int(sqlite3_common.get_sql_table_count(user_db_file, user_db_conn, user_table_name))
 
-            if userTableCount != 'N/A':
-                if int(userTableCount) > 10000:
-                    rowId = 'sampleTime'
-                    beginLine = 0
-                    endLine = int(userTableCount) - 10000
+            if user_table_count != 'N/A':
+                if int(user_table_count) > 10000:
+                    row_id = 'sample_time'
+                    begin_line = 0
+                    end_line = int(user_table_count) - 10000
 
-                    print('    Deleting database "' + str(userDbFile) + '" table "' + str(userTableName) + '" ' + str(beginLine) + '-' + str(endLine) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                    sqlite3_common.deleteSqlTableRows(userDbFile, userDbConn, userTableName, rowId, beginLine, endLine)
+                    sqlite3_common.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
 
-        userDbConn.commit()
-        userDbConn.close()
+        user_db_conn.commit()
+        user_db_conn.close()
 
     def sampling(self):
         while True:
-            if self.jobSampling:
-                p = Process(target=self.sampleJobInfo)
+            if self.job_sampling:
+                p = Process(target=self.sample_job_info)
                 p.start()
 
-            if self.queueSampling:
-                p = Process(target=self.sampleQueueInfo)
+            if self.queue_sampling:
+                p = Process(target=self.sample_queue_info)
                 p.start()
 
-            if self.hostSampling:
-                p = Process(target=self.sampleHostInfo)
+            if self.host_sampling:
+                p = Process(target=self.sample_host_info)
                 p.start()
 
-            if self.loadSampling:
-                p = Process(target=self.sampleLoadInfo)
+            if self.load_sampling:
+                p = Process(target=self.sample_load_info)
                 p.start()
 
-            if self.userSampling:
-                p = Process(target=self.sampleUserInfo)
+            if self.user_sampling:
+                p = Process(target=self.sample_user_info)
                 p.start()
 
             p.join()
@@ -483,9 +483,9 @@ class Sampling:
 # Main Function #
 #################
 def main():
-    (job, queue, host, load, user, interval) = readArgs()
-    mySampling = Sampling(job, queue, host, load, user, interval)
-    mySampling.sampling()
+    (job, queue, host, load, user, interval) = read_args()
+    my_sampling = Sampling(job, queue, host, load, user, interval)
+    my_sampling.sampling()
 
 
 if __name__ == '__main__':

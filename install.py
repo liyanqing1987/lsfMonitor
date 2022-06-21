@@ -5,31 +5,31 @@ import stat
 CWD = os.getcwd()
 
 
-def checkPythonVersion():
+def check_python_version():
     """
     Check python version.
     python3 is required, anaconda3 is better.
     """
     print('>>> Check python version.')
 
-    currentPython = sys.version_info[:2]
-    requiredPython = (3, 5)
+    current_python = sys.version_info[:2]
+    required_python = (3, 5)
 
-    if currentPython < requiredPython:
+    if current_python < required_python:
         sys.stderr.write("""
 ==========================
 Unsupported Python version
 ==========================
-This version of lsfMonitor requires Python {}.{} (or greater version), 
+This version of lsfMonitor requires Python {}.{} (or greater version),
 but you're trying to install it on Python {}.{}.
-""".format(*(requiredPython + currentPython)))
+""".format(*(required_python + current_python)))
         sys.exit(1)
     else:
-        print('    Required python version : ' + str(requiredPython))
-        print('    Current  python version : ' + str(currentPython))
+        print('    Required python version : ' + str(required_python))
+        print('    Current  python version : ' + str(current_python))
 
 
-def genBmonitor():
+def gen_bmonitor():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor.
     """
@@ -40,12 +40,12 @@ def genBmonitor():
 
     try:
         with open(bmonitor, 'w') as BM:
-            pythonPath = os.path.dirname(os.path.abspath(sys.executable))
+            python_path = os.path.dirname(os.path.abspath(sys.executable))
 
             BM.write("""#!/bin/bash
 
 # Set python3 path.
-export PATH=""" + str(pythonPath) + """:$PATH
+export PATH=""" + str(python_path) + """:$PATH
 
 # Set lsfMonitor install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
@@ -60,7 +60,7 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bmonitor.py $@
         sys.exit(1)
 
 
-def genBsample():
+def gen_bsample():
     """
     Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample.
     """
@@ -71,12 +71,12 @@ def genBsample():
 
     try:
         with open(bsample, 'w') as BS:
-            pythonPath = os.path.dirname(os.path.abspath(sys.executable))
+            python_path = os.path.dirname(os.path.abspath(sys.executable))
 
             BS.write("""#!/bin/bash
 
 # Set python3 path.
-export PATH=""" + str(pythonPath) + """:$PATH
+export PATH=""" + str(python_path) + """:$PATH
 
 # Set lsfMonitor install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
@@ -91,55 +91,55 @@ python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
         sys.exit(1)
 
 
-def genConfigFile():
+def gen_config_file():
     """
     Generate config file <LSFMONITOR_INSTALL_PATH>/monitor/conf/config.py.
     """
-    configFile = str(CWD) + '/monitor/conf/config.py'
+    config_file = str(CWD) + '/monitor/conf/config.py'
 
     print('')
-    print('>>> Generate config file "' + str(configFile) + '".')
+    print('>>> Generate config file "' + str(config_file) + '".')
 
-    if os.path.exists(configFile):
-        print('*Warning*: config file "' + str(configFile) + '" already exists, will not update it.')
+    if os.path.exists(config_file):
+        print('*Warning*: config file "' + str(config_file) + '" already exists, will not update it.')
     else:
         try:
-            dbPath = str(CWD) + '/db'
-            defaultProductFeatureRelationshipFile = str(CWD) + '/monitor/conf/product_feature_relationship.yaml'
+            db_path = str(CWD) + '/db'
+            default_product_feature_relationship_file = str(CWD) + '/monitor/conf/product_feature_relationship.yaml'
 
-            with open(configFile, 'w') as CF:
+            with open(config_file, 'w') as CF:
                 CF.write('''# Specify the database directory.
-dbPath = "''' + str(dbPath) + '''"
+db_path = "''' + str(db_path) + '''"
 
 # Specify lmstat path, example "/*/*/bin".
-lmstatPath = ""
+lmstat_path = ""
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
-lmstatBsubCommand = ""
+lmstat_bsub_command = ""
 
 # Specify EDA license product-feature relationship file.
-productFeatureRelationshipFile = "''' + str(defaultProductFeatureRelationshipFile) + '''"
+product_feature_relationship_file = "''' + str(default_product_feature_relationship_file) + '''"
 ''')
 
-            os.chmod(configFile, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-            os.chmod(dbPath, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+            os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+            os.chmod(db_path, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
         except Exception as error:
-            print('*Error*: Failed on opening config file "' + str(configFile) + '" for write: ' + str(error))
+            print('*Error*: Failed on opening config file "' + str(config_file) + '" for write: ' + str(error))
             sys.exit(1)
 
 
-def updateTools():
+def update_tools():
     """
     Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
     """
-    expectedPython = os.path.abspath(sys.executable)
-    toolList = [str(CWD) + '/monitor/tools/check_issue_reason.py', str(CWD) + '/monitor/tools/get_license_product_feature_relationship.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py', str(CWD) + '/monitor/tools/show_license_feature_usage.py']
+    expected_python = os.path.abspath(sys.executable)
+    tool_list = [str(CWD) + '/monitor/tools/check_issue_reason.py', str(CWD) + '/monitor/tools/get_license_product_feature_relationship.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py', str(CWD) + '/monitor/tools/show_license_feature_usage.py']
 
-    for tool in toolList:
+    for tool in tool_list:
         with open(tool, 'r+') as TOOL:
             lines = TOOL.read()
             TOOL.seek(0)
-            lines = lines.replace('EXPECTED_PYTHON', expectedPython)
+            lines = lines.replace('EXPECTED_PYTHON', expected_python)
             lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
             TOOL.write(lines)
 
@@ -148,11 +148,11 @@ def updateTools():
 # Main Process #
 ################
 def main():
-    checkPythonVersion()
-    genBmonitor()
-    genBsample()
-    genConfigFile()
-    updateTools()
+    check_python_version()
+    gen_bmonitor()
+    gen_bsample()
+    gen_config_file()
+    update_tools()
 
     print('')
     print('Done, Please enjoy it.')

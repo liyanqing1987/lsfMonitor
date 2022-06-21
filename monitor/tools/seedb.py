@@ -14,7 +14,7 @@ from conf import config
 from common import sqlite3_common
 
 
-def readArgs():
+def read_args():
     """
     Read in arguments.
     """
@@ -40,7 +40,7 @@ def readArgs():
 
     if not os.path.exists(args.database):
         if not re.match('^/.*$', args.database):
-            database = str(config.dbPath) + '/monitor/' + str(args.database)
+            database = str(config.db_path) + '/monitor/' + str(args.database)
 
             if os.path.exists(database):
                 args.database = database
@@ -54,68 +54,68 @@ def readArgs():
     return(args.database, args.tables, args.keys, args.number)
 
 
-def getLength(inputList):
+def get_length(input_list):
     """
     Get the length of the longest item on the input list.
     """
     length = 0
 
-    for item in inputList:
-        itemLength = len(item)
+    for item in input_list:
+        item_length = len(item)
 
-        if itemLength > length:
-            length = itemLength
+        if item_length > length:
+            length = item_length
 
     return(length)
 
 
-def seedb(dbFile, tableList, keyList, number):
-    print('DB FILE : ' + str(dbFile))
+def seedb(db_file, table_list, key_list, number):
+    print('DB FILE : ' + str(db_file))
 
-    if len(tableList) == 0:
-        tableList = sqlite3_common.getSqlTableList(dbFile, '')
+    if len(table_list) == 0:
+        table_list = sqlite3_common.get_sql_table_list(db_file, '')
 
         print('TABLES :')
         print('========')
 
-        for table in tableList:
+        for table in table_list:
             print(table)
 
         print('========')
     else:
-        for table in tableList:
+        for table in table_list:
             print('TABLE : ' + str(table))
             print('========')
 
-            dataDic = sqlite3_common.getSqlTableData(dbFile, '', table, keyList, number)
-            keyList = list(dataDic.keys())
+            data_dic = sqlite3_common.get_sql_table_data(db_file, '', table, key_list, number)
+            key_list = list(data_dic.keys())
 
-            if len(keyList) == 0:
-                print('*Error*: No valid keyList is specified.')
+            if len(key_list) == 0:
+                print('*Error*: No valid key_list is specified.')
             else:
-                length = getLength(keyList)
-                formatString = '%-' + str(length+10) + 's'
+                length = get_length(key_list)
+                format_string = '%-' + str(length+10) + 's'
 
-                for key in keyList:
-                    print(formatString % (key), end='')
-
-                print('')
-
-                for key in keyList:
-                    print(formatString % ('----'), end='')
+                for key in key_list:
+                    print(format_string % (key), end='')
 
                 print('')
 
-                firstKey = keyList[0]
-                firstValueList = dataDic[firstKey]
+                for key in key_list:
+                    print(format_string % ('----'), end='')
 
-                for i in range(len(firstValueList)):
-                    for j in range(len(keyList)):
-                        key = keyList[j]
-                        valueList = dataDic[key]
-                        value = valueList[i]
+                print('')
 
-                        print(formatString % (value), end='')
+                first_key = key_list[0]
+                first_value_list = data_dic[first_key]
+
+                for i in range(len(first_value_list)):
+                    for j in range(len(key_list)):
+                        key = key_list[j]
+                        value_list = data_dic[key]
+                        value = value_list[i]
+
+                        print(format_string % (value), end='')
 
                     print('')
 
@@ -126,8 +126,8 @@ def seedb(dbFile, tableList, keyList, number):
 # Main Process #
 ################
 def main():
-    (dbFile, tableList, keyList, number) = readArgs()
-    seedb(dbFile, tableList, keyList, number)
+    (db_file, table_list, key_list, number) = read_args()
+    seedb(db_file, table_list, key_list, number)
 
 
 if __name__ == '__main__':

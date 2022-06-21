@@ -25,7 +25,7 @@ from common import license_common
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 
-def readArgs():
+def read_args():
     """
     Read in arguments.
     """
@@ -51,126 +51,126 @@ class ShowLicenseFreatureUsage(QMainWindow):
         self.server = server
         self.feature = feature
 
-        self.licenseFeatureUsageDicList = self.getLicenseFeatureUsage()
-        self.initUI()
+        self.license_feature_usage_dic_list = self.get_license_feature_usage()
+        self.init_ui()
 
-    def parseFeatureUsageLine(self, line):
-        usageDic = {
-                    'user': '',
-                    'execute_host': '',
-                    'submit_host': '',
-                    'version': '',
-                    'license_server': '',
-                    'start_time': '',
-                    'license_num': '1',
-                   }
+    def parse_feature_usage_line(self, line):
+        usage_dic = {
+                     'user': '',
+                     'execute_host': '',
+                     'submit_host': '',
+                     'version': '',
+                     'license_server': '',
+                     'start_time': '',
+                     'license_num': '1',
+                    }
 
         if re.match('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$', line):
-            myMatch = re.match('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$', line)
-            usageDic['user'] = myMatch.group(1)
-            usageDic['execute_host'] = myMatch.group(2)
-            displaySetting = myMatch.group(3)
+            my_match = re.match('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$', line)
+            usage_dic['user'] = my_match.group(1)
+            usage_dic['execute_host'] = my_match.group(2)
+            display_setting = my_match.group(3)
 
-            if displaySetting:
-                if re.match('^(.+):.+$', displaySetting):
-                    displayMatch = re.match('^(.+):.+$', displaySetting)
-                    usageDic['submit_host'] = displayMatch.group(1)
+            if display_setting:
+                if re.match('^(.+):.+$', display_setting):
+                    display_match = re.match('^(.+):.+$', display_setting)
+                    usage_dic['submit_host'] = display_match.group(1)
 
-            usageDic['version'] = myMatch.group(5)
-            usageDic['license_server'] = myMatch.group(6)
-            usageDic['start_time'] = myMatch.group(8)
+            usage_dic['version'] = my_match.group(5)
+            usage_dic['license_server'] = my_match.group(6)
+            usage_dic['start_time'] = my_match.group(8)
 
-            licenseNumSetting = myMatch.group(9)
+            license_num_setting = my_match.group(9)
 
-            if licenseNumSetting:
-                usageDic['license_num'] = myMatch.group(10)
+            if license_num_setting:
+                usage_dic['license_num'] = my_match.group(10)
 
-        return(usageDic)
+        return(usage_dic)
 
-    def getLicenseFeatureUsage(self):
+    def get_license_feature_usage(self):
         # Get license information.
-        licenseDic = license_common.getLicenseInfo(specifiedFeature=self.feature)
-        licenseFeatureUsageDicList = []
+        license_dic = license_common.get_license_info(specified_feature=self.feature)
+        license_feature_usage_dic_list = []
 
-        if self.server in licenseDic:
-            if 'feature' in licenseDic[self.server]:
-                if self.feature in licenseDic[self.server]['feature']:
-                    if 'in_use_info' in licenseDic[self.server]['feature'][self.feature]:
-                        for featureUsageLine in licenseDic[self.server]['feature'][self.feature]['in_use_info']:
-                            usageDic = self.parseFeatureUsageLine(featureUsageLine)
-                            licenseFeatureUsageDicList.append(usageDic)
+        if self.server in license_dic:
+            if 'feature' in license_dic[self.server]:
+                if self.feature in license_dic[self.server]['feature']:
+                    if 'in_use_info' in license_dic[self.server]['feature'][self.feature]:
+                        for feature_usage_line in license_dic[self.server]['feature'][self.feature]['in_use_info']:
+                            usage_dic = self.parse_feature_usage_line(feature_usage_line)
+                            license_feature_usage_dic_list.append(usage_dic)
 
-        return(licenseFeatureUsageDicList)
+        return(license_feature_usage_dic_list)
 
-    def initUI(self):
-        # Add mainTab
-        self.mainTab = QTabWidget(self)
-        self.setCentralWidget(self.mainTab)
+    def init_ui(self):
+        # Add main_tab
+        self.main_tab = QTabWidget(self)
+        self.setCentralWidget(self.main_tab)
 
-        self.mainFrame = QFrame(self.mainTab)
+        self.main_frame = QFrame(self.main_tab)
 
         # Grid
-        mainGrid = QGridLayout()
-        mainGrid.addWidget(self.mainFrame, 0, 0)
-        self.mainTab.setLayout(mainGrid)
+        main_grid = QGridLayout()
+        main_grid.addWidget(self.main_frame, 0, 0)
+        self.main_tab.setLayout(main_grid)
 
-        # Generate mainTable
-        self.genMainFrame()
+        # Generate main_table
+        self.gen_main_frame()
 
         # Show main window
         self.setWindowTitle('"' + str(self.feature) + '" usage on ' + str(self.server))
 
         self.resize(900, 400)
-        pyqt5_common.centerWindow(self)
+        pyqt5_common.center_window(self)
 
-    def genMainFrame(self):
-        self.mainTable = QTableWidget(self.mainFrame)
+    def gen_main_frame(self):
+        self.main_table = QTableWidget(self.main_frame)
 
         # Grid
-        mainFrameGrid = QGridLayout()
-        mainFrameGrid.addWidget(self.mainTable, 0, 0)
-        self.mainFrame.setLayout(mainFrameGrid)
+        main_frame_grid = QGridLayout()
+        main_frame_grid.addWidget(self.main_table, 0, 0)
+        self.main_frame.setLayout(main_frame_grid)
 
-        self.genMainTable()
+        self.gen_main_table()
 
-    def genMainTable(self):
-        self.mainTable.setShowGrid(True)
-        self.mainTable.setColumnCount(0)
-        self.mainTable.setColumnCount(6)
-        self.mainTable.setHorizontalHeaderLabels(['USER', 'SUBMIT_HOST', 'EXECUTE_HOST', 'LICENSE_NUM', 'LICENSE_VERSION', 'START_TIME'])
+    def gen_main_table(self):
+        self.main_table.setShowGrid(True)
+        self.main_table.setColumnCount(0)
+        self.main_table.setColumnCount(6)
+        self.main_table.setHorizontalHeaderLabels(['USER', 'SUBMIT_HOST', 'EXECUTE_HOST', 'LICENSE_NUM', 'LICENSE_VERSION', 'START_TIME'])
 
         # Set column width
-        self.mainTable.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.mainTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.mainTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.mainTable.setColumnWidth(3, 120)
-        self.mainTable.setColumnWidth(4, 140)
-        self.mainTable.setColumnWidth(5, 140)
+        self.main_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.main_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.main_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.main_table.setColumnWidth(3, 120)
+        self.main_table.setColumnWidth(4, 140)
+        self.main_table.setColumnWidth(5, 140)
 
         # Set item
-        self.mainTable.setRowCount(len(self.licenseFeatureUsageDicList))
+        self.main_table.setRowCount(len(self.license_feature_usage_dic_list))
 
-        titleList = ['user', 'submit_host', 'execute_host', 'license_num', 'version', 'start_time']
+        title_list = ['user', 'submit_host', 'execute_host', 'license_num', 'version', 'start_time']
 
-        for (row, licenseFeatureUsageDic) in enumerate(self.licenseFeatureUsageDicList):
-            for (column, title) in enumerate(titleList):
+        for (row, license_feature_usage_dic) in enumerate(self.license_feature_usage_dic_list):
+            for (column, title) in enumerate(title_list):
                 item = QTableWidgetItem()
-                item.setText(licenseFeatureUsageDic[title])
+                item.setText(license_feature_usage_dic[title])
 
-                if (column == 5) and license_common.checkLongRuntime(licenseFeatureUsageDic[title]):
+                if (column == 5) and license_common.check_long_runtime(license_feature_usage_dic[title]):
                     item.setForeground(QBrush(Qt.red))
 
-                self.mainTable.setItem(row, column, item)
+                self.main_table.setItem(row, column, item)
 
 
 ################
 # Main Process #
 ################
 def main():
-    (server, feature) = readArgs()
+    (server, feature) = read_args()
     app = QApplication(sys.argv)
-    myShow = ShowLicenseFreatureUsage(server, feature)
-    myShow.show()
+    my_show = ShowLicenseFreatureUsage(server, feature)
+    my_show.show()
     sys.exit(app.exec_())
 
 

@@ -21,17 +21,17 @@ CONFIGURATION:
 After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
 then update file config.py for your own configuration.
 
-    dbPath = ""
-    lmstatPath = ""
-    lmstatBsubCommand = ""
-    productFeatureRelationshipFile = ""
+    db_path = ""
+    lmstat_path = ""
+    lmstat_bsub_command = ""
+    product_feature_relationship_file = ""
 
-"dbPath" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
+"db_path" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
 you can re-point it into your own path.
-"lmstatPath" is used to specify lmstat path, it is for LICENSE tab.
-"lmstatBsubCommand" is used to specify LSF command for lmstat, for example, "bsub -q
+"lmstat_path" is used to specify lmstat path, it is for LICENSE tab.
+"lmstat_bsub_command" is used to specify LSF command for lmstat, for example, "bsub -q
 normal -Is". (It is forbidden to run lmstat on login server.)
-"productFeatureRelationshipFile" is used to get EDA license product-feature 
+"product_feature_relationship_file" is used to get EDA license product-feature 
 relationship from a yaml configuration file.
 
 
@@ -64,7 +64,7 @@ For more documents please see files under "docs".
 
 
 VERSION:
-22.6
+2022.6
 
 
 AUTHOR:

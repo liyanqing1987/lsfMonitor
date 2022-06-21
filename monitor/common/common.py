@@ -2,14 +2,14 @@ import re
 import subprocess
 
 
-def printError(message):
+def print_error(message):
     """
     Print error message with red color.
     """
     print('\033[1;31m' + str(message) + '\033[0m')
 
 
-def printWarning(message):
+def print_warning(message):
     """
     Print warning message with yellow color.
     """
@@ -26,16 +26,16 @@ def run_command(command, mystdin=subprocess.PIPE, mystdout=subprocess.PIPE, myst
     return(SP.returncode, stdout, stderr)
 
 
-def getJobRangeDic(jobList):
-    jobRangeDic = {}
+def get_job_range_dic(job_list):
+    job_range_dic = {}
 
-    for job in jobList:
-        jobOrg = job
+    for job in job_list:
+        job_org = job
         job = re.sub('\[.*', '', job)
-        jobHead = (int(int(job)/10000))*10000
-        jobTail = jobHead + 9999
-        jobRange = str(jobHead) + '_' + str(jobTail)
-        jobRangeDic.setdefault(jobRange, [])
-        jobRangeDic[jobRange].append(jobOrg)
+        job_head = (int(int(job)/10000))*10000
+        job_tail = job_head + 9999
+        job_range = str(job_head) + '_' + str(job_tail)
+        job_range_dic.setdefault(job_range, [])
+        job_range_dic[job_range].append(job_org)
 
-    return(jobRangeDic)
+    return(job_range_dic)

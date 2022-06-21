@@ -22,7 +22,7 @@ from common import pyqt5_common
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 
-def readArgs():
+def read_args():
     """
     Read in arguments.
     """
@@ -47,47 +47,47 @@ class ShowMessage(QMainWindow):
         self.title = title
         self.message = message
 
-        self.initUI()
+        self.init_ui()
 
-    def initUI(self):
-        # Add mainTab
-        self.mainTab = QTabWidget(self)
-        self.setCentralWidget(self.mainTab)
+    def init_ui(self):
+        # Add main_tab
+        self.main_tab = QTabWidget(self)
+        self.setCentralWidget(self.main_tab)
 
-        self.mainFrame = QFrame(self.mainTab)
+        self.main_frame = QFrame(self.main_tab)
 
         # Grid
-        mainGrid = QGridLayout()
-        mainGrid.addWidget(self.mainFrame, 0, 0)
-        self.mainTab.setLayout(mainGrid)
+        main_grid = QGridLayout()
+        main_grid.addWidget(self.main_frame, 0, 0)
+        self.main_tab.setLayout(main_grid)
 
-        # Generate mainTable
-        self.genMainFrame()
+        # Generate main_table
+        self.gen_main_frame()
 
         # Show main window
         self.setWindowTitle(self.title)
         self.resize(400, 50)
-        pyqt5_common.centerWindow(self)
+        pyqt5_common.center_window(self)
 
-    def genMainFrame(self):
-        self.messageLabel = QLabel(self.mainFrame)
-        self.messageLabel.setText(self.message)
-        self.messageLabel.setAlignment(Qt.AlignCenter)
+    def gen_main_frame(self):
+        self.message_label = QLabel(self.main_frame)
+        self.message_label.setText(self.message)
+        self.message_label.setAlignment(Qt.AlignCenter)
 
         # Grid
-        mainFrameGrid = QGridLayout()
-        mainFrameGrid.addWidget(self.messageLabel, 0, 0)
-        self.mainFrame.setLayout(mainFrameGrid)
+        main_frame_grid = QGridLayout()
+        main_frame_grid.addWidget(self.message_label, 0, 0)
+        self.main_frame.setLayout(main_frame_grid)
 
 
 ################
 # Main Process #
 ################
 def main():
-    (title, message) = readArgs()
+    (title, message) = read_args()
     app = QApplication(sys.argv)
-    myShowMessage = ShowMessage(title, message)
-    myShowMessage.show()
+    my_show_message = ShowMessage(title, message)
+    my_show_message.show()
     sys.exit(app.exec_())
 
 

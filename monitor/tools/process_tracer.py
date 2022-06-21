@@ -25,7 +25,7 @@ from common import pyqt5_common
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 
-def readArgs():
+def read_args():
     """
     Read in arguments.
     """
@@ -41,7 +41,7 @@ def readArgs():
     args = parser.parse_args()
 
     if (not args.job) and (not args.pid):
-        common.printError('*Error*: "--job" or "--pid" must be specified.')
+        common.print_error('*Error*: "--job" or "--pid" must be specified.')
         sys.exit(1)
 
     return(args.job, args.pid)
@@ -54,127 +54,127 @@ class ProcessTracer(QMainWindow):
         self.pid = pid
 
         self.preprocess()
-        self.initUI()
+        self.init_ui()
 
     def preprocess(self):
-        self.jobDic = {}
-        self.pidList = []
+        self.job_dic = {}
+        self.pid_list = []
 
         if self.job:
-            (self.jobDic, self.pidList) = self.checkJob(self.job)
+            (self.job_dic, self.pid_list) = self.check_job(self.job)
         elif self.pid:
-            self.pidList = self.checkPid(self.pid)
+            self.pid_list = self.check_pid(self.pid)
 
-    def checkJob(self, job):
+    def check_job(self, job):
         command = 'bjobs -UF ' + str(job)
-        jobDic = lsf_common.getLsfBjobsUfInfo(command)
+        job_dic = lsf_common.get_lsf_bjobs_uf_info(command)
 
-        if jobDic[job]['status'] != 'RUN':
-            common.printError('*Error*: Job "' + str(job) + '" is not running, cannot get process status.')
+        if job_dic[job]['status'] != 'RUN':
+            common.print_error('*Error*: Job "' + str(job) + '" is not running, cannot get process status.')
             sys.exit(1)
         else:
-            if not jobDic[job]['pids']:
-                common.printError('*Error*: Not find PIDs information for job "' + str(job) + '".')
+            if not job_dic[job]['pids']:
+                common.print_error('*Error*: Not find PIDs information for job "' + str(job) + '".')
                 sys.exit(1)
 
-        return(jobDic, jobDic[job]['pids'])
+        return(job_dic, job_dic[job]['pids'])
 
-    def checkPid(self, pid):
-        pidList = []
+    def check_pid(self, pid):
+        pid_list = []
         command = 'pstree -p ' + str(pid)
 
-        (returnCode, stdout, stderr) = common.run_command(command)
+        (return_code, stdout, stderr) = common.run_command(command)
 
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
 
             if re.findall('\((\d+)\)', line):
-                tmpPidList = re.findall('\((\d+)\)', line)
+                tmp_pid_list = re.findall('\((\d+)\)', line)
 
-                if tmpPidList:
-                    pidList.extend(tmpPidList)
+                if tmp_pid_list:
+                    pid_list.extend(tmp_pid_list)
 
-        if not pidList:
-            common.printError('*Error*: No valid pid was found.')
+        if not pid_list:
+            common.print_error('*Error*: No valid pid was found.')
             sys.exit(1)
 
-        return(pidList)
+        return(pid_list)
 
-    def getProcessInfo(self):
-        processDic = {
-                      'user': [],
-                      'pid': [],
-                      'cpu': [],
-                      'mem': [],
-                      'stat': [],
-                      'started': [],
-                      'command': [],
-                     }
+    def get_process_info(self):
+        process_dic = {
+                       'user': [],
+                       'pid': [],
+                       'cpu': [],
+                       'mem': [],
+                       'stat': [],
+                       'started': [],
+                       'command': [],
+                      }
 
-        command = 'ps -o ruser=userForLongName -o pid,%cpu,%mem,stat,start,command -f' + ','.join(self.pidList)
+        command = 'ps -o ruser=userForLongName -o pid,%cpu,%mem,stat,start,command -f' + ','.join(self.pid_list)
 
         if self.job:
-            bsubCommand = self.getBsubCommand()
-            command = str(bsubCommand) + " '" + str(command) + "'"
+            bsub_command = self.get_bsub_command()
+            command = str(bsub_command) + " '" + str(command) + "'"
 
-        (returnCode, stdout, stderr) = common.run_command(command)
+        (return_code, stdout, stderr) = common.run_command(command)
 
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
 
             if re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line):
-                myMatch = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
-                user = myMatch.group(1)
-                pid = myMatch.group(2)
-                cpu = myMatch.group(3)
-                mem = myMatch.group(4)
-                stat = myMatch.group(5)
-                started = myMatch.group(6)
-                command = myMatch.group(7)
+                my_match = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
+                user = my_match.group(1)
+                pid = my_match.group(2)
+                cpu = my_match.group(3)
+                mem = my_match.group(4)
+                stat = my_match.group(5)
+                started = my_match.group(6)
+                command = my_match.group(7)
 
-                processDic['user'].append(user)
-                processDic['pid'].append(pid)
-                processDic['cpu'].append(cpu)
-                processDic['mem'].append(mem)
-                processDic['stat'].append(stat)
-                processDic['started'].append(started)
-                processDic['command'].append(command)
+                process_dic['user'].append(user)
+                process_dic['pid'].append(pid)
+                process_dic['cpu'].append(cpu)
+                process_dic['mem'].append(mem)
+                process_dic['stat'].append(stat)
+                process_dic['started'].append(started)
+                process_dic['command'].append(command)
             else:
                 continue
 
-        return(processDic)
+        return(process_dic)
 
-    def getBsubCommand(self):
-        bsubCommand = 'bsub -Is '
-        queue = self.jobDic[self.job]['queue']
-        startedOn = self.jobDic[self.job]['startedOn']
+    def get_bsub_command(self):
+        bsub_command = 'bsub -Is '
+        queue = self.job_dic[self.job]['queue']
+        started_on = self.job_dic[self.job]['started_on']
 
         if queue:
-            bsubCommand = str(bsubCommand) + ' -q ' + str(queue)
+            bsub_command = str(bsub_command) + ' -q ' + str(queue)
 
-        if startedOn:
-            startedOnList = startedOn.split()
-            bsubCommand = str(bsubCommand) + ' -m ' + str(startedOnList[0])
+        if started_on:
+            started_on_list = started_on.split()
+            bsub_command = str(bsub_command) + ' -m ' + str(started_on_list[0])
 
-        return(bsubCommand)
+        return(bsub_command)
 
-    def initUI(self):
+    def init_ui(self):
         # Gen menubar
-        self.genMenubar()
+        self.gen_menubar()
 
-        # Add mainTab
-        self.mainTab = QTabWidget(self)
-        self.setCentralWidget(self.mainTab)
+        # Add main_tab
+        self.main_tab = QTabWidget(self)
+        self.setCentralWidget(self.main_tab)
 
-        self.mainFrame = QFrame(self.mainTab)
+        self.main_frame = QFrame(self.main_tab)
 
         # Grid
-        mainGrid = QGridLayout()
-        mainGrid.addWidget(self.mainFrame, 0, 0)
-        self.mainTab.setLayout(mainGrid)
+        main_grid = QGridLayout()
+        main_grid.addWidget(self.main_frame, 0, 0)
+        self.main_tab.setLayout(main_grid)
 
-        # Generate mainTable
-        self.genMainFrame()
+        # Generate main_table
+        self.gen_main_frame()
 
         # Show main window
         if self.job:
@@ -183,103 +183,103 @@ class ProcessTracer(QMainWindow):
             self.setWindowTitle('Process Tracer (pid:' + str(self.pid) + ')')
 
         self.resize(1200, 300)
-        pyqt5_common.centerWindow(self)
+        pyqt5_common.center_window(self)
 
-    def genMenubar(self):
+    def gen_menubar(self):
         menubar = self.menuBar()
 
         # File
-        exitAction = QAction('Exit', self)
-        exitAction.triggered.connect(qApp.quit)
+        exit_action = QAction('Exit', self)
+        exit_action.triggered.connect(qApp.quit)
 
-        fileMenu = menubar.addMenu('File')
-        fileMenu.addAction(exitAction)
+        file_menu = menubar.addMenu('File')
+        file_menu.addAction(exit_action)
 
         # Setup
-        freshAction = QAction('Fresh', self)
-        freshAction.triggered.connect(self.genMainTable)
-        self.periodicFreshTimer = QTimer(self)
-        periodicFreshAction = QAction('Periodic Fresh (1 min)', self, checkable=True)
-        periodicFreshAction.triggered.connect(self.periodicFresh)
+        fresh_action = QAction('Fresh', self)
+        fresh_action.triggered.connect(self.gen_main_table)
+        self.periodic_fresh_timer = QTimer(self)
+        periodic_fresh_action = QAction('Periodic Fresh (1 min)', self, checkable=True)
+        periodic_fresh_action.triggered.connect(self.periodic_fresh)
 
-        setupMenu = menubar.addMenu('Setup')
-        setupMenu.addAction(freshAction)
-        setupMenu.addAction(periodicFreshAction)
+        setup_menu = menubar.addMenu('Setup')
+        setup_menu.addAction(fresh_action)
+        setup_menu.addAction(periodic_fresh_action)
 
         # Help
-        aboutAction = QAction('About process_tracer', self)
-        aboutAction.triggered.connect(self.showAbout)
+        about_action = QAction('About process_tracer', self)
+        about_action.triggered.connect(self.show_about)
 
-        helpMenu = menubar.addMenu('Help')
-        helpMenu.addAction(aboutAction)
+        help_menu = menubar.addMenu('Help')
+        help_menu.addAction(about_action)
 
-    def periodicFresh(self, state):
+    def periodic_fresh(self, state):
         """
         Fresh the GUI every 60 seconds.
         """
         if state:
-            self.periodicFreshTimer.timeout.connect(self.genMainTable)
-            self.periodicFreshTimer.start(60000)
+            self.periodic_fresh_timer.timeout.connect(self.gen_main_table)
+            self.periodic_fresh_timer.start(60000)
         else:
-            self.periodicFreshTimer.stop()
+            self.periodic_fresh_timer.stop()
 
-    def showAbout(self):
+    def show_about(self):
         """
         Show process_tracer about information.
         """
-        aboutMessage = 'process_tracer is used to get process tree and trace pid status.'
-        QMessageBox.about(self, 'About process_tracer', aboutMessage)
+        about_message = 'process_tracer is used to get process tree and trace pid status.'
+        QMessageBox.about(self, 'About process_tracer', about_message)
 
-    def genMainFrame(self):
-        self.mainTable = QTableWidget(self.mainFrame)
+    def gen_main_frame(self):
+        self.main_table = QTableWidget(self.main_frame)
 
         # Grid
-        mainFrameGrid = QGridLayout()
-        mainFrameGrid.addWidget(self.mainTable, 0, 0)
-        self.mainFrame.setLayout(mainFrameGrid)
+        main_frame_grid = QGridLayout()
+        main_frame_grid.addWidget(self.main_table, 0, 0)
+        self.main_frame.setLayout(main_frame_grid)
 
-        self.genMainTable()
+        self.gen_main_table()
 
-    def genMainTable(self):
-        self.mainTable.setShowGrid(True)
-        self.mainTable.setColumnCount(0)
-        self.mainTable.setColumnCount(7)
-        self.mainTable.setHorizontalHeaderLabels(['USER', 'PID', '%CPU', '%MEM', 'STAT', 'STARTED', 'COMMAND'])
+    def gen_main_table(self):
+        self.main_table.setShowGrid(True)
+        self.main_table.setColumnCount(0)
+        self.main_table.setColumnCount(7)
+        self.main_table.setHorizontalHeaderLabels(['USER', 'PID', '%CPU', '%MEM', 'STAT', 'STARTED', 'COMMAND'])
 
         # Set column width
-        self.mainTable.setColumnWidth(1, 70)
-        self.mainTable.setColumnWidth(2, 60)
-        self.mainTable.setColumnWidth(3, 60)
-        self.mainTable.setColumnWidth(4, 60)
-        self.mainTable.setColumnWidth(5, 80)
-        self.mainTable.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        self.main_table.setColumnWidth(1, 70)
+        self.main_table.setColumnWidth(2, 60)
+        self.main_table.setColumnWidth(3, 60)
+        self.main_table.setColumnWidth(4, 60)
+        self.main_table.setColumnWidth(5, 80)
+        self.main_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
 
         # Set click behavior
-        self.mainTable.itemClicked.connect(self.mainTabCheckClick)
+        self.main_table.itemClicked.connect(self.main_tab_check_click)
 
         # Set item
-        self.processDic = self.getProcessInfo()
-        self.mainTable.setRowCount(len(self.processDic['pid']))
+        self.process_dic = self.get_process_info()
+        self.main_table.setRowCount(len(self.process_dic['pid']))
 
-        titleList = ['user', 'pid', 'cpu', 'mem', 'stat', 'started', 'command']
+        title_list = ['user', 'pid', 'cpu', 'mem', 'stat', 'started', 'command']
 
-        for (row, pid) in enumerate(self.processDic['pid']):
-            for (column, title) in enumerate(titleList):
+        for (row, pid) in enumerate(self.process_dic['pid']):
+            for (column, title) in enumerate(title_list):
                 item = QTableWidgetItem()
-                item.setText(self.processDic[title][row])
-                self.mainTable.setItem(row, column, item)
+                item.setText(self.process_dic[title][row])
+                self.main_table.setItem(row, column, item)
 
-    def mainTabCheckClick(self, item=None):
+    def main_tab_check_click(self, item=None):
         if item is not None:
             if item.column() == 1:
-                currentRow = self.mainTable.currentRow()
-                pid = self.mainTable.item(currentRow, 1).text()
+                current_row = self.main_table.currentRow()
+                pid = self.main_table.item(current_row, 1).text()
 
                 command = 'xterm -e "strace -tt -p ' + str(pid) + '"'
 
                 if self.job:
-                    bsubCommand = self.getBsubCommand()
-                    command = str(bsubCommand) + " '" + str(command) + "'"
+                    bsub_command = self.get_bsub_command()
+                    command = str(bsub_command) + " '" + str(command) + "'"
 
                 os.system(command)
 
@@ -288,10 +288,10 @@ class ProcessTracer(QMainWindow):
 # Main Process #
 ################
 def main():
-    (job, pid) = readArgs()
+    (job, pid) = read_args()
     app = QApplication(sys.argv)
-    myProcessTracer = ProcessTracer(job, pid)
-    myProcessTracer.show()
+    my_process_tracer = ProcessTracer(job, pid)
+    my_process_tracer.show()
     sys.exit(app.exec_())
 
 

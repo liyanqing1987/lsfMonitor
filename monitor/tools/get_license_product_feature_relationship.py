@@ -20,13 +20,13 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 CWD = os.getcwd()
 
 
-def readArgs():
+def read_args():
     """
     Read in arguments.
     """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-f', '--licenseFiles',
+    parser.add_argument('-f', '--license_files',
                         required=True,
                         nargs='+',
                         default=[],
@@ -35,45 +35,45 @@ def readArgs():
                         required=True,
                         nargs='+',
                         default=[],
-                        help='Required argument, specify vendor list, must be the same order of licenseFiles.')
-    parser.add_argument('-o', '--outputFile',
+                        help='Required argument, specify vendor list, must be the same order of license_files.')
+    parser.add_argument('-o', '--output_file',
                         default=str(CWD) + '/product_feature_relationship.yaml',
                         help='Output file, yaml format, default is "./product_feature_relationship.yaml"')
 
     args = parser.parse_args()
 
     # Check license file exists or not.
-    for licenseFile in args.licenseFiles:
-        if not os.path.exists(licenseFile):
-            print('*Error*: "' + str(licenseFile) + '": No such license file.')
+    for license_file in args.license_files:
+        if not os.path.exists(license_file):
+            print('*Error*: "' + str(license_file) + '": No such license file.')
             sys.exit(1)
 
     # Check vendor valid or not.
-    validVendorList = ['cadence', 'synopsys', 'mentor', 'xilinx']
+    valid_vendor_list = ['cadence', 'synopsys', 'mentor', 'xilinx']
 
     for vendor in args.vendors:
-        if vendor not in validVendorList:
+        if vendor not in valid_vendor_list:
             print('*Error*: "' + str(vendor) + '": invalid vendor name.')
             sys.exit(1)
 
     # Check output directory exists or not.
-    args.outputFile = os.path.abspath(args.outputFile)
-    outputFileDir = os.path.dirname(args.outputFile)
+    args.output_file = os.path.abspath(args.output_file)
+    output_file_dir = os.path.dirname(args.output_file)
 
-    if not os.path.exists(outputFileDir):
-        print('*Error*: "' + str(outputFileDir) + '": No such output file directory.')
+    if not os.path.exists(output_file_dir):
+        print('*Error*: "' + str(output_file_dir) + '": No such output file directory.')
         sys.exit(1)
 
-    return(args.licenseFiles, args.vendors, args.outputFile)
+    return(args.license_files, args.vendors, args.output_file)
 
 
 ################
 # Main Process #
 ################
 def main():
-    (licenseFileList, vendorList, outputFile) = readArgs()
-    myGetProductFeatureRelationship = license_common.GetProductFeatureRelationship(licenseFileList, vendorList, outputFile)
-    myGetProductFeatureRelationship.run()
+    (license_file_list, vendor_list, output_file) = read_args()
+    my_get_product_feature_relationship = license_common.Get_product_feature_relationship(license_file_list, vendor_list, output_file)
+    my_get_product_feature_relationship.run()
 
 
 if __name__ == '__main__':

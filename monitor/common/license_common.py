@@ -12,397 +12,397 @@ from conf import config
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 
-def getLicenseInfo(specifiedFeature=''):
+def get_license_info(specified_feature=''):
     """
     Get EDA liecnse feature usage and expires information.
     Save it into a dict.
     """
-    licenseDic = {}
-    licenseServer = ''
-    licenseFiles = ''
-    lmgrdStatus = ''
+    license_dic = {}
+    license_server = ''
+    license_files = ''
+    lmgrd_status = ''
     feature = ''
-    expiresMark = False
+    expires_mark = False
 
     # Get lmstat command.
-    if config.lmstatPath:
-        lmstat = str(config.lmstatPath) + '/lmstat'
+    if config.lmstat_path:
+        lmstat = str(config.lmstat_path) + '/lmstat'
 
         if os.path.exists(lmstat):
             command = str(lmstat) + ' -a -i'
     else:
         command = 'lmstat -a -i'
 
-    if specifiedFeature:
-        command = str(command) + ' ' + str(specifiedFeature)
+    if specified_feature:
+        command = str(command) + ' ' + str(specified_feature)
 
-    if 'lmstatBsubCommand' in os.environ:
-        command = str(os.environ['lmstatBsubCommand']) + ' "' + str(command) + '"'
-    elif config.lmstatBsubCommand:
-        command = str(config.lmstatBsubCommand) + ' "' + str(command) + '"'
+    if 'lmstat_bsub_command' in os.environ:
+        command = str(os.environ['lmstat_bsub_command']) + ' "' + str(command) + '"'
+    elif config.lmstat_bsub_command:
+        command = str(config.lmstat_bsub_command) + ' "' + str(command) + '"'
 
-    (returnCode, stdout, stderr) = common.run_command(command)
+    (return_code, stdout, stderr) = common.run_command(command)
 
     # Parse lmstat output message.
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
         if re.match('^License server status: (\S+)\s*$', line):
-            myMatch = re.match('^License server status: (\S+)\s*$', line)
-            licenseServer = myMatch.group(1)
-            licenseDic.setdefault(licenseServer, {})
-            expiresMark = False
+            my_match = re.match('^License server status: (\S+)\s*$', line)
+            license_server = my_match.group(1)
+            license_dic.setdefault(license_server, {})
+            expires_mark = False
         elif re.match('^\s*License file\(s\) on (\S+): (\S+):\s*$', line):
-            myMatch = re.match('^\s*License file\(s\) on (\S+): (\S+):\s*$', line)
-            licenseHost = re.sub('.*@', '', licenseServer)
+            my_match = re.match('^\s*License file\(s\) on (\S+): (\S+):\s*$', line)
+            license_host = re.sub('.*@', '', license_server)
 
-            if myMatch.group(1) != licenseHost:
-                print('*Error*: Not find "License file(s) ..." information for license server "' + str(licenseServer) + '".')
+            if my_match.group(1) != license_host:
+                print('*Error*: Not find "License file(s) ..." information for license server "' + str(license_server) + '".')
                 sys.exit(1)
 
-            licenseFiles = myMatch.group(2)
-            licenseFileList = licenseFiles.split(':')
-            licenseDic[licenseServer].setdefault('licenseFiles', licenseFileList)
+            license_files = my_match.group(2)
+            license_file_list = license_files.split(':')
+            license_dic[license_server].setdefault('license_files', license_file_list)
         elif re.search('license server UP', line):
-            lmgrdStatus = 'up'
-            licenseDic[licenseServer].setdefault('status', lmgrdStatus)
+            lmgrd_status = 'up'
+            license_dic[license_server].setdefault('status', lmgrd_status)
         elif re.search('license server DOWN', line):
-            lmgrdStatus = 'down'
-            licenseDic[licenseServer].setdefault('status', lmgrdStatus)
+            lmgrd_status = 'down'
+            license_dic[license_server].setdefault('status', lmgrd_status)
         elif re.match('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$', line):
-            myMatch = re.match('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$', line)
-            feature = myMatch.group(1)
-            issuedNum = myMatch.group(2)
-            inUseNum = myMatch.group(4)
+            my_match = re.match('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$', line)
+            feature = my_match.group(1)
+            issued_num = my_match.group(2)
+            in_use_num = my_match.group(4)
 
-            licenseDic[licenseServer].setdefault('feature', {})
-            licenseDic[licenseServer]['feature'].setdefault(feature, {})
-            licenseDic[licenseServer]['feature'][feature].setdefault('issued', issuedNum)
-            licenseDic[licenseServer]['feature'][feature].setdefault('in_use', inUseNum)
-            licenseDic[licenseServer]['feature'][feature].setdefault('in_use_info', [])
+            license_dic[license_server].setdefault('feature', {})
+            license_dic[license_server]['feature'].setdefault(feature, {})
+            license_dic[license_server]['feature'][feature].setdefault('issued', issued_num)
+            license_dic[license_server]['feature'][feature].setdefault('in_use', in_use_num)
+            license_dic[license_server]['feature'][feature].setdefault('in_use_info', [])
         elif re.search(', start ', line):
-            licenseDic[licenseServer]['feature'][feature]['in_use_info'].append(line)
+            license_dic[license_server]['feature'][feature]['in_use_info'].append(line)
         elif re.match('^Feature .* Expires\s*$', line):
-            expiresMark = True
-            licenseDic[licenseServer].setdefault('expires', {})
-        elif expiresMark and re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line):
-            myMatch = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line)
-            feature = myMatch.group(1)
-            version = myMatch.group(2)
-            license = myMatch.group(3)
-            vendor = myMatch.group(4)
-            expires = myMatch.group(5)
-            licenseDic[licenseServer]['expires'].setdefault(feature, [])
-            licenseDic[licenseServer]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
+            expires_mark = True
+            license_dic[license_server].setdefault('expires', {})
+        elif expires_mark and re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line):
+            my_match = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$', line)
+            feature = my_match.group(1)
+            version = my_match.group(2)
+            license = my_match.group(3)
+            vendor = my_match.group(4)
+            expires = my_match.group(5)
+            license_dic[license_server]['expires'].setdefault(feature, [])
+            license_dic[license_server]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
 
-    return(licenseDic)
+    return(license_dic)
 
 
-def filterLicenseFeature(licenseDic, features=[], servers=[], mode='ALL'):
+def filter_license_feature(license_dic, features=[], servers=[], mode='ALL'):
     """
-    Only keep specified features on licenseDic.
+    Only keep specified features on license_dic.
     """
-    newLicenseDic = {}
+    new_license_dic = {}
 
-    for (licenseServer, licenseServerDic) in licenseDic.items():
-        if (not servers) or ('ALL' in servers) or (licenseServer in servers):
-            licenseFiles = ' '.join(licenseServerDic['licenseFiles'])
-            licenseStatus = licenseServerDic['status']
+    for (license_server, license_server_dic) in license_dic.items():
+        if (not servers) or ('ALL' in servers) or (license_server in servers):
+            license_files = ' '.join(license_server_dic['license_files'])
+            license_status = license_server_dic['status']
 
             # Get filtered feature information. (filtered by feature and in_use mode)
-            newFeatureList = []
-            newFeatureDic = {}
-            maxFeatureLength = 0
+            new_feature_list = []
+            new_feature_dic = {}
+            max_feature_length = 0
 
-            if 'feature' in licenseServerDic.keys():
-                for (feature, featureDic) in licenseServerDic['feature'].items():
+            if 'feature' in license_server_dic.keys():
+                for (feature, feature_dic) in license_server_dic['feature'].items():
                     if feature in features:
-                        issuedNum = featureDic['issued']
-                        inUseNum = featureDic['in_use']
-                        inUseInfo = featureDic['in_use_info']
+                        issued_num = feature_dic['issued']
+                        in_use_num = feature_dic['in_use']
+                        in_use_info = feature_dic['in_use_info']
 
-                        if (mode == 'ALL') or ((mode == 'in_use') and (inUseNum != '0')):
-                            newFeatureList.append(feature)
-                            newFeatureDic.setdefault(feature, {'issued': issuedNum, 'in_use': inUseNum, 'in_use_info': inUseInfo})
+                        if (mode == 'ALL') or ((mode == 'in_use') and (in_use_num != '0')):
+                            new_feature_list.append(feature)
+                            new_feature_dic.setdefault(feature, {'issued': issued_num, 'in_use': in_use_num, 'in_use_info': in_use_info})
 
-                            if len(feature) > maxFeatureLength:
-                                maxFeatureLength = len(feature)
+                            if len(feature) > max_feature_length:
+                                max_feature_length = len(feature)
 
-            # Save newLicenseDic.
-            if newFeatureDic:
-                newLicenseDic.setdefault(licenseServer, {})
-                newLicenseDic[licenseServer].setdefault('licenseFiles', licenseFiles)
-                newLicenseDic[licenseServer].setdefault('status', licenseStatus)
+            # Save new_license_dic.
+            if new_feature_dic:
+                new_license_dic.setdefault(license_server, {})
+                new_license_dic[license_server].setdefault('license_files', license_files)
+                new_license_dic[license_server].setdefault('status', license_status)
 
-                if newFeatureDic:
-                    newLicenseDic[licenseServer].setdefault('feature', newFeatureDic)
-                    newLicenseDic[licenseServer].setdefault('maxFeatureLength', maxFeatureLength)
+                if new_feature_dic:
+                    new_license_dic[license_server].setdefault('feature', new_feature_dic)
+                    new_license_dic[license_server].setdefault('max_feature_length', max_feature_length)
 
                 # Save expires information.
-                if 'expires' in licenseServerDic.keys():
-                    for (feature, featureDicList) in licenseServerDic['expires'].items():
-                        if feature in newFeatureList:
-                            for featureDic in featureDicList:
-                                version = featureDic['version']
-                                license = featureDic['license']
-                                vendor = featureDic['vendor']
-                                expires = featureDic['expires']
+                if 'expires' in license_server_dic.keys():
+                    for (feature, feature_dic_list) in license_server_dic['expires'].items():
+                        if feature in new_feature_list:
+                            for feature_dic in feature_dic_list:
+                                version = feature_dic['version']
+                                license = feature_dic['license']
+                                vendor = feature_dic['vendor']
+                                expires = feature_dic['expires']
 
-                                newLicenseDic[licenseServer].setdefault('expires', {})
-                                newLicenseDic[licenseServer]['expires'].setdefault(feature, [])
-                                newLicenseDic[licenseServer]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
+                                new_license_dic[license_server].setdefault('expires', {})
+                                new_license_dic[license_server]['expires'].setdefault(feature, [])
+                                new_license_dic[license_server]['expires'][feature].append({'version': version, 'license': license, 'vendor': vendor, 'expires': expires})
 
-    return(newLicenseDic)
+    return(new_license_dic)
 
 
-def checkLongRuntime(startTime, secondThreshold=259200):
+def check_long_runtime(start_time, second_threshold=259200):
     """
-    Runtime is more than secondThreshold (default is 3 days), return True.
-    Runtime is less than secondThreshold (default is 3 days), return False.
+    Runtime is more than second_threshold (default is 3 days), return True.
+    Runtime is less than second_threshold (default is 3 days), return False.
     """
-    if startTime:
-        currentYear = datetime.date.today().year
-        startTime = str(currentYear) + ' ' + str(startTime)
-        startSeconds = int(time.mktime(time.strptime(startTime, '%Y %a %m/%d %H:%M')))
-        currentSeconds = int(time.time())
+    if start_time:
+        current_year = datetime.date.today().year
+        start_time = str(current_year) + ' ' + str(start_time)
+        start_seconds = int(time.mktime(time.strptime(start_time, '%Y %a %m/%d %H:%M')))
+        current_seconds = int(time.time())
 
-        if startSeconds > currentSeconds:
-            currentYear = int(datetime.date.today().year) - 1
-            startSeconds = int(time.mktime(time.strptime(startTime, '%Y %a %m/%d %H:%M')))
+        if start_seconds > current_seconds:
+            current_year = int(datetime.date.today().year) - 1
+            start_seconds = int(time.mktime(time.strptime(start_time, '%Y %a %m/%d %H:%M')))
 
-        if currentSeconds - startSeconds >= secondThreshold:
+        if current_seconds - start_seconds >= second_threshold:
             return(True)
 
     return(False)
 
 
-def checkExpireDate(expireDate, secondThreshold=1209600):
+def check_expire_date(expire_date, second_threshold=1209600):
     """
     Expired, return -1.
-    Expire in secondThreshold (default is 14 days), return day number.
-    Expire later than secondThreshold (default is 14 days), return 0.
+    Expire in second_threshold (default is 14 days), return day number.
+    Expire later than second_threshold (default is 14 days), return 0.
     """
-    if re.search('permanent', expireDate):
+    if re.search('permanent', expire_date):
         return(0)
     else:
-        expireSeconds = int(time.mktime(time.strptime(expireDate, '%d-%b-%Y')))
-        expireSeconds = expireSeconds + 86400
-        currentSeconds = int(time.time())
+        expire_seconds = int(time.mktime(time.strptime(expire_date, '%d-%b-%Y')))
+        expire_seconds = expire_seconds + 86400
+        current_seconds = int(time.time())
 
-        if expireSeconds < currentSeconds:
+        if expire_seconds < current_seconds:
             return(-1)
-        elif expireSeconds - currentSeconds <= secondThreshold:
-            return((expireSeconds - currentSeconds)//86400 + 1)
+        elif expire_seconds - current_seconds <= second_threshold:
+            return((expire_seconds - current_seconds)//86400 + 1)
         else:
             return(0)
 
 
 class GetProductFeatureRelationship():
-    def __init__(self, licenseFileList, vendorList, outputFile='./product_feature_relationship.yaml'):
+    def __init__(self, license_file_list, vendor_list, output_file='./product_feature_relationship.yaml'):
         """
-        licenseFileList : license files.
-        vendorList : same order with licenseFileList, vendor must be "cadence/synopsys/mentor".
-        outputFile : must be yaml format.
+        license_file_list : license files.
+        vendor_list : same order with license_file_list, vendor must be "cadence/synopsys/mentor".
+        output_file : must be yaml format.
         """
-        self.licenseFileList = licenseFileList
-        self.vendorList = vendorList
-        self.outputFile = outputFile
-        self.licenseDic = {}
+        self.license_file_list = license_file_list
+        self.vendor_list = vendor_list
+        self.output_file = output_file
+        self.license_dic = {}
 
-        # Check licenseFile exist or not.
-        for (i, licenseFile) in enumerate(self.licenseFileList):
-            if os.path.exists(licenseFile):
-                self.licenseFileList[i] = os.path.realpath(licenseFile)
+        # Check license_file exist or not.
+        for (i, license_file) in enumerate(self.license_file_list):
+            if os.path.exists(license_file):
+                self.license_file_list[i] = os.path.realpath(license_file)
             else:
-                print('*Error*: "' + str(licenseFile) + '": No such license file.')
+                print('*Error*: "' + str(license_file) + '": No such license file.')
                 sys.exit(1)
 
         # Check vendor setting.
-        validVendorList = ['cadence', 'synopsys', 'mentor', 'xilinx']
+        valid_vendor_list = ['cadence', 'synopsys', 'mentor', 'xilinx']
 
-        for vendor in self.vendorList:
-            if vendor not in validVendorList:
+        for vendor in self.vendor_list:
+            if vendor not in valid_vendor_list:
                 print('*Error*: "' + str(vendor) + '": Invalid vendor.')
                 sys.exit(1)
 
-        # Check self.licenseFileList and self.vendorList length.
-        if len(self.licenseFileList) != len(self.vendorList):
-            print('*Error*: length of licenseFileList is different with vendorList.')
+        # Check self.license_file_list and self.vendor_list length.
+        if len(self.license_file_list) != len(self.vendor_list):
+            print('*Error*: length of license_file_list is different with vendor_list.')
             sys.exit(1)
 
         # Check output file.
-        outputDir = os.path.dirname(self.outputFile)
+        output_dir = os.path.dirname(self.output_file)
 
-        if os.path.exists(outputDir):
-            self.outputFile = os.path.abspath(self.outputFile)
+        if os.path.exists(output_dir):
+            self.output_file = os.path.abspath(self.output_file)
         else:
-            print('*Error*: "' + str(self.outputFile) + '": No such output directory.')
+            print('*Error*: "' + str(self.output_file) + '": No such output directory.')
             sys.exit(1)
 
-    def parseCadenceLicenseFile(self, licenseFile):
+    def parse_cadence_license_file(self, license_file):
         """
-        Parse cadence license file, and save product-feature relationship into self.licenseDic.
+        Parse cadence license file, and save product-feature relationship into self.license_dic.
         """
-        self.licenseDic.setdefault('cadence', {})
-        productName = ''
+        self.license_dic.setdefault('cadence', {})
+        product_name = ''
         feature = ''
 
-        with open(licenseFile, 'r') as LF:
+        with open(license_file, 'r') as LF:
             for line in LF.readlines():
                 if re.match('^\s*#\s*Product\s+Name\s*:\s*(.+?)\s*$', line):
-                    myMatch = re.match('^\s*#\s*Product\s+Name\s*:\s*(.+?)\s*$', line)
-                    productName = myMatch.group(1)
-                    self.licenseDic['cadence'].setdefault(productName, [])
+                    my_match = re.match('^\s*#\s*Product\s+Name\s*:\s*(.+?)\s*$', line)
+                    product_name = my_match.group(1)
+                    self.license_dic['cadence'].setdefault(product_name, [])
                 elif re.match('^\s*#\s*Feature\s*:\s*(.+?)\s+.*$', line):
-                    myMatch = re.match('^\s*#\s*Feature\s*:\s*(.+?)\s+.*$', line)
-                    feature = myMatch.group(1)
+                    my_match = re.match('^\s*#\s*Feature\s*:\s*(.+?)\s+.*$', line)
+                    feature = my_match.group(1)
 
-                    if productName:
-                        if feature not in self.licenseDic['cadence'][productName]:
-                            self.licenseDic['cadence'][productName].append(feature)
+                    if product_name:
+                        if feature not in self.license_dic['cadence'][product_name]:
+                            self.license_dic['cadence'][product_name].append(feature)
                     else:
                         print('*Warning*: Not find product name for feature "' + str(feature) + '".')
 
-    def parseSynopsysLicenseFile(self, licenseFile):
+    def parse_synopsys_license_file(self, license_file):
         """
-        Parse synopsys license file, and save product-feature relationship into self.licenseDic.
+        Parse synopsys license file, and save product-feature relationship into self.license_dic.
         """
-        self.licenseDic.setdefault('synopsys', {})
-        productDic = {}
-        productId = ''
-        productName = ''
+        self.license_dic.setdefault('synopsys', {})
+        product_dic = {}
+        product_id = ''
+        product_name = ''
         feature = ''
-        productMark = 0
+        product_mark = 0
 
-        with open(licenseFile, 'r') as LF:
+        with open(license_file, 'r') as LF:
             for line in LF.readlines():
-                if (productMark == 0) and re.match('^\s*#\s*Product\s*:.*$', line):
-                    productMark = 1
-                elif (productMark == 1) and re.match('^\s*#\s*----.*$', line):
-                    productMark = 2
-                elif (productMark == 2) and re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line):
-                    myMatch = re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line)
-                    productId = myMatch.group(1)
-                    productName = myMatch.group(2)
-                    self.licenseDic['synopsys'].setdefault(productName, [])
-                    productDic.setdefault(productId, productName)
-                elif (productMark == 2) and re.match('^\s*#\s*----.*$', line):
-                    productMark = 0
-                elif (productMark == 0) and re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line):
-                    myMatch = re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line)
-                    feature = myMatch.group(2)
-                elif (productMark == 0) and re.match('^.*SN=RK:(.+?):.*$', line):
-                    myMatch = re.match('^.*SN=RK:(.+?):.*$', line)
-                    currentProductId = myMatch.group(1)
+                if (product_mark == 0) and re.match('^\s*#\s*Product\s*:.*$', line):
+                    product_mark = 1
+                elif (product_mark == 1) and re.match('^\s*#\s*----.*$', line):
+                    product_mark = 2
+                elif (product_mark == 2) and re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line):
+                    my_match = re.match('^\s*#\s*(.+?):\S+\s+(.+?)\s+0000.*$', line)
+                    product_id = my_match.group(1)
+                    product_name = my_match.group(2)
+                    self.license_dic['synopsys'].setdefault(product_name, [])
+                    product_dic.setdefault(product_id, product_name)
+                elif (product_mark == 2) and re.match('^\s*#\s*----.*$', line):
+                    product_mark = 0
+                elif (product_mark == 0) and re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line):
+                    my_match = re.match('^\s*(FEATURE|INCREMENT)\s+(\S+)\s+.*$', line)
+                    feature = my_match.group(2)
+                elif (product_mark == 0) and re.match('^.*SN=RK:(.+?):.*$', line):
+                    my_match = re.match('^.*SN=RK:(.+?):.*$', line)
+                    current_product_id = my_match.group(1)
 
                     if feature:
-                        if currentProductId in productDic:
-                            if feature not in self.licenseDic['synopsys'][productDic[currentProductId]]:
-                                self.licenseDic['synopsys'][productDic[currentProductId]].append(feature)
+                        if current_product_id in product_dic:
+                            if feature not in self.license_dic['synopsys'][product_dic[current_product_id]]:
+                                self.license_dic['synopsys'][product_dic[current_product_id]].append(feature)
                         else:
                             print('*Warning*: Not find product name for feature "' + str(feature) + '".')
 
-    def parseMentorLicenseFile(self, licenseFile):
+    def parse_mentor_license_file(self, license_file):
         """
-        Parse mentor license file, and save product-feature relationship into self.licenseDic.
+        Parse mentor license file, and save product-feature relationship into self.license_dic.
         """
-        self.licenseDic.setdefault('mentor', {})
-        productName = ''
+        self.license_dic.setdefault('mentor', {})
+        product_name = ''
         feature = ''
 
-        with open(licenseFile, 'r', encoding='ISO-8859-1') as LF:
+        with open(license_file, 'r', encoding='ISO-8859-1') as LF:
             for line in LF.readlines():
                 if re.match(r'^\s*#\s*(\d+)\s*(.+?)\s+\d+\s*$', line):
-                    myMatch = re.match(r'^\s*#\s*(\d+)\s*(.+?)\s+\d+\s*$', line)
-                    productName = myMatch.group(2)
-                    self.licenseDic['mentor'].setdefault(productName, [])
+                    my_match = re.match(r'^\s*#\s*(\d+)\s*(.+?)\s+\d+\s*$', line)
+                    product_name = my_match.group(2)
+                    self.license_dic['mentor'].setdefault(product_name, [])
                 elif re.match(r'^\s*#\s*(\S+)\s*(20\S+)\s*(\S+)\s*(\S+)\s*\d+\s*$', line):
-                    myMatch = re.match(r'^\s*#\s*(\S+)\s*(20\S+)\s*(\S+)\s*(\S+)\s*\d+\s*$', line)
-                    feature = myMatch.group(1)
+                    my_match = re.match(r'^\s*#\s*(\S+)\s*(20\S+)\s*(\S+)\s*(\S+)\s*\d+\s*$', line)
+                    feature = my_match.group(1)
 
-                    if productName:
-                        if feature not in self.licenseDic['mentor'][productName]:
-                            self.licenseDic['mentor'][productName].append(feature)
+                    if product_name:
+                        if feature not in self.license_dic['mentor'][product_name]:
+                            self.license_dic['mentor'][product_name].append(feature)
                     else:
                         print('*Warning*: Not find product name for feature "' + str(feature) + '".')
 
-    def parseXilinxLicenseFile(self, licenseFile):
+    def parse_xilinx_license_file(self, license_file):
         """
-        Parse xilinx license file, and save product-feature relationship into self.licenseDic.
+        Parse xilinx license file, and save product-feature relationship into self.license_dic.
         """
-        self.licenseDic.setdefault('xilinx', {})
-        lineString = ''
-        productName = ''
+        self.license_dic.setdefault('xilinx', {})
+        line_string = ''
+        product_name = ''
         feature = ''
-        featureList = []
-        packageFeatureList = []
+        feature_list = []
+        package_feature_list = []
 
-        with open(licenseFile, 'r') as LF:
+        with open(license_file, 'r') as LF:
             for line in LF.readlines():
                 line = line.strip()
                 line = re.sub('\\\s*$', '', line)
 
                 if re.match('^\s*#.*$', line) or re.match('^\s*$', line):
-                    if lineString:
-                        if re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', lineString):
-                            myMatch = re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', lineString)
-                            productName = myMatch.group(1)
-                            featureString = myMatch.group(2)
-                            featureList = featureString.split()
-                            packageFeatureList.extend(featureList)
-                            self.licenseDic['xilinx'].setdefault(productName, featureList)
-                        elif re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString):
-                            myMatch = re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', lineString)
-                            feature = myMatch.group(2)
-                            featureList.append(feature)
+                    if line_string:
+                        if re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', line_string):
+                            my_match = re.match('^\s*PACKAGE\s+(.+?)\s+.*COMPONENTS="(.+?)".*$', line_string)
+                            product_name = my_match.group(1)
+                            feature_string = my_match.group(2)
+                            feature_list = feature_string.split()
+                            package_feature_list.extend(feature_list)
+                            self.license_dic['xilinx'].setdefault(product_name, feature_list)
+                        elif re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', line_string):
+                            my_match = re.match('^\s*(FEATURE|INCREMENT)\s+(.+?)\s+.*$', line_string)
+                            feature = my_match.group(2)
+                            feature_list.append(feature)
 
-                    lineString = ''
+                    line_string = ''
                 elif re.match('^FEATURE\s+.*$', line) or re.match('^INCREMENT\s+.*$', line) or re.match('^PACKAGE\s+.*$', line):
-                    lineString = line
+                    line_string = line
                 else:
-                    if lineString:
-                        lineString = str(lineString) + str(line)
+                    if line_string:
+                        line_string = str(line_string) + str(line)
 
-            for feature in featureList:
-                if feature not in packageFeatureList:
-                    if feature in self.licenseDic['xilinx'].keys():
-                        self.licenseDic['xilinx'][feature].append(feature)
+            for feature in feature_list:
+                if feature not in package_feature_list:
+                    if feature in self.license_dic['xilinx'].keys():
+                        self.license_dic['xilinx'][feature].append(feature)
                     else:
                         print('*Warning*: Not find product name for feature "' + str(feature) + '".')
 
-    def parseLicenseFile(self):
+    def parse_license_file(self):
         """
         Parse license file to get product-feature relationship.
         """
-        for (i, licenseFile) in enumerate(self.licenseFileList):
-            vendor = self.vendorList[i]
+        for (i, license_file) in enumerate(self.license_file_list):
+            vendor = self.vendor_list[i]
 
-            print('>>> Parse ' + str(vendor) + ' license file "' + str(licenseFile) + '".')
+            print('>>> Parse ' + str(vendor) + ' license file "' + str(license_file) + '".')
 
             if vendor == 'cadence':
-                self.parseCadenceLicenseFile(licenseFile)
+                self.parse_cadence_license_file(license_file)
             elif vendor == 'synopsys':
-                self.parseSynopsysLicenseFile(licenseFile)
+                self.parse_synopsys_license_file(license_file)
             elif vendor == 'mentor':
-                self.parseMentorLicenseFile(licenseFile)
+                self.parse_mentor_license_file(license_file)
             elif vendor == 'xilinx':
-                self.parseXilinxLicenseFile(licenseFile)
+                self.parse_xilinx_license_file(license_file)
 
-        return(self.licenseDic)
+        return(self.license_dic)
 
-    def writeOutputFile(self):
+    def write_output_file(self):
         """
-        Write self.outputFile with yaml format.
+        Write self.output_file with yaml format.
         """
         print('')
-        print('* Write output file "' + str(self.outputFile) + '".')
+        print('* Write output file "' + str(self.output_file) + '".')
 
-        with open(self.outputFile, 'w', encoding='utf-8') as OF:
-            yaml.dump(self.licenseDic, OF)
+        with open(self.output_file, 'w', encoding='utf-8') as OF:
+            yaml.dump(self.license_dic, OF)
 
     def run(self):
         """
         Main function of class GetProductFeatureRelationship.
         """
-        self.parseLicenseFile()
-        self.writeOutputFile()
+        self.parse_license_file()
+        self.write_output_file()
