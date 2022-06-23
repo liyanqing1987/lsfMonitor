@@ -72,7 +72,7 @@ def read_args():
 ################
 def main():
     (license_file_list, vendor_list, output_file) = read_args()
-    my_get_product_feature_relationship = license_common.Get_product_feature_relationship(license_file_list, vendor_list, output_file)
+    my_get_product_feature_relationship = license_common.GetProductFeatureRelationship(license_file_list, vendor_list, output_file)
     my_get_product_feature_relationship.run()
 
 
