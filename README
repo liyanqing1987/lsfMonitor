@@ -1,7 +1,7 @@
 Thanks for downloading lsfMonitor.
 
-lsfMonitor is an open source software for LSF data-collection,
-data-analysis and information-display.
+lsfMonitor is an open source software for LSF information data-collection,
+data-analysis and data-display.
 
 
 The tool use flow is as below:
@@ -24,15 +24,12 @@ then update file config.py for your own configuration.
     db_path = ""
     lmstat_path = ""
     lmstat_bsub_command = ""
-    product_feature_relationship_file = ""
 
 "db_path" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
 you can re-point it into your own path.
 "lmstat_path" is used to specify lmstat path, it is for LICENSE tab.
 "lmstat_bsub_command" is used to specify LSF command for lmstat, for example, "bsub -q
 normal -Is". (It is forbidden to run lmstat on login server.)
-"product_feature_relationship_file" is used to get EDA license product-feature 
-relationship from a yaml configuration file.
 
 
 SAMPLING:
@@ -61,10 +58,6 @@ For more details please see file "LICENSE".
 
 DOC:
 For more documents please see files under "docs".
-
-
-VERSION:
-2022.6
 
 
 AUTHOR:

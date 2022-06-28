@@ -105,7 +105,6 @@ def gen_config_file():
     else:
         try:
             db_path = str(CWD) + '/db'
-            default_product_feature_relationship_file = str(CWD) + '/monitor/conf/product_feature_relationship.yaml'
 
             with open(config_file, 'w') as CF:
                 CF.write('''# Specify the database directory.
@@ -116,9 +115,6 @@ lmstat_path = ""
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
 lmstat_bsub_command = ""
-
-# Specify EDA license product-feature relationship file.
-product_feature_relationship_file = "''' + str(default_product_feature_relationship_file) + '''"
 ''')
 
             os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)

@@ -6,7 +6,6 @@ import sys
 import stat
 import copy
 import time
-import yaml
 import getpass
 import datetime
 import argparse
@@ -160,15 +159,6 @@ class MainWindow(QMainWindow):
         if not self.license_dic:
             print('*Warning*: Not find any valid license information.')
 
-        # Get liense product-feature relationshi directory.
-        print('* Loading license product-feature relationship, please wait a moment ...')
-        self.product_feature_relationship_dic = {}
-
-        if os.path.exists(config.product_feature_relationship_file):
-            self.product_feature_relationship_dic = yaml.load(open(config.product_feature_relationship_file), Loader=yaml.FullLoader)
-        else:
-            print('*Warning*: product feature relationshi file "' + str(config.product_feature_relationship_file) + '" is missing.')
-
         # Generate the sub-tabs
         self.gen_job_tab()
         self.gen_jobs_tab()
@@ -294,31 +284,17 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = ''
-        version_mark = False
-        readme_file = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/README'
-
-        with open(readme_file, 'r') as RF:
-            for line in RF.readlines():
-                if version_mark:
-                    version = line.strip()
-                    break
-                else:
-                    if re.match('^\s*VERSION:\s*$', line):
-                        version_mark = True
-
+        version = '2022.6'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
         """
         Show lsfMonitor about information.
         """
-        readme_file = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/README'
-        about_message = ''
+        about_message = """
+Thanks for downloading lsfMonitor.
 
-        with open(readme_file, 'r') as RF:
-            for line in RF.readlines():
-                about_message = str(about_message) + str(line)
+lsfMonitor is an open source software for LSF information data-collection, data-analysis and data-display."""
 
         QMessageBox.about(self, 'lsfMonitor', about_message)
 
@@ -794,10 +770,14 @@ class MainWindow(QMainWindow):
         self.jobs_tab_table.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command'])
 
         self.jobs_tab_table.setColumnWidth(0, 70)
-        self.jobs_tab_table.setColumnWidth(2, 70)
-        self.jobs_tab_table.setColumnWidth(7, 80)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.jobs_tab_table.setColumnWidth(2, 60)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.jobs_tab_table.setColumnWidth(7, 40)
         self.jobs_tab_table.setColumnWidth(8, 80)
-        self.jobs_tab_table.setColumnWidth(9, 80)
+        self.jobs_tab_table.setColumnWidth(9, 70)
         self.jobs_tab_table.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
 
         # Get specified user related jobs.
@@ -1964,24 +1944,6 @@ class MainWindow(QMainWindow):
 
         self.license_tab_license_server_combo.currentIndexChanged.connect(self.filter_license_feature)
 
-        # License Vendor
-        license_tab_license_vendor_label = QLabel('     Vendor', self.license_tab_frame0)
-        license_tab_license_vendor_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_license_vendor_combo = QComboBox(self.license_tab_frame0)
-        self.license_tab_license_vendor_combo.setMaximumWidth(100)
-        self.set_license_tab_license_vendor_combo()
-
-        self.license_tab_license_vendor_combo.activated.connect(self.update_license_tab_license_product_combo)
-
-        # License Product
-        license_tab_license_product_label = QLabel('    Product', self.license_tab_frame0)
-        license_tab_license_product_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_license_product_combo = QComboBox(self.license_tab_frame0)
-        self.license_tab_license_product_combo.setMaximumWidth(100)
-        self.set_license_tab_license_product_combo()
-
-        self.license_tab_license_product_combo.activated.connect(self.filter_license_feature)
-
         # License Feature
         license_tab_license_feature_label = QLabel('    Feature', self.license_tab_frame0)
         license_tab_license_feature_label.setStyleSheet("font-weight: bold;")
@@ -1990,6 +1952,9 @@ class MainWindow(QMainWindow):
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
 
+        # Empty label
+        license_tab_empty_label = QLabel('')
+
         # self.license_tab_frame0 - Grid
         license_tab_frame0_grid = QGridLayout()
 
@@ -1997,25 +1962,15 @@ class MainWindow(QMainWindow):
         license_tab_frame0_grid.addWidget(self.license_tab_show_combo, 0, 1)
         license_tab_frame0_grid.addWidget(license_tab_license_server_label, 0, 2)
         license_tab_frame0_grid.addWidget(self.license_tab_license_server_combo, 0, 3)
-        license_tab_frame0_grid.addWidget(license_tab_license_vendor_label, 0, 4)
-        license_tab_frame0_grid.addWidget(self.license_tab_license_vendor_combo, 0, 5)
-        license_tab_frame0_grid.addWidget(license_tab_license_product_label, 0, 6)
-        license_tab_frame0_grid.addWidget(self.license_tab_license_product_combo, 0, 7)
-        license_tab_frame0_grid.addWidget(license_tab_license_feature_label, 0, 8)
-        license_tab_frame0_grid.addWidget(self.license_tab_license_feature_line, 0, 9)
-        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 10)
+        license_tab_frame0_grid.addWidget(license_tab_license_feature_label, 0, 4)
+        license_tab_frame0_grid.addWidget(self.license_tab_license_feature_line, 0, 5)
+        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 6)
+        license_tab_frame0_grid.addWidget(license_tab_empty_label, 0, 7)
 
-        license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
-        license_tab_frame0_grid.setColumnStretch(2, 1)
         license_tab_frame0_grid.setColumnStretch(3, 1)
-        license_tab_frame0_grid.setColumnStretch(4, 1)
         license_tab_frame0_grid.setColumnStretch(5, 1)
-        license_tab_frame0_grid.setColumnStretch(6, 1)
-        license_tab_frame0_grid.setColumnStretch(7, 1)
-        license_tab_frame0_grid.setColumnStretch(8, 1)
-        license_tab_frame0_grid.setColumnStretch(9, 3)
-        license_tab_frame0_grid.setColumnStretch(10, 1)
+        license_tab_frame0_grid.setColumnStretch(7, 3)
 
         self.license_tab_frame0.setLayout(license_tab_frame0_grid)
 
@@ -2033,36 +1988,6 @@ class MainWindow(QMainWindow):
         for license_server in license_server_list:
             self.license_tab_license_server_combo.addItem(license_server)
 
-    def set_license_tab_license_vendor_combo(self):
-        self.license_tab_license_vendor_combo.clear()
-
-        license_vendor_list = list(self.product_feature_relationship_dic.keys())
-        license_vendor_list.insert(0, 'ALL')
-
-        for license_vendor in license_vendor_list:
-            self.license_tab_license_vendor_combo.addItem(license_vendor)
-
-    def set_license_tab_license_product_combo(self):
-        self.license_tab_license_product_combo.clear()
-
-        license_product_list = []
-        current_vendor = self.license_tab_license_vendor_combo.currentText().strip()
-
-        for vendor in self.product_feature_relationship_dic.keys():
-            if (current_vendor == 'ALL') or (vendor == current_vendor):
-                for product in self.product_feature_relationship_dic[vendor].keys():
-                    if product not in license_product_list:
-                        license_product_list.append(product)
-
-        license_product_list.insert(0, 'ALL')
-
-        for license_product in license_product_list:
-            self.license_tab_license_product_combo.addItem(license_product)
-
-    def update_license_tab_license_product_combo(self):
-        self.set_license_tab_license_product_combo()
-        self.filter_license_feature()
-
     def filter_license_feature(self):
         # Get license information.
         print('* Loading license information, please wait a moment ...')
@@ -2075,21 +2000,7 @@ class MainWindow(QMainWindow):
             print('*Warning*: Not find any valid license information.')
 
         if self.license_dic:
-            # Get specified Vendor-Product license features.
-            vendor_product_feature_list = []
-            current_vendor = self.license_tab_license_vendor_combo.currentText().strip()
-            current_product = self.license_tab_license_product_combo.currentText().strip()
-
-            if not ((current_vendor == 'ALL') and (current_product == 'ALL')):
-                for vendor in self.product_feature_relationship_dic.keys():
-                    if (current_vendor == 'ALL') or (vendor == current_vendor):
-                        for product in self.product_feature_relationship_dic[vendor].keys():
-                            if (current_product == 'ALL') or (product == current_product):
-                                for feature in self.product_feature_relationship_dic[vendor][product]:
-                                    if feature not in vendor_product_feature_list:
-                                        vendor_product_feature_list.append(feature)
-
-            # Fileter license feature with Server/Vendor/Product.
+            # Fileter license feature with Server selection.
             filtered_license_feature_list = []
             current_server = self.license_tab_license_server_combo.currentText().strip()
 
@@ -2098,12 +2009,7 @@ class MainWindow(QMainWindow):
                     if 'feature' in license_server_dic:
                         for feature in license_server_dic['feature']:
                             if feature not in filtered_license_feature_list:
-                                if vendor_product_feature_list:
-                                    if feature in vendor_product_feature_list:
-                                        filtered_license_feature_list.append(feature)
-                                else:
-                                    if (current_vendor == 'ALL') and (current_product == 'ALL'):
-                                        filtered_license_feature_list.append(feature)
+                                filtered_license_feature_list.append(feature)
 
             # Filter license feature with Feature line.
             expected_license_feature_list = []
@@ -2300,7 +2206,7 @@ class ProcessTracer(QThread):
 
 class ShowLicenseFeatureUsage(QThread):
     """
-    Start tool process_tracer.py to trace job process.
+    Start tool show_license_feature_usage.py to show license feature usage information.
     """
     def __init__(self, server, feature):
         super(ShowLicenseFeatureUsage, self).__init__()
