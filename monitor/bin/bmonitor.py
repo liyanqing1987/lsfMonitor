@@ -369,6 +369,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         job_tab_job_label.setText('Job')
 
         self.job_tab_job_line = QLineEdit()
+        self.job_tab_job_line.returnPressed.connect(self.check_job)
 
         job_tab_check_button = QPushButton('Check', self.job_tab_frame0)
         job_tab_check_button.clicked.connect(self.check_job)
@@ -733,6 +734,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         jobs_tab_user_label = QLabel('       User', self.jobs_tab_frame0)
         jobs_tab_user_label.setStyleSheet("font-weight: bold;")
         self.jobs_tab_user_line = QLineEdit()
+        self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
         self.jobs_tab_status_combo.currentIndexChanged.connect(self.gen_jobs_tab_table)
         self.jobs_tab_queue_combo.currentIndexChanged.connect(self.gen_jobs_tab_table)
@@ -1948,6 +1950,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_license_feature_label = QLabel('    Feature', self.license_tab_frame0)
         license_tab_license_feature_label.setStyleSheet("font-weight: bold;")
         self.license_tab_license_feature_line = QLineEdit()
+        self.license_tab_license_feature_line.returnPressed.connect(self.filter_license_feature)
 
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
