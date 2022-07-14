@@ -7,7 +7,6 @@
 # Description :
 ################################
 import os
-import re
 import sys
 import argparse
 
@@ -16,9 +15,10 @@ from PyQt5.QtGui import QBrush
 from PyQt5.QtCore import Qt
 
 if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
+    os.environ['LSFMONITOR_INSTALL_PATH'] = '/ic/software/cad_tools/it/lsfMonitor'
 
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+from conf import config
 from common import pyqt5_common
 from common import license_common
 
@@ -35,6 +35,10 @@ def read_args():
                         required=True,
                         default='',
                         help='Specify license server.')
+    parser.add_argument('-v', '--vendor',
+                        required=True,
+                        default='',
+                        help='Specify vendor daemon.')
     parser.add_argument('-f', '--feature',
                         required=True,
                         default='',
@@ -42,62 +46,33 @@ def read_args():
 
     args = parser.parse_args()
 
-    return(args.server, args.feature)
+    return(args.server, args.vendor, args.feature)
 
 
 class ShowLicenseFreatureUsage(QMainWindow):
-    def __init__(self, server, feature):
+    def __init__(self, server, vendor, feature):
         super().__init__()
         self.server = server
+        self.vendor = vendor
         self.feature = feature
 
         self.license_feature_usage_dic_list = self.get_license_feature_usage()
         self.init_ui()
 
-    def parse_feature_usage_line(self, line):
-        usage_dic = {
-                     'user': '',
-                     'execute_host': '',
-                     'submit_host': '',
-                     'version': '',
-                     'license_server': '',
-                     'start_time': '',
-                     'license_num': '1',
-                    }
-
-        if re.match('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$', line):
-            my_match = re.match('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$', line)
-            usage_dic['user'] = my_match.group(1)
-            usage_dic['execute_host'] = my_match.group(2)
-            display_setting = my_match.group(3)
-
-            if display_setting:
-                if re.match('^(.+):.+$', display_setting):
-                    display_match = re.match('^(.+):.+$', display_setting)
-                    usage_dic['submit_host'] = display_match.group(1)
-
-            usage_dic['version'] = my_match.group(5)
-            usage_dic['license_server'] = my_match.group(6)
-            usage_dic['start_time'] = my_match.group(8)
-
-            license_num_setting = my_match.group(9)
-
-            if license_num_setting:
-                usage_dic['license_num'] = my_match.group(10)
-
-        return(usage_dic)
-
     def get_license_feature_usage(self):
-        # Get license information.
-        license_dic = license_common.get_license_info(specified_feature=self.feature)
+        # Get self.license_dic.
+        if config.lmstat_path:
+            os.environ['PATH'] = str(config.lmstat_path) + ':' + str(os.environ['PATH'])
+
+        my_get_license_info = license_common.GetLicenseInfo(specified_feature=self.feature, bsub_command=config.lmstat_bsub_command)
+        license_dic = my_get_license_info.get_license_info()
         license_feature_usage_dic_list = []
 
         if self.server in license_dic:
-            if 'feature' in license_dic[self.server]:
-                if self.feature in license_dic[self.server]['feature']:
-                    if 'in_use_info' in license_dic[self.server]['feature'][self.feature]:
-                        for feature_usage_line in license_dic[self.server]['feature'][self.feature]['in_use_info']:
-                            usage_dic = self.parse_feature_usage_line(feature_usage_line)
+            if self.vendor in license_dic[self.server]['vendor_daemon']:
+                if self.feature in license_dic[self.server]['vendor_daemon'][self.vendor]['feature']:
+                    if 'in_use_info' in license_dic[self.server]['vendor_daemon'][self.vendor]['feature'][self.feature]:
+                        for usage_dic in license_dic[self.server]['vendor_daemon'][self.vendor]['feature'][self.feature]['in_use_info']:
                             license_feature_usage_dic_list.append(usage_dic)
 
         return(license_feature_usage_dic_list)
@@ -118,7 +93,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
         self.gen_main_frame()
 
         # Show main window
-        self.setWindowTitle('"' + str(self.feature) + '" usage on ' + str(self.server))
+        self.setWindowTitle('"' + str(self.feature) + '" usage on ' + str(self.server) + '/' + str(self.vendor))
 
         self.resize(900, 400)
         pyqt5_common.center_window(self)
@@ -167,9 +142,9 @@ class ShowLicenseFreatureUsage(QMainWindow):
 # Main Process #
 ################
 def main():
-    (server, feature) = read_args()
+    (server, vendor, feature) = read_args()
     app = QApplication(sys.argv)
-    my_show = ShowLicenseFreatureUsage(server, feature)
+    my_show = ShowLicenseFreatureUsage(server, vendor, feature)
     my_show.show()
     sys.exit(app.exec_())
 

@@ -114,11 +114,45 @@ class MainWindow(QMainWindow):
     """
     def __init__(self, specified_job, specified_user, specified_feature, specified_tab):
         super().__init__()
+        self.license_dic = {}
+        self.license_dic_second = 0
+
         self.specified_job = specified_job
         self.specified_user = specified_user
         self.specified_feature = specified_feature
         self.init_ui()
         self.switch_tab(specified_tab)
+
+    def get_license_dic(self):
+        # Not update license_dic repeatedly in 100 seconds.
+        current_second = int(time.time())
+
+        if current_second - self.license_dic_second <= 100:
+            return
+
+        self.license_dic_second = current_second
+
+        # Print loading license informaiton message.
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading License information, please wait a moment ...')
+
+        # Print loading license informaiton message with GUI.
+        my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
+        my_show_message.start()
+
+        # Get self.license_dic.
+        if config.lmstat_path:
+            os.environ['PATH'] = str(config.lmstat_path) + ':' + str(os.environ['PATH'])
+
+        my_get_license_info = license_common.GetLicenseInfo(bsub_command=config.lmstat_bsub_command)
+        self.license_dic = my_get_license_info.get_license_info()
+
+        # Print loading license informaiton message with GUI. (END)
+        my_show_message.terminate()
+
+        if not self.license_dic:
+            print('*Warning*: Not find any valid license information.')
 
     def init_ui(self):
         """
@@ -153,11 +187,7 @@ class MainWindow(QMainWindow):
         self.host_list = lsf_common.get_host_list()
 
         # Get license information.
-        print('* Loading license information, please wait a moment ...')
-        self.license_dic = license_common.get_license_info()
-
-        if not self.license_dic:
-            print('*Warning*: Not find any valid license information.')
+        self.get_license_dic()
 
         # Generate the sub-tabs
         self.gen_job_tab()
@@ -204,7 +234,7 @@ class MainWindow(QMainWindow):
         fresh_action = QAction('Fresh', self)
         fresh_action.triggered.connect(self.fresh)
         self.periodic_fresh_timer = QTimer(self)
-        periodic_fresh_action = QAction('Periodic Fresh (1 min)', self, checkable=True)
+        periodic_fresh_action = QAction('Periodic Fresh (5 min)', self, checkable=True)
         periodic_fresh_action.triggered.connect(self.periodic_fresh)
 
         setup_menu = menubar.addMenu('Setup')
@@ -239,23 +269,19 @@ class MainWindow(QMainWindow):
         """
         Re-build the GUI with latest LSF status.
         """
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Re-Loading LSF and License status, please wait a moment ...')
-
         self.gen_jobs_tab_table()
         self.gen_hosts_tab_table()
         self.gen_queues_tab_table()
-        self.gen_license_tab_feature_table(update=True)
-        self.gen_license_tab_expires_table()
+        self.gen_license_tab_feature_table(self.license_dic)
+        self.gen_license_tab_expires_table(self.license_dic)
 
     def periodic_fresh(self, state):
         """
-        Fresh the GUI every 60 seconds.
+        Fresh the GUI every 300 seconds.
         """
         if state:
             self.periodic_fresh_timer.timeout.connect(self.fresh)
-            self.periodic_fresh_timer.start(60000)
+            self.periodic_fresh_timer.start(300000)
         else:
             self.periodic_fresh_timer.stop()
 
@@ -775,8 +801,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.jobs_tab_table.setColumnWidth(2, 60)
         self.jobs_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.jobs_tab_table.setColumnWidth(4, 105)
+        self.jobs_tab_table.setColumnWidth(5, 150)
+        self.jobs_tab_table.setColumnWidth(6, 100)
         self.jobs_tab_table.setColumnWidth(7, 40)
         self.jobs_tab_table.setColumnWidth(8, 80)
         self.jobs_tab_table.setColumnWidth(9, 70)
@@ -835,19 +862,19 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         jobs = list(job_dic.keys())
 
         for i in range(len(jobs)):
-            # File "Job"
+            # Fill "Job"
             job = jobs[i]
             j = 0
             item = QTableWidgetItem(job)
             item.setFont(QFont('song', 9, QFont.Bold))
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "User"
+            # Fill "User"
             j = j+1
             item = QTableWidgetItem(job_dic[job]['user'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Status"
+            # Fill "Status"
             j = j+1
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
@@ -857,22 +884,23 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Queue"
+            # Fill "Queue"
             j = j+1
             item = QTableWidgetItem(job_dic[job]['queue'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Host"
+            # Fill "Host"
             j = j+1
             item = QTableWidgetItem(job_dic[job]['started_on'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Started"
+            # Fill "Started"
             j = j+1
-            item = QTableWidgetItem(job_dic[job]['started_time'])
+            start_time = self.switch_start_time(job_dic[job]['started_time'])
+            item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Project"
+            # Fill "Project"
             j = j+1
 
             if str(job_dic[job]['project']) != '':
@@ -880,7 +908,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, job_dic[job]['project'])
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Slot"
+            # Fill "Slot"
             j = j+1
 
             if str(job_dic[job]['processors_requested']) != '':
@@ -888,7 +916,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, int(job_dic[job]['processors_requested']))
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Rusage"
+            # Fill "Rusage"
             j = j+1
 
             if str(job_dic[job]['rusage_mem']) != '':
@@ -897,7 +925,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # File "Mem"
+            # Fill "Mem"
             j = j+1
 
             if str(job_dic[job]['mem']) != '':
@@ -909,10 +937,32 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 if ((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value)):
                     item.setForeground(QBrush(Qt.red))
 
-            # File "Command"
+            # Fill "Command"
             j = j+1
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
+
+    def switch_start_time(self, start_time):
+        new_start_time = start_time
+
+        if start_time and (start_time != 'N/A'):
+            # Switch start_time to start_seconds.
+            current_year = datetime.date.today().year
+            start_time_list = start_time.split()
+
+            start_time_with_year = str(current_year) + ' ' + str(start_time_list[1]) + ' ' + str(start_time_list[2]) + ' ' + str(start_time_list[3])
+            start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %b %d %H:%M:%S'))
+            current_seconds = time.time()
+
+            if int(start_seconds) > int(current_seconds):
+                current_year = int(datetime.date.today().year) - 1
+                start_time_with_year = str(current_year) + ' ' + str(start_time_list[1]) + ' ' + str(start_time_list[2]) + ' ' + str(start_time_list[3])
+                start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %b %d %H:%M:%S'))
+
+            # Switch start_seconds to expected time format.
+            new_start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_seconds))
+
+        return(new_start_time)
 
     def jobs_tab_check_click(self, item=None):
         """
@@ -920,8 +970,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
         """
         if item is not None:
-            currentRow = self.jobs_tab_table.currentRow()
-            job = self.jobs_tab_table.item(currentRow, 0).text().strip()
+            current_row = self.jobs_tab_table.currentRow()
+            job = self.jobs_tab_table.item(current_row, 0).text().strip()
 
             if item.column() == 0:
                 if job != '':
@@ -929,7 +979,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     self.check_job()
                     self.main_tab.setCurrentWidget(self.job_tab)
             elif item.column() == 2:
-                job_status = self.jobs_tab_table.item(currentRow, 2).text().strip()
+                job_status = self.jobs_tab_table.item(current_row, 2).text().strip()
 
                 if job_status == 'PEND':
                     print('* Getting job pend reason for "' + str(job) + '", please wait a moment ...')
@@ -1297,9 +1347,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         If click the non-zero Njobs number, jump to the JOBS tab and show the host related jobs information.
         """
         if item is not None:
-            currentRow = self.hosts_tab_table.currentRow()
-            host = self.hosts_tab_table.item(currentRow, 0).text().strip()
-            njobs_num = self.hosts_tab_table.item(currentRow, 5).text().strip()
+            current_row = self.hosts_tab_table.currentRow()
+            host = self.hosts_tab_table.item(current_row, 0).text().strip()
+            njobs_num = self.hosts_tab_table.item(current_row, 5).text().strip()
 
             if item.column() == 0:
                 host_list = copy.deepcopy(self.host_list)
@@ -1393,7 +1443,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Hide the vertical header
         self.queues_tab_table.verticalHeader().setVisible(False)
 
-        # File self.queues_tab_table items.
+        # Fill self.queues_tab_table items.
         self.queues_tab_table.setRowCount(0)
         self.queues_tab_table.setRowCount(len(self.queue_list)+1)
 
@@ -1475,10 +1525,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         If click the RUN number, jump to the JOB Tab and show the queue RUN jobs.
         """
         if item is not None:
-            currentRow = self.queues_tab_table.currentRow()
-            queue = self.queues_tab_table.item(currentRow, 0).text().strip()
-            pend_num = self.queues_tab_table.item(currentRow, 1).text().strip()
-            run_num = self.queues_tab_table.item(currentRow, 2).text().strip()
+            current_row = self.queues_tab_table.currentRow()
+            queue = self.queues_tab_table.item(current_row, 0).text().strip()
+            pend_num = self.queues_tab_table.item(current_row, 1).text().strip()
+            run_num = self.queues_tab_table.item(current_row, 2).text().strip()
 
             if item.column() == 0:
                 print('* Checking queue "' + str(queue) + '".')
@@ -1870,7 +1920,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             self.draw_host_mem_curve(fig, sample_time_list, mem_list)
 
     def draw_host_mem_curve(self, fig, sample_time_list, mem_list):
-        # File self.host_mem_figure_canvas.
+        # Fill self.host_mem_figure_canvas.
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('host "' + str(self.specified_host) + '" available mem curve')
@@ -1920,11 +1970,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         # Generate sub-frame
         self.gen_license_tab_frame0()
-        self.gen_license_tab_feature_table()
-        self.gen_license_tab_expires_table()
+        self.gen_license_tab_feature_table(self.license_dic)
+        self.gen_license_tab_expires_table(self.license_dic)
 
         if self.specified_feature:
-            self.license_tab_license_feature_line.setText(str(self.specified_feature))
+            self.license_tab_feature_line.setText(str(self.specified_feature))
             self.filter_license_feature()
 
     def gen_license_tab_frame0(self):
@@ -1932,146 +1982,132 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Show
         license_tab_show_label = QLabel('       Show', self.license_tab_frame0)
         license_tab_show_label.setStyleSheet("font-weight: bold;")
+
         self.license_tab_show_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_show_combo()
-
         self.license_tab_show_combo.currentIndexChanged.connect(self.filter_license_feature)
 
         # License Server
-        license_tab_license_server_label = QLabel('     Server', self.license_tab_frame0)
-        license_tab_license_server_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_license_server_combo = QComboBox(self.license_tab_frame0)
-        self.license_tab_license_server_combo.setMaximumWidth(100)
-        self.set_license_tab_license_server_combo()
+        license_tab_server_label = QLabel('     Server', self.license_tab_frame0)
+        license_tab_server_label.setStyleSheet("font-weight: bold;")
 
-        self.license_tab_license_server_combo.currentIndexChanged.connect(self.filter_license_feature)
+        self.license_tab_server_combo = QComboBox(self.license_tab_frame0)
+        self.set_license_tab_server_combo()
+        self.license_tab_server_combo.currentIndexChanged.connect(self.update_license_tab_vendor_combo)
+
+        # Vendor Daemon
+        license_tab_vendor_label = QLabel('     Vendor', self.license_tab_frame0)
+        license_tab_vendor_label.setStyleSheet("font-weight: bold;")
+
+        self.license_tab_vendor_combo = QComboBox(self.license_tab_frame0)
+        self.set_license_tab_vendor_combo()
+        self.license_tab_vendor_combo.currentIndexChanged.connect(self.check_license_tab_vendor_combo)
 
         # License Feature
-        license_tab_license_feature_label = QLabel('    Feature', self.license_tab_frame0)
-        license_tab_license_feature_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_license_feature_line = QLineEdit()
-        self.license_tab_license_feature_line.returnPressed.connect(self.filter_license_feature)
+        license_tab_feature_label = QLabel('    Feature', self.license_tab_frame0)
+        license_tab_feature_label.setStyleSheet("font-weight: bold;")
 
+        self.license_tab_feature_line = QLineEdit()
+        self.license_tab_feature_line.returnPressed.connect(self.filter_license_feature)
+
+        # Filter Button
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
-
-        # Empty label
-        license_tab_empty_label = QLabel('')
 
         # self.license_tab_frame0 - Grid
         license_tab_frame0_grid = QGridLayout()
 
         license_tab_frame0_grid.addWidget(license_tab_show_label, 0, 0)
         license_tab_frame0_grid.addWidget(self.license_tab_show_combo, 0, 1)
-        license_tab_frame0_grid.addWidget(license_tab_license_server_label, 0, 2)
-        license_tab_frame0_grid.addWidget(self.license_tab_license_server_combo, 0, 3)
-        license_tab_frame0_grid.addWidget(license_tab_license_feature_label, 0, 4)
-        license_tab_frame0_grid.addWidget(self.license_tab_license_feature_line, 0, 5)
-        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 6)
-        license_tab_frame0_grid.addWidget(license_tab_empty_label, 0, 7)
+        license_tab_frame0_grid.addWidget(license_tab_server_label, 0, 2)
+        license_tab_frame0_grid.addWidget(self.license_tab_server_combo, 0, 3)
+        license_tab_frame0_grid.addWidget(license_tab_vendor_label, 0, 4)
+        license_tab_frame0_grid.addWidget(self.license_tab_vendor_combo, 0, 5)
+        license_tab_frame0_grid.addWidget(license_tab_feature_label, 0, 6)
+        license_tab_frame0_grid.addWidget(self.license_tab_feature_line, 0, 7)
+        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 8)
 
         license_tab_frame0_grid.setColumnStretch(1, 1)
         license_tab_frame0_grid.setColumnStretch(3, 1)
         license_tab_frame0_grid.setColumnStretch(5, 1)
-        license_tab_frame0_grid.setColumnStretch(7, 3)
+        license_tab_frame0_grid.setColumnStretch(7, 1)
 
         self.license_tab_frame0.setLayout(license_tab_frame0_grid)
 
     def set_license_tab_show_combo(self):
         self.license_tab_show_combo.clear()
         self.license_tab_show_combo.addItem('ALL')
-        self.license_tab_show_combo.addItem('in_use')
+        self.license_tab_show_combo.addItem('IN_USE')
 
-    def set_license_tab_license_server_combo(self):
-        self.license_tab_license_server_combo.clear()
+    def set_license_tab_server_combo(self):
+        self.license_tab_server_combo.clear()
 
         license_server_list = list(self.license_dic.keys())
         license_server_list.insert(0, 'ALL')
 
         for license_server in license_server_list:
-            self.license_tab_license_server_combo.addItem(license_server)
+            self.license_tab_server_combo.addItem(license_server)
+
+    def set_license_tab_vendor_combo(self):
+        self.license_tab_vendor_combo.clear()
+
+        # Get vendor_daemon list.
+        vendor_daemon_list = ['ALL', ]
+        selected_license_server = self.license_tab_server_combo.currentText().strip()
+
+        for license_server in self.license_dic.keys():
+            if (selected_license_server == license_server) or (selected_license_server == 'ALL'):
+                for vendor_daemon in self.license_dic[license_server]['vendor_daemon'].keys():
+                    if vendor_daemon not in vendor_daemon_list:
+                        vendor_daemon_list.append(vendor_daemon)
+
+        # Fill self.license_tab_vendor_combo.
+        for vendor_daemon in vendor_daemon_list:
+            self.license_tab_vendor_combo.addItem(vendor_daemon)
+
+    def update_license_tab_vendor_combo(self):
+        self.set_license_tab_vendor_combo()
+        self.filter_license_feature()
+
+    def check_license_tab_vendor_combo(self):
+        if self.license_tab_vendor_combo.count() > 2:
+            self.filter_license_feature()
 
     def filter_license_feature(self):
         # Get license information.
-        print('* Loading license information, please wait a moment ...')
-        my_show_message = ShowMessage('Info', 'Please wait, getting license information ...')
-        my_show_message.start()
-        self.license_dic = license_common.get_license_info()
-        my_show_message.terminate()
-
-        if not self.license_dic:
-            print('*Warning*: Not find any valid license information.')
+        self.get_license_dic()
 
         if self.license_dic:
-            # Fileter license feature with Server selection.
-            filtered_license_feature_list = []
-            current_server = self.license_tab_license_server_combo.currentText().strip()
+            selected_license_server = self.license_tab_server_combo.currentText().strip()
+            selected_vendor_daemon = self.license_tab_vendor_combo.currentText().strip()
+            specified_license_feature_list = self.license_tab_feature_line.text().strip().split()
+            show_mode = self.license_tab_show_combo.currentText().strip()
 
-            for (license_server, license_server_dic) in self.license_dic.items():
-                if (current_server == 'ALL') or (license_server == current_server):
-                    if 'feature' in license_server_dic:
-                        for feature in license_server_dic['feature']:
-                            if feature not in filtered_license_feature_list:
-                                filtered_license_feature_list.append(feature)
-
-            # Filter license feature with Feature line.
-            expected_license_feature_list = []
-            specified_license_feature_list = self.license_tab_license_feature_line.text().strip().split()
-
-            if not specified_license_feature_list:
-                expected_license_feature_list = filtered_license_feature_list
-            else:
-                expected_license_feature_absolute_list = []
-                expected_license_feature_relative_list = []
-
-                for expected_license_feature in specified_license_feature_list:
-                    if expected_license_feature in filtered_license_feature_list:
-                        expected_license_feature_absolute_list.append(expected_license_feature)
-                    else:
-                        for license_feature in filtered_license_feature_list:
-                            if re.search(expected_license_feature.lower(), license_feature.lower()):
-                                expected_license_feature_relative_list.append(license_feature)
-
-                expected_license_feature_list = expected_license_feature_absolute_list + expected_license_feature_relative_list
-
-            if len(expected_license_feature_list) > 5:
-                print('* Filter license features "' + str(' '.join(expected_license_feature_list[0:4])) + '" ...')
-            elif len(expected_license_feature_list) > 0:
-                print('* Filter license features "' + str(' '.join(expected_license_feature_list)) + '".')
-
-            current_server = self.license_tab_license_server_combo.currentText().strip()
-            specified_show = self.license_tab_show_combo.currentText().strip()
-            self.license_dic = license_common.filter_license_feature(self.license_dic, features=expected_license_feature_list, servers=[current_server, ], mode=specified_show)
+            filter_license_dic = license_common.FilterLicenseDic()
+            filtered_license_dic = filter_license_dic.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, show_mode=show_mode)
 
             # Update self.license_tab_feature_table and self.license_tab_expires_table.
-            self.gen_license_tab_feature_table()
-            self.gen_license_tab_expires_table()
+            self.gen_license_tab_feature_table(filtered_license_dic)
+            self.gen_license_tab_expires_table(filtered_license_dic)
 
-    def gen_license_tab_feature_table(self, update=False):
-        # Get license information.
-        if update:
-            print('* Loading license information, please wait a moment ...')
-            self.license_dic = license_common.get_license_info()
-
-            if not self.license_dic:
-                print('*Warning*: Not find any valid license information.')
-
+    def gen_license_tab_feature_table(self, license_dic):
         self.license_tab_feature_table.setShowGrid(True)
         self.license_tab_feature_table.setColumnCount(0)
-        self.license_tab_feature_table.setColumnCount(4)
-        self.license_tab_feature_table.setHorizontalHeaderLabels(['License Server', 'Feature', 'Issued', 'In_use'])
+        self.license_tab_feature_table.setColumnCount(5)
+        self.license_tab_feature_table.setHorizontalHeaderLabels(['Server', 'Vendor', 'Feature', 'Issued', 'In_Use'])
 
         self.license_tab_feature_table.setColumnWidth(0, 160)
-        self.license_tab_feature_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.license_tab_feature_table.setColumnWidth(2, 50)
+        self.license_tab_feature_table.setColumnWidth(1, 80)
+        self.license_tab_feature_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.license_tab_feature_table.setColumnWidth(3, 50)
+        self.license_tab_feature_table.setColumnWidth(4, 50)
 
         # Get license feature information length.
         license_feature_info_length = 0
 
-        for (license_server, license_server_dic) in self.license_dic.items():
-            if 'feature' in license_server_dic:
-                for feature in license_server_dic['feature']:
+        for license_server in license_dic.keys():
+            for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
+                for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].keys():
                     license_feature_info_length += 1
 
         # Fill self.license_tab_feature_table items.
@@ -2080,24 +2116,32 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         row = -1
 
-        for (license_server, license_server_dic) in self.license_dic.items():
-            if 'feature' in license_server_dic:
-                for feature in license_server_dic['feature']:
+        for license_server in license_dic.keys():
+            for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
+                for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].keys():
                     row += 1
+
+                    # For "Server"
                     self.license_tab_feature_table.setItem(row, 0, QTableWidgetItem(license_server))
 
+                    # For "Vendor"
+                    self.license_tab_feature_table.setItem(row, 1, QTableWidgetItem(vendor_daemon))
+
+                    # For "Feature"
                     item = QTableWidgetItem(feature)
                     item.setForeground(QBrush(Qt.blue))
-                    self.license_tab_feature_table.setItem(row, 1, item)
-
-                    issued = license_server_dic['feature'][feature]['issued']
-                    item = QTableWidgetItem(issued)
                     self.license_tab_feature_table.setItem(row, 2, item)
 
-                    in_use = license_server_dic['feature'][feature]['in_use']
+                    # For "Issued"
+                    issued = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['issued']
+                    item = QTableWidgetItem(issued)
+                    self.license_tab_feature_table.setItem(row, 3, item)
+
+                    # For "In_Use"
+                    in_use = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']
                     item = QTableWidgetItem(in_use)
                     item.setFont(QFont('song', 9, QFont.Bold))
-                    self.license_tab_feature_table.setItem(row, 3, item)
+                    self.license_tab_feature_table.setItem(row, 4, item)
 
     def license_tab_check_click(self, item=None):
         """
@@ -2105,19 +2149,20 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
         """
         if item is not None:
-            if item.column() == 3:
-                currentRow = self.license_tab_feature_table.currentRow()
-                in_use_num = int(self.license_tab_feature_table.item(currentRow, 3).text().strip())
+            if item.column() == 4:
+                current_row = self.license_tab_feature_table.currentRow()
+                in_use_num = int(self.license_tab_feature_table.item(current_row, 3).text().strip())
 
                 if in_use_num > 0:
-                    license_server = self.license_tab_feature_table.item(currentRow, 0).text().strip()
-                    license_feature = self.license_tab_feature_table.item(currentRow, 1).text().strip()
+                    license_server = self.license_tab_feature_table.item(current_row, 0).text().strip()
+                    vendor_daemon = self.license_tab_feature_table.item(current_row, 1).text().strip()
+                    license_feature = self.license_tab_feature_table.item(current_row, 2).text().strip()
 
                     print('* Getting license feature "' + str(license_feature) + '" usage on license server ' + str(license_server) + ' ...')
-                    self.my_show_license_feature_usage = ShowLicenseFeatureUsage(server=license_server, feature=license_feature)
+                    self.my_show_license_feature_usage = ShowLicenseFeatureUsage(server=license_server, vendor=vendor_daemon, feature=license_feature)
                     self.my_show_license_feature_usage.start()
 
-    def gen_license_tab_expires_table(self):
+    def gen_license_tab_expires_table(self, license_dic):
         self.license_tab_expires_table.setShowGrid(True)
         self.license_tab_expires_table.setColumnCount(0)
         self.license_tab_expires_table.setColumnCount(4)
@@ -2131,21 +2176,21 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Get license feature information length.
         license_expires_info_length = 0
 
-        for (license_server, license_server_dic) in self.license_dic.items():
-            if 'expires' in license_server_dic:
-                for feature in license_server_dic['expires']:
-                    license_expires_info_length += len(license_server_dic['expires'][feature])
+        for license_server in license_dic.keys():
+            for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
+                for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
+                    license_expires_info_length += len(license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature])
 
-        # File self.license_tab_expires_table items.
+        # Fill self.license_tab_expires_table items.
         self.license_tab_expires_table.setRowCount(0)
         self.license_tab_expires_table.setRowCount(license_expires_info_length)
 
         row = -1
 
-        for (license_server, license_server_dic) in self.license_dic.items():
-            if 'expires' in license_server_dic:
-                for feature in license_server_dic['expires']:
-                    for expires_dic in license_server_dic['expires'][feature]:
+        for license_server in license_dic.keys():
+            for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
+                for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
+                    for expires_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
                         row += 1
                         self.license_tab_expires_table.setItem(row, 0, QTableWidgetItem(license_server))
 
@@ -2211,13 +2256,14 @@ class ShowLicenseFeatureUsage(QThread):
     """
     Start tool show_license_feature_usage.py to show license feature usage information.
     """
-    def __init__(self, server, feature):
+    def __init__(self, server, vendor, feature):
         super(ShowLicenseFeatureUsage, self).__init__()
         self.server = server
+        self.vendor = vendor
         self.feature = feature
 
     def run(self):
-        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/show_license_feature_usage.py -s ' + str(self.server) + ' -f ' + str(self.feature)
+        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/show_license_feature_usage.py -s ' + str(self.server) + ' -v ' + str(self.vendor) + ' -f ' + str(self.feature)
         os.system(command)
 
 
