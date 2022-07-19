@@ -9,9 +9,9 @@ installation -> configuration -> sampling -> monitoring
 
 
 INSTALLATION:
-To install it, make sure you have Python 3.5 (or greater version) installed,
-you can also install Anaconda3-5.2.0 (or greater version) to solve packge
-dependency. Then run below command to install it:
+To install it, make sure you have Python 3.8 (or greater version) installed,
+you can also install Anaconda3-2021.05 to solve packge dependency. Then run
+below command to install it:
 Come into install directory, then execute below command.
 
     python3 install.py
