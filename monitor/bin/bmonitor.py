@@ -26,6 +26,14 @@ from common import pyqt5_common
 from common import sqlite3_common
 from conf import config
 
+# Import local config file if exists.
+local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
+local_config = str(local_config_dir) + '/config.py'
+
+if os.path.exists(local_config):
+    sys.path.append(local_config_dir)
+    import config
+
 os.environ['PYTHONUNBUFFERED'] = '1'
 
 # Solve some unexpected warning message.

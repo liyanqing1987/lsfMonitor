@@ -18,9 +18,17 @@ if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
     os.environ['LSFMONITOR_INSTALL_PATH'] = '/ic/software/cad_tools/it/lsfMonitor'
 
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
-from conf import config
 from common import pyqt5_common
 from common import license_common
+from conf import config
+
+# Import local config file if exists.
+local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
+local_config = str(local_config_dir) + '/config.py'
+
+if os.path.exists(local_config):
+    sys.path.append(local_config_dir)
+    import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
