@@ -77,6 +77,10 @@ def read_args():
                         default='JOBS',
                         choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'LICENSE'],
                         help='Specify current tab, default is "JOB" tab.')
+    parser.add_argument("-dl", "--disable_license",
+                        action='store_true',
+                        default=False,
+                        help='Disable license check function.')
 
     args = parser.parse_args()
 
@@ -104,7 +108,7 @@ def read_args():
     if not args.tab:
         args.tab = 'JOB'
 
-    return(args.jobid, args.user, args.feature, args.tab)
+    return(args.jobid, args.user, args.feature, args.tab, args.disable_license)
 
 
 class FigureCanvas(FigureCanvasQTAgg):
@@ -120,7 +124,7 @@ class MainWindow(QMainWindow):
     """
     Main window of lsfMonitor.
     """
-    def __init__(self, specified_job, specified_user, specified_feature, specified_tab):
+    def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license):
         super().__init__()
         self.license_dic = {}
         self.license_dic_second = 0
@@ -128,10 +132,15 @@ class MainWindow(QMainWindow):
         self.specified_job = specified_job
         self.specified_user = specified_user
         self.specified_feature = specified_feature
+        self.disable_license = disable_license
+
         self.init_ui()
         self.switch_tab(specified_tab)
 
     def get_license_dic(self):
+        if self.disable_license:
+            return
+
         # Not update license_dic repeatedly in 100 seconds.
         current_second = int(time.time())
 
@@ -140,12 +149,8 @@ class MainWindow(QMainWindow):
 
         self.license_dic_second = current_second
 
-        # Print loading license informaiton message.
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading License information, please wait a moment ...')
-
-        # Print loading license informaiton message with GUI.
+        # Print loading license message.
+        print('* Loading License information, please wait a moment ...')
         my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
         my_show_message.start()
 
@@ -2294,9 +2299,9 @@ class ShowMessage(QThread):
 #################
 def main():
     check_tool()
-    (specified_job, specified_user, specified_feature, specified_tab) = read_args()
+    (specified_job, specified_user, specified_feature, specified_tab, disable_license) = read_args()
     app = QApplication(sys.argv)
-    mw = MainWindow(specified_job, specified_user, specified_feature, specified_tab)
+    mw = MainWindow(specified_job, specified_user, specified_feature, specified_tab, disable_license)
     mw.show()
     sys.exit(app.exec_())
 
