@@ -52,6 +52,10 @@ def read_args():
 
     args = parser.parse_args()
 
+    if (not args.job) and (not args.queue) and (not args.host) and (not args.load) and (not args.user):
+        common.print_error('*Error*: at least one argument of "job/queue/host/load/user" must be selected.')
+        sys.exit(1)
+
     if args.interval < 0:
         common.print_error('*Error*: interval "' + str(args.interval) + '": Cannot be less than "0".')
         sys.exit(1)
