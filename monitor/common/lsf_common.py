@@ -279,7 +279,7 @@ def get_lsf_bjobs_uf_info(command):
 
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in stdout.decode('utf-8', 'ignore').split('\n'):
         line = line.strip()
 
         if re.match('Job <' + str(job) + '> is not found', line):
