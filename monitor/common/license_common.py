@@ -43,12 +43,13 @@ class GetLicenseInfo():
             lm_license_file_list = os.environ['LM_LICENSE_FILE'].split(':')
 
             for lm_license_file in lm_license_file_list:
-                license_dic[lm_license_file] = {
-                                                'license_files': '',
-                                                'license_server_status': 'UNKNOWN',
-                                                'license_server_version': '',
-                                                'vendor_daemon': {}
-                                               }
+                if lm_license_file:
+                    license_dic[lm_license_file] = {
+                                                    'license_files': '',
+                                                    'license_server_status': 'UNKNOWN',
+                                                    'license_server_version': '',
+                                                    'vendor_daemon': {}
+                                                   }
 
         return(license_dic)
 
