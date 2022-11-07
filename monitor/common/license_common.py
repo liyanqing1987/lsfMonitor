@@ -99,7 +99,7 @@ class GetLicenseInfo():
                                'license_server': re.compile('^\s*(\S+): license server (\S+?) .* (\S+?)\s*$'),
                                'vendor_daemon_status': re.compile('^\s*Vendor daemon status \(on (.+)\):\s*$'),
                                'vendor_daemon_up': re.compile('^\s*(\S+): UP (\S+)\s*$'),
-                               'vendor_daemon_down': re.compile('^\s*(\S+): The desired vendor daemon is down\..*$'),
+                               'vendor_daemon_down': re.compile('^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
                                'users_of_feature': re.compile('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
                                'in_use_info': re.compile('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
                                'reservation': re.compile('^\s*(\d+)\s+RESERVATION for HOST\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
@@ -184,6 +184,7 @@ class GetLicenseInfo():
                                                         'vendor_daemon': {},
                                                        })
                 expires_mark = False
+                vendor_daemon_status_mark = False
             elif license_compile_dic['license_files'].match(line):
                 my_match = license_compile_dic['license_files'].match(line)
                 license_dic[license_server]['license_files'] = my_match.group(2)
@@ -207,7 +208,6 @@ class GetLicenseInfo():
                                                                                         'feature': {},
                                                                                         'expires': {},
                                                                                        })
-                vendor_daemon_status_mark = False
             elif vendor_daemon_status_mark and license_compile_dic['vendor_daemon_down'].match(line):
                 my_match = license_compile_dic['vendor_daemon_down'].match(line)
                 vendor_daemon = my_match.group(1)
@@ -217,7 +217,6 @@ class GetLicenseInfo():
                                                                                         'feature': {},
                                                                                         'expires': {},
                                                                                        })
-                vendor_daemon_status_mark = False
             elif license_compile_dic['feature_expires'].match(line):
                 expires_mark = True
                 license_dic[license_server]['vendor_daemon'][vendor_daemon].setdefault('expires', {})
