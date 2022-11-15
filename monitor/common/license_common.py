@@ -165,10 +165,10 @@ class GetLicenseInfo():
                 my_match = license_compile_dic['reservation'].match(line)
                 usage_dic = {
                              'user': 'N/A',
-                             'execute_host': my_match.group(2),
+                             'execute_host': my_match.group(3),
                              'submit_host': 'N/A',
                              'version': 'N/A',
-                             'license_server': my_match.group(3),
+                             'license_server': my_match.group(4),
                              'start_time': 'N/A',
                              'license_num': my_match.group(1),
                             }
