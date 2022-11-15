@@ -103,7 +103,7 @@ class GetLicenseInfo():
                                'vendor_daemon_down': re.compile('^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
                                'users_of_feature': re.compile('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
                                'in_use_info': re.compile('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
-                               'reservation': re.compile('^\s*(\d+)\s+RESERVATION for HOST\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
+                               'reservation': re.compile('^\s*(\d+)\s+RESERVATION for (HOST|HOST_GROUP)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
                                'feature_expires': re.compile('^Feature .* Expires\s*$'),
                                'expire_info': re.compile('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$'),
                               }
