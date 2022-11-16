@@ -123,9 +123,10 @@ class GetLicenseInfo():
                               'expires': my_match.group(5),
                              }
 
-                if vendor_daemon:
-                    license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, [])
-                    license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature].append(expire_dic)
+                for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
+                    if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature']:
+                        license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, [])
+                        license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature].append(expire_dic)
             elif license_compile_dic['users_of_feature'].match(line):
                 my_match = license_compile_dic['users_of_feature'].match(line)
                 feature = my_match.group(1)
