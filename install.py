@@ -84,6 +84,9 @@ export PATH=""" + str(python_path) + """:$PATH
 # Set lsfMonitor install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
 
+# Set LD_LIBRARY_PATH.
+export LD_LIBRARY_PATH=$LSFMONITOR_INSTALL_PATH/lib:$LD_LIBRARY_PATH
+
 # Execute bsample.py.
 python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
 """)
