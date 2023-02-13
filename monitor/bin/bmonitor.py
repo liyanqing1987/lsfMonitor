@@ -775,9 +775,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_user_line = QLineEdit()
         self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
-        self.jobs_tab_status_combo.currentIndexChanged.connect(self.gen_jobs_tab_table)
-        self.jobs_tab_queue_combo.currentIndexChanged.connect(self.gen_jobs_tab_table)
-        self.jobs_tab_started_on_combo.currentIndexChanged.connect(self.gen_jobs_tab_table)
+        self.jobs_tab_status_combo.activated.connect(self.gen_jobs_tab_table)
+        self.jobs_tab_queue_combo.activated.connect(self.gen_jobs_tab_table)
+        self.jobs_tab_started_on_combo.activated.connect(self.gen_jobs_tab_table)
 
         jobs_tab_check_button = QPushButton('Check', self.jobs_tab_frame0)
         jobs_tab_check_button.clicked.connect(self.gen_jobs_tab_table)
@@ -1077,7 +1077,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         hosts_tab_queue_label.setStyleSheet("font-weight: bold;")
         self.hosts_tab_queue_combo = QComboBox(self.hosts_tab_frame0)
         self.set_hosts_tab_queue_combo()
-        self.hosts_tab_queue_combo.currentIndexChanged.connect(self.gen_hosts_tab_table)
+        self.hosts_tab_queue_combo.activated.connect(self.gen_hosts_tab_table)
         hosts_tab_empty_label = QLabel('')
 
         # self.hosts_tab_frame0 - Grid
@@ -1734,13 +1734,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         load_tab_host_label.setStyleSheet("font-weight: bold;")
         self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
         self.set_load_tab_host_combo()
-        self.load_tab_host_combo.currentIndexChanged.connect(self.update_load_tab_load_info)
+        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
 
         load_tab_date_label = QLabel('          Date', self.load_tab_frame0)
         load_tab_date_label.setStyleSheet("font-weight: bold;")
         self.load_tab_date_combo = QComboBox(self.load_tab_frame0)
         self.set_load_tab_date_combo()
-        self.load_tab_date_combo.currentIndexChanged.connect(self.update_load_tab_load_info)
+        self.load_tab_date_combo.activated.connect(self.update_load_tab_load_info)
 
         load_tab_empty_label = QLabel('')
 
@@ -1998,7 +1998,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.license_tab_show_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_show_combo()
-        self.license_tab_show_combo.currentIndexChanged.connect(self.filter_license_feature)
+        self.license_tab_show_combo.activated.connect(self.filter_license_feature)
 
         # License Server
         license_tab_server_label = QLabel('     Server', self.license_tab_frame0)
@@ -2006,7 +2006,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.license_tab_server_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_server_combo()
-        self.license_tab_server_combo.currentIndexChanged.connect(self.update_license_tab_vendor_combo)
+        self.license_tab_server_combo.activated.connect(self.update_license_tab_vendor_combo)
 
         # Vendor Daemon
         license_tab_vendor_label = QLabel('     Vendor', self.license_tab_frame0)
@@ -2014,7 +2014,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.license_tab_vendor_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_vendor_combo()
-        self.license_tab_vendor_combo.currentIndexChanged.connect(self.check_license_tab_vendor_combo)
+        self.license_tab_vendor_combo.activated.connect(self.check_license_tab_vendor_combo)
 
         # License Feature
         license_tab_feature_label = QLabel('    Feature', self.license_tab_frame0)
