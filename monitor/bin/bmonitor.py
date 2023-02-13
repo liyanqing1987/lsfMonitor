@@ -108,7 +108,7 @@ def read_args():
     if not args.tab:
         args.tab = 'JOB'
 
-    return(args.jobid, args.user, args.feature, args.tab, args.disable_license)
+    return (args.jobid, args.user, args.feature, args.tab, args.disable_license)
 
 
 class FigureCanvas(FigureCanvasQTAgg):
@@ -323,7 +323,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = '2022.6'
+        version = 'V1.3'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -529,8 +529,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Job name must be a string of numbers.
         current_job = self.current_job
 
-        if re.match('^(\d+)(\[\d+\])?$', self.current_job):
-            my_match = re.match('^(\d+)(\[\d+\])?$', self.current_job)
+        if re.match(r'^(\d+)(\[\d+\])?$', self.current_job):
+            my_match = re.match(r'^(\d+)(\[\d+\])?$', self.current_job)
             current_job = my_match.group(1)
         else:
             warning_message = '*Warning*: No valid job is specified!'
@@ -690,7 +690,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                 job_db_conn.close()
 
-        return(runtime_list, real_mem_list)
+        return (runtime_list, real_mem_list)
 
     def update_job_tab_frame3(self, init=False):
         """
@@ -716,7 +716,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         axes.set_title('job "' + str(self.current_job) + '" memory curve')
         axes.set_xlabel('Runtime (Minutes)')
         axes.set_ylabel('Memory Usage (G)')
-        axes.plot(runtime_list, mem_list, 'ro-', color='red')
+        axes.plot(runtime_list, mem_list, 'ro-')
         axes.grid()
         self.job_mem_figure_canvas.draw()
 # For job TAB (end) #
@@ -826,7 +826,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         command = 'bjobs -UF '
         specified_user = self.jobs_tab_user_line.text().strip()
 
-        if re.match('^\s*$', specified_user):
+        if re.match(r'^\s*$', specified_user):
             command = str(command) + ' -u all'
         else:
             command = str(command) + ' -u ' + str(specified_user)
@@ -975,7 +975,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # Switch start_seconds to expected time format.
             new_start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_seconds))
 
-        return(new_start_time)
+        return (new_start_time)
 
     def jobs_tab_check_click(self, item=None):
         """
@@ -1171,7 +1171,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = lshosts_dic['HOST_NAME'].index(host)
             ncpus = lshosts_dic['ncpus'][index]
 
-            if not re.match('^[0-9]+$', ncpus):
+            if not re.match(r'^[0-9]+$', ncpus):
                 common.print_warning('*Warning*: host(' + str(host) + ') ncpus info "' + str(ncpus) + '": invalid value, reset it to "0".')
                 ncpus = 0
 
@@ -1184,7 +1184,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = bhosts_dic['HOST_NAME'].index(host)
             max = bhosts_dic['MAX'][index]
 
-            if not re.match('^[0-9]+$', max):
+            if not re.match(r'^[0-9]+$', max):
                 common.print_warning('*Warning*: host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".')
                 max = 0
 
@@ -1197,7 +1197,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = bhosts_dic['HOST_NAME'].index(host)
             njobs = bhosts_dic['NJOBS'][index]
 
-            if not re.match('^[0-9]+$', njobs):
+            if not re.match(r'^[0-9]+$', njobs):
                 common.print_warning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
                 njobs = 0
 
@@ -1215,9 +1215,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 index = lsload_dic['HOST_NAME'].index(host)
                 ut = lsload_dic['ut'][index]
 
-            ut = re.sub('%', '', ut)
+            ut = re.sub(r'%', '', ut)
 
-            if not re.match('^[0-9]+$', ut):
+            if not re.match(r'^[0-9]+$', ut):
                 common.print_warning('*Warning*: host(' + str(host) + ') ut info "' + str(ut) + '": invalid value, reset it to "0".')
                 ut = 0
 
@@ -1234,13 +1234,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = lshosts_dic['HOST_NAME'].index(host)
             maxmem = lshosts_dic['maxmem'][index]
 
-            if re.search('M', maxmem):
-                maxmem = re.sub('M', '', maxmem)
+            if re.search(r'M', maxmem):
+                maxmem = re.sub(r'M', '', maxmem)
                 maxmem = float(maxmem)/1024
-            elif re.search('G', maxmem):
-                maxmem = re.sub('G', '', maxmem)
-            elif re.search('T', maxmem):
-                maxmem = re.sub('T', '', maxmem)
+            elif re.search(r'G', maxmem):
+                maxmem = re.sub(r'G', '', maxmem)
+            elif re.search(r'T', maxmem):
+                maxmem = re.sub(r'T', '', maxmem)
                 maxmem = float(maxmem)*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
@@ -1259,13 +1259,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 index = lsload_dic['HOST_NAME'].index(host)
                 mem = lsload_dic['mem'][index]
 
-            if re.search('M', mem):
-                mem = re.sub('M', '', mem)
+            if re.search(r'M', mem):
+                mem = re.sub(r'M', '', mem)
                 mem = float(mem)/1024
-            elif re.search('G', mem):
-                mem = re.sub('G', '', mem)
-            elif re.search('T', mem):
-                mem = re.sub('T', '', mem)
+            elif re.search(r'G', mem):
+                mem = re.sub(r'G', '', mem)
+            elif re.search(r'T', mem):
+                mem = re.sub(r'T', '', mem)
                 mem = float(mem)*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
@@ -1284,13 +1284,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = lshosts_dic['HOST_NAME'].index(host)
             maxswp = lshosts_dic['maxswp'][index]
 
-            if re.search('M', maxswp):
-                maxswp = re.sub('M', '', maxswp)
+            if re.search(r'M', maxswp):
+                maxswp = re.sub(r'M', '', maxswp)
                 maxswp = float(maxswp)/1024
-            elif re.search('G', maxswp):
-                maxswp = re.sub('G', '', maxswp)
-            elif re.search('T', maxswp):
-                maxswp = re.sub('T', '', maxswp)
+            elif re.search(r'G', maxswp):
+                maxswp = re.sub(r'G', '', maxswp)
+            elif re.search(r'T', maxswp):
+                maxswp = re.sub(r'T', '', maxswp)
                 maxswp = float(maxswp)*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
@@ -1309,13 +1309,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 index = lsload_dic['HOST_NAME'].index(host)
                 swp = lsload_dic['swp'][index]
 
-            if re.search('M', swp):
-                swp = re.sub('M', '', swp)
+            if re.search(r'M', swp):
+                swp = re.sub(r'M', '', swp)
                 swp = float(swp)/1024
-            elif re.search('G', swp):
-                swp = re.sub('G', '', swp)
-            elif re.search('T', swp):
-                swp = re.sub('T', '', swp)
+            elif re.search(r'G', swp):
+                swp = re.sub(r'G', '', swp)
+            elif re.search(r'T', swp):
+                swp = re.sub(r'T', '', swp)
                 swp = float(swp)*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
@@ -1334,13 +1334,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 index = lsload_dic['HOST_NAME'].index(host)
                 tmp = lsload_dic['tmp'][index]
 
-            if re.search('M', tmp):
-                tmp = re.sub('M', '', tmp)
+            if re.search(r'M', tmp):
+                tmp = re.sub(r'M', '', tmp)
                 tmp = float(tmp)/1024
-            elif re.search('G', tmp):
-                tmp = re.sub('G', '', tmp)
-            elif re.search('T', tmp):
-                tmp = re.sub('T', '', tmp)
+            elif re.search(r'G', tmp):
+                tmp = re.sub(r'G', '', tmp)
+            elif re.search(r'T', tmp):
+                tmp = re.sub(r'T', '', tmp)
                 tmp = float(tmp)*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".')
@@ -1648,7 +1648,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                     for i in range(len(orig_sample_time_list)):
                         sample_time = orig_sample_time_list[i]
-                        date = re.sub('_.*', '', sample_time)
+                        date = re.sub(r'_.*', '', sample_time)
                         pend_num = orig_pend_list[i]
                         run_num = orig_run_list[i]
 
@@ -1677,7 +1677,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                     queue_db_conn.close()
 
-        return(date_list, pend_list, run_list)
+        return (date_list, pend_list, run_list)
 
     def draw_queue_job_num_curve(self, fig, queue, date_list, pend_list, run_list):
         fig.subplots_adjust(bottom=0.25)
@@ -1685,8 +1685,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         axes.set_title('queue "' + str(queue) + '" PEND/RUN slots number curve')
         axes.set_xlabel('Sample Date')
         axes.set_ylabel('Slots Num')
-        axes.plot(date_list, pend_list, 'ro-', label='PEND', color='red')
-        axes.plot(date_list, run_list, 'ro-', label='RUN', color='green')
+        axes.plot(date_list, pend_list, 'ro-', label='PEND')
+        axes.plot(date_list, run_list, 'go-', label='RUN')
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
@@ -1873,7 +1873,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                                 ut = data_dic['ut'][i]
 
                                 if ut:
-                                    ut = int(re.sub('%', '', ut))
+                                    ut = int(re.sub(r'%', '', ut))
                                 else:
                                     ut = 0
 
@@ -1883,12 +1883,12 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                                 mem = data_dic['mem'][i]
 
                                 if mem:
-                                    if re.match('.*M', mem):
-                                        mem = round(float(re.sub('M', '', mem))/1024, 1)
-                                    elif re.match('.*G', mem):
-                                        mem = round(float(re.sub('G', '', mem)), 1)
-                                    elif re.match('.*T', mem):
-                                        mem = round(float(re.sub('T', '', mem))*1024, 1)
+                                    if re.match(r'.*M', mem):
+                                        mem = round(float(re.sub(r'M', '', mem))/1024, 1)
+                                    elif re.match(r'.*G', mem):
+                                        mem = round(float(re.sub(r'G', '', mem)), 1)
+                                    elif re.match(r'.*T', mem):
+                                        mem = round(float(re.sub(r'T', '', mem))*1024, 1)
                                 else:
                                     mem = 0
 
@@ -1896,7 +1896,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                     load_db_conn.close()
 
-        return(sample_time_list, ut_list, mem_list)
+        return (sample_time_list, ut_list, mem_list)
 
     def update_load_tab_frame1(self, sample_time_list, ut_list):
         """
@@ -1916,7 +1916,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         axes.set_title('host "' + str(self.specified_host) + '" ut curve')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Cpu Utilization (%)')
-        axes.plot(sample_time_list, ut_list, 'ro-', color='red')
+        axes.plot(sample_time_list, ut_list, 'ro-')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.host_ut_figure_canvas.draw()
@@ -1939,7 +1939,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         axes.set_title('host "' + str(self.specified_host) + '" available mem curve')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Available RAM (G)')
-        axes.plot(sample_time_list, mem_list, 'ro-', color='green')
+        axes.plot(sample_time_list, mem_list, 'go-')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
         self.host_mem_figure_canvas.draw()

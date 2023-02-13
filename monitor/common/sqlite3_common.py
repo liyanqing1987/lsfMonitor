@@ -17,12 +17,12 @@ def connect_db_file(db_file, mode='read'):
         if os.path.exists(journal_db_file) and (mode == 'write'):
             common.print_warning('*Warning*: database file "' + str(db_file) + '" is on another connection, will not connect it.')
             result = 'locked'
-            return(result, conn)
+            return (result, conn)
     elif mode == 'read':
         if not os.path.exists(db_file):
             common.print_error('*Error*: "' + str(db_file) + '" No such database file.')
             result = 'failed'
-            return(result, conn)
+            return (result, conn)
 
     try:
         conn = sqlite3.connect(db_file)
@@ -30,7 +30,7 @@ def connect_db_file(db_file, mode='read'):
         common.print_error('*Error*: Failed on connecting database file "' + str(db_file) + '": ' + str(error))
         result = 'failed'
 
-    return(result, conn)
+    return (result, conn)
 
 
 def connect_preprocess(db_file, orig_conn, mode='read'):
@@ -42,7 +42,7 @@ def connect_preprocess(db_file, orig_conn, mode='read'):
 
     curs = conn.cursor()
 
-    return(result, conn, curs)
+    return (result, conn, curs)
 
 
 def get_sql_table_list(db_file, orig_conn):
@@ -53,7 +53,7 @@ def get_sql_table_list(db_file, orig_conn):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return(table_list)
+        return (table_list)
 
     try:
         command = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -71,7 +71,7 @@ def get_sql_table_list(db_file, orig_conn):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_list) : Failed on getting table list on db_file "' + str(db_file) + '": ' + str(error))
 
-    return(table_list)
+    return (table_list)
 
 
 def get_sql_table_count(db_file, orig_conn, table_name):
@@ -83,7 +83,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return(count)
+        return (count)
 
     try:
         command = "SELECT count(*) FROM '" + str(table_name) + "'"
@@ -98,7 +98,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_count) : Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '": ' + str(error))
 
-    return(count)
+    return (count)
 
 
 def get_sql_table_key_list(db_file, orig_conn, table_name):
@@ -110,7 +110,7 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return(key_list)
+        return (key_list)
 
     try:
         command = "SELECT * FROM '" + str(table_name) + "'"
@@ -123,7 +123,7 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_key_list) : Failed on getting table key list on db_file "' + str(db_file) + '": ' + str(error))
 
-    return(key_list)
+    return (key_list)
 
 
 def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
@@ -134,7 +134,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return(data_dic)
+        return (data_dic)
 
     try:
         command = "SELECT * FROM '" + str(table_name) + "'"
@@ -156,7 +156,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
             for key in key_list:
                 if key not in table_key_list:
                     common.print_error('*Error* (get_sql_table_data) : "' + str(key) + '": invalid key on specified key list.')
-                    return(data_dic)
+                    return (data_dic)
 
         for item in all_items:
             value_list = list(item)
@@ -174,7 +174,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_data) : Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '": ' + str(error))
 
-    return(data_dic)
+    return (data_dic)
 
 
 def delete_sql_table_rows(db_file, orig_conn, table_name, row_id, begin_line, end_line, commit=True):
@@ -293,7 +293,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
         else:
             key_string = str(key_string) + " '" + str(key) + "' " + str(key_type) + ","
 
-    return(key_string)
+    return (key_string)
 
 
 def gen_sql_table_value_string(value_list, auto_increment=False):
@@ -318,4 +318,4 @@ def gen_sql_table_value_string(value_list, auto_increment=False):
         else:
             value_string = str(value_string) + " '" + str(value) + "',"
 
-    return(value_string)
+    return (value_string)

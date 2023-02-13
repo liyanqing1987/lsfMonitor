@@ -1,6 +1,11 @@
 #!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
-
+################################
+# File Name   : seedb.py
+# Author      : liyanqing
+# Created On  : 2020-10-01 00:00:00
+# Description :
+################################
 import os
 import re
 import sys
@@ -61,7 +66,7 @@ def read_args():
             print('*Error*: ' + str(args.database) + ': No such database file.')
             sys.exit(1)
 
-    return(args.database, args.tables, args.keys, args.number)
+    return (args.database, args.tables, args.keys, args.number)
 
 
 def get_length(input_list):
@@ -76,7 +81,7 @@ def get_length(input_list):
         if item_length > length:
             length = item_length
 
-    return(length)
+    return (length)
 
 
 def seedb(db_file, table_list, key_list, number):

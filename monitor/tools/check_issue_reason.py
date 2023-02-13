@@ -40,7 +40,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return(args.job, args.issue)
+    return (args.job, args.issue)
 
 
 class MainWindow(QMainWindow):
@@ -186,34 +186,34 @@ class MainWindow(QMainWindow):
             for (i, line) in enumerate(job_dic[job]['pending_reasons']):
                 self.info_text.append('[Reason ' + str(i) + '] : ' + str(line))
 
-                if re.search('New job is waiting for scheduling',  line):
+                if re.search(r'New job is waiting for scheduling',  line):
                     self.info_text.append('                    任务分发中, 请耐心等待')
-                elif re.search('Not enough job slot',  line):
+                elif re.search(r'Not enough job slot',  line):
                     self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
                     if job_dic[job]['processors_requested']:
                         self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
-                elif re.search('Job slot limit reached',  line):
+                elif re.search(r'Job slot limit reached',  line):
                     self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
                     if job_dic[job]['processors_requested']:
                         self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
-                elif re.search('Not enough processors to meet the job\'s spanning requirement',  line):
+                elif re.search(r'Not enough processors to meet the job\'s spanning requirement',  line):
                     self.info_text.append('                    cpu需求不能满足, 请耐心等待队列资源.')
 
                     if job_dic[job]['processors_requested']:
                         self.info_text.append('                    cpu : ' + str(job_dic[job]['processors_requested']) + ' slot(s)')
-                elif re.search('Job requirements for reserving resource \(mem\) not satisfied',  line):
+                elif re.search(r'Job requirements for reserving resource \(mem\) not satisfied',  line):
                     self.info_text.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
 
                     if job_dic[job]['requested_resources']:
                         self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
-                elif re.search('Job\'s requirements for resource reservation not satisfied \(Resource: mem\)',  line):
+                elif re.search(r'Job\'s requirements for resource reservation not satisfied \(Resource: mem\)',  line):
                     self.info_text.append('                    mem需求不能满足, 请耐心等待队列资源, 如有必要申请专有队列.')
 
                     if job_dic[job]['requested_resources']:
                         self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
-                elif re.search('There are no suitable hosts for the job',  line):
+                elif re.search(r'There are no suitable hosts for the job',  line):
                     self.info_text.append('                    资源申请不能满足, 请检查资源申请条件是否过于苛刻.')
 
                     if job_dic[job]['processors_requested']:
@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
 
                     if job_dic[job]['requested_resources']:
                         self.info_text.append('                    mem : ' + str(job_dic[job]['requested_resources']))
-                elif re.search('User has reached the per-user job slot limit of the queue',  line):
+                elif re.search(r'User has reached the per-user job slot limit of the queue',  line):
                     self.info_text.append('                    queue限制, 请耐心等待队列资源.')
 
             self.info_text.append('')

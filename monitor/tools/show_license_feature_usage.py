@@ -15,7 +15,7 @@ from PyQt5.QtGui import QBrush
 from PyQt5.QtCore import Qt
 
 if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = '/ic/software/cad_tools/it/lsfMonitor'
+    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
 
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import pyqt5_common
@@ -54,7 +54,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return(args.server, args.vendor, args.feature)
+    return (args.server, args.vendor, args.feature)
 
 
 class ShowLicenseFreatureUsage(QMainWindow):
@@ -83,7 +83,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
                         for usage_dic in license_dic[self.server]['vendor_daemon'][self.vendor]['feature'][self.feature]['in_use_info']:
                             license_feature_usage_dic_list.append(usage_dic)
 
-        return(license_feature_usage_dic_list)
+        return (license_feature_usage_dic_list)
 
     def init_ui(self):
         # Add main_tab

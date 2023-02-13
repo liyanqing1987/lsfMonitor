@@ -44,7 +44,7 @@ def read_args():
         common.print_error('*Error*: "--job" or "--pid" must be specified.')
         sys.exit(1)
 
-    return(args.job, args.pid)
+    return (args.job, args.pid)
 
 
 class ProcessTracer(QMainWindow):
@@ -77,7 +77,7 @@ class ProcessTracer(QMainWindow):
                 common.print_error('*Error*: Not find PIDs information for job "' + str(job) + '".')
                 sys.exit(1)
 
-        return(job_dic, job_dic[job]['pids'])
+        return (job_dic, job_dic[job]['pids'])
 
     def check_pid(self, pid):
         pid_list = []
@@ -88,8 +88,8 @@ class ProcessTracer(QMainWindow):
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
 
-            if re.findall('\((\d+)\)', line):
-                tmp_pid_list = re.findall('\((\d+)\)', line)
+            if re.findall(r'\((\d+)\)', line):
+                tmp_pid_list = re.findall(r'\((\d+)\)', line)
 
                 if tmp_pid_list:
                     pid_list.extend(tmp_pid_list)
@@ -98,7 +98,7 @@ class ProcessTracer(QMainWindow):
             common.print_error('*Error*: No valid pid was found.')
             sys.exit(1)
 
-        return(pid_list)
+        return (pid_list)
 
     def get_process_info(self):
         process_dic = {
@@ -122,8 +122,8 @@ class ProcessTracer(QMainWindow):
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
 
-            if re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line):
-                my_match = re.match('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
+            if re.match(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line):
+                my_match = re.match(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
                 user = my_match.group(1)
                 pid = my_match.group(2)
                 cpu = my_match.group(3)
@@ -142,7 +142,7 @@ class ProcessTracer(QMainWindow):
             else:
                 continue
 
-        return(process_dic)
+        return (process_dic)
 
     def get_bsub_command(self):
         bsub_command = 'bsub -Is '
@@ -156,7 +156,7 @@ class ProcessTracer(QMainWindow):
             started_on_list = started_on.split()
             bsub_command = str(bsub_command) + ' -m ' + str(started_on_list[0])
 
-        return(bsub_command)
+        return (bsub_command)
 
     def init_ui(self):
         # Gen menubar

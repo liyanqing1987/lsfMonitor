@@ -31,7 +31,7 @@ class GetLicenseInfo():
         elif 'lmstat_bsub_command' in os.environ:
             lmstat_command = str(os.environ['lmstat_bsub_command']) + ' "' + str(lmstat_command) + '"'
 
-        return(lmstat_command)
+        return (lmstat_command)
 
     def init_license_dic(self):
         """
@@ -51,7 +51,7 @@ class GetLicenseInfo():
                                                     'vendor_daemon': {}
                                                    }
 
-        return(license_dic)
+        return (license_dic)
 
     def get_license_info(self):
         """
@@ -94,18 +94,18 @@ class GetLicenseInfo():
         vendor_daemon_status_mark = False
 
         license_compile_dic = {
-                               'empty_line': re.compile('^\s*$'),
-                               'license_server_status': re.compile('^\s*License server status: (\S+)\s*$'),
-                               'license_files': re.compile('^\s*License file\(s\) on (\S+): (\S+):\s*$'),
-                               'license_server': re.compile('^\s*(\S+): license server (\S+?) .* (\S+?)\s*$'),
-                               'vendor_daemon_status': re.compile('^\s*Vendor daemon status \(on (.+)\):\s*$'),
-                               'vendor_daemon_up': re.compile('^\s*(\S+): UP (\S+)\s*$'),
-                               'vendor_daemon_down': re.compile('^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
-                               'users_of_feature': re.compile('^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
-                               'in_use_info': re.compile('^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
-                               'reservation': re.compile('^\s*(\d+)\s+RESERVATION for (HOST|HOST_GROUP)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
-                               'feature_expires': re.compile('^Feature .* Expires\s*$'),
-                               'expire_info': re.compile('^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$'),
+                               'empty_line': re.compile(r'^\s*$'),
+                               'license_server_status': re.compile(r'^\s*License server status: (\S+)\s*$'),
+                               'license_files': re.compile(r'^\s*License file\(s\) on (\S+): (\S+):\s*$'),
+                               'license_server': re.compile(r'^\s*(\S+): license server (\S+?) .* (\S+?)\s*$'),
+                               'vendor_daemon_status': re.compile(r'^\s*Vendor daemon status \(on (.+)\):\s*$'),
+                               'vendor_daemon_up': re.compile(r'^\s*(\S+): UP (\S+)\s*$'),
+                               'vendor_daemon_down': re.compile(r'^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
+                               'users_of_feature': re.compile(r'^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
+                               'in_use_info': re.compile(r'^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
+                               'reservation': re.compile(r'^\s*(\d+)\s+RESERVATION for (HOST|HOST_GROUP)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
+                               'feature_expires': re.compile(r'^Feature .* Expires\s*$'),
+                               'expire_info': re.compile(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$'),
                               }
 
         for line in str(stdout, 'utf-8').split('\n'):
@@ -153,8 +153,8 @@ class GetLicenseInfo():
                 display_setting = my_match.group(3)
 
                 if display_setting:
-                    if re.match('^(.+):.+$', display_setting):
-                        display_match = re.match('^(.+):.+$', display_setting)
+                    if re.match(r'^(.+):.+$', display_setting):
+                        display_match = re.match(r'^(.+):.+$', display_setting)
                         usage_dic['submit_host'] = display_match.group(1)
 
                 license_num_setting = my_match.group(9)
@@ -228,7 +228,7 @@ class GetLicenseInfo():
                                                                                              'expires': {},
                                                                                             })
 
-        return(license_dic)
+        return (license_dic)
 
 
 class FilterLicenseDic():
@@ -246,7 +246,7 @@ class FilterLicenseDic():
             if (license_server in server_list) or ('ALL' in server_list):
                 new_license_dic.setdefault(license_server, license_dic[license_server])
 
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_vendor(self, license_dic, vendor_list):
         new_license_dic = {}
@@ -262,7 +262,7 @@ class FilterLicenseDic():
                                                                })
                     new_license_dic[license_server]['vendor_daemon'].setdefault(vendor_daemon, license_dic[license_server]['vendor_daemon'][vendor_daemon])
 
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_feature(self, license_dic, feature_list):
         # Get filtered_feature_list from exact_feature_list/fuzzy_feature_list.
@@ -310,7 +310,7 @@ class FilterLicenseDic():
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature])
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature])
 
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_feature_usage_attribute(self, license_dic, feature_usage_attribute, feature_usage_attribute_list):
         new_license_dic = {}
@@ -341,19 +341,19 @@ class FilterLicenseDic():
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'][i])
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info'].append(usage_dic)
 
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_submit_host(self, license_dic, submit_host_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'submit_host', submit_host_list)
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_execute_host(self, license_dic, execute_host_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'execute_host', execute_host_list)
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_by_user(self, license_dic, user_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'user', user_list)
-        return(new_license_dic)
+        return (new_license_dic)
 
     def filter_show_mode_feature(self, license_dic, show_mode):
         new_license_dic = {}
@@ -398,7 +398,7 @@ class FilterLicenseDic():
                     new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature])
                     new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, expire_dic_list)
 
-        return(new_license_dic)
+        return (new_license_dic)
 
     def run(self, license_dic, server_list=[], vendor_list=[], feature_list=[], submit_host_list=[], execute_host_list=[], user_list=[], show_mode='ALL'):
         filtered_license_dic = license_dic
@@ -424,7 +424,7 @@ class FilterLicenseDic():
         if show_mode != 'ALL':
             filtered_license_dic = self.filter_show_mode_feature(filtered_license_dic, show_mode)
 
-        return(filtered_license_dic)
+        return (filtered_license_dic)
 
 
 def check_long_runtime(start_time, second_threshold=259200):
@@ -444,9 +444,9 @@ def check_long_runtime(start_time, second_threshold=259200):
             start_seconds = int(time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M')))
 
         if current_seconds - start_seconds >= second_threshold:
-            return(True)
+            return (True)
 
-    return(False)
+    return (False)
 
 
 def check_expire_date(expire_date, second_threshold=1209600):
@@ -455,16 +455,16 @@ def check_expire_date(expire_date, second_threshold=1209600):
     Expire in second_threshold (default is 14 days), return day number.
     Expire later than second_threshold (default is 14 days), return 0.
     """
-    if re.search('permanent', expire_date):
-        return(0)
+    if re.search(r'permanent', expire_date):
+        return (0)
     else:
         expire_seconds = int(time.mktime(time.strptime(expire_date, '%d-%b-%Y')))
         expire_seconds = expire_seconds + 86400
         current_seconds = int(time.time())
 
         if expire_seconds < current_seconds:
-            return(-1)
+            return (-1)
         elif expire_seconds - current_seconds <= second_threshold:
-            return((expire_seconds - current_seconds)//86400 + 1)
+            return ((expire_seconds - current_seconds)//86400 + 1)
         else:
-            return(0)
+            return (0)

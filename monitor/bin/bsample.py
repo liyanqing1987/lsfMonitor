@@ -60,7 +60,7 @@ def read_args():
         common.print_error('*Error*: interval "' + str(args.interval) + '": Cannot be less than "0".')
         sys.exit(1)
 
-    return(args.job, args.queue, args.host, args.load, args.user, args.interval)
+    return (args.job, args.queue, args.host, args.load, args.user, args.interval)
 
 
 class Sampling:

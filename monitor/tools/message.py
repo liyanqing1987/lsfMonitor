@@ -3,7 +3,7 @@
 ################################
 # File Name   : process_tracer.py
 # Author      : liyanqing
-# Created On  : 2021-11-30 17:25:47
+# Created On  : 2021-11-30 00:00:00
 # Description :
 ################################
 import os
@@ -38,7 +38,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return(args.title, args.message)
+    return (args.title, args.message)
 
 
 class ShowMessage(QMainWindow):
