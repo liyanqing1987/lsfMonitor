@@ -1,4 +1,3 @@
-#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 ################################
 # File Name   : process_tracer.py
@@ -14,13 +13,10 @@ import argparse
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView, QAction, qApp, QMessageBox
 from PyQt5.QtCore import QTimer
 
-if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
-
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
-from common import lsf_common
-from common import pyqt5_common
+from common import common_lsf
+from common import common_pyqt5
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -67,7 +63,7 @@ class ProcessTracer(QMainWindow):
 
     def check_job(self, job):
         command = 'bjobs -UF ' + str(job)
-        job_dic = lsf_common.get_lsf_bjobs_uf_info(command)
+        job_dic = common_lsf.get_lsf_bjobs_uf_info(command)
 
         if job_dic[job]['status'] != 'RUN':
             common.print_error('*Error*: Job "' + str(job) + '" is not running, cannot get process status.')
@@ -183,7 +179,7 @@ class ProcessTracer(QMainWindow):
             self.setWindowTitle('Process Tracer (pid:' + str(self.pid) + ')')
 
         self.resize(1200, 300)
-        pyqt5_common.center_window(self)
+        common_pyqt5.center_window(self)
 
     def gen_menubar(self):
         menubar = self.menuBar()

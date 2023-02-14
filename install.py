@@ -3,6 +3,7 @@ import sys
 import stat
 
 CWD = os.getcwd()
+PYTHON_PATH = os.path.dirname(os.path.abspath(sys.executable))
 
 
 def check_python_version():
@@ -29,72 +30,38 @@ but you're trying to install it on Python {}.{}.
         print('    Current  python version : ' + str(current_python))
 
 
-def gen_bmonitor():
+def gen_shell_tools():
     """
-    Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bmonitor.
+    Generate shell scripts under <LSFMONITOR_INSTALL_PATH>/tools.
     """
-    bmonitor = str(CWD) + '/monitor/bin/bmonitor'
+    tool_list = ['monitor/bin/bmonitor', 'monitor/bin/bsample', 'monitor/tools/check_issue_reason', 'monitor/tools/seedb', 'monitor/tools/process_tracer', 'monitor/tools/show_license_feature_usage']
 
-    print('')
-    print('>>> Generate script "' + str(bmonitor) + '".')
+    for tool_name in tool_list:
+        tool = str(CWD) + '/' + str(tool_name)
 
-    try:
-        with open(bmonitor, 'w') as BM:
-            python_path = os.path.dirname(os.path.abspath(sys.executable))
+        print('')
+        print('>>> Generate script "' + str(tool) + '".')
 
-            BM.write("""#!/bin/bash
+        try:
+            with open(tool, 'w') as SP:
+                SP.write("""#!/bin/bash
 
 # Set python3 path.
-export PATH=""" + str(python_path) + """:$PATH
+export PATH=""" + str(PYTHON_PATH) + """:$PATH
 
-# Set lsfMonitor install path.
+# Set install path.
 export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
 
 # Set LD_LIBRARY_PATH.
-export LD_LIBRARY_PATH=$LSFMONITOR_INSTALL_PATH/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$LSFMONITOR_INSTALL_PATH/lib:""" + str(os.environ['LD_LIBRARY_PATH']) + """
 
-# Execute bmonitor.py.
-python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bmonitor.py $@
-""")
+# Execute """ + str(tool_name) + """.py.
+python3 $LSFMONITOR_INSTALL_PATH/""" + str(tool_name) + '.py $@')
 
-        os.chmod(bmonitor, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-    except Exception as err:
-        print('*Error*: Failed on generating script "' + str(bmonitor) + '": ' + str(err))
-        sys.exit(1)
-
-
-def gen_bsample():
-    """
-    Generate script <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample.
-    """
-    bsample = str(CWD) + '/monitor/bin/bsample'
-
-    print('')
-    print('>>> Generate script "' + str(bsample) + '".')
-
-    try:
-        with open(bsample, 'w') as BS:
-            python_path = os.path.dirname(os.path.abspath(sys.executable))
-
-            BS.write("""#!/bin/bash
-
-# Set python3 path.
-export PATH=""" + str(python_path) + """:$PATH
-
-# Set lsfMonitor install path.
-export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
-
-# Set LD_LIBRARY_PATH.
-export LD_LIBRARY_PATH=$LSFMONITOR_INSTALL_PATH/lib:$LD_LIBRARY_PATH
-
-# Execute bsample.py.
-python3 $LSFMONITOR_INSTALL_PATH/monitor/bin/bsample.py $@
-""")
-
-        os.chmod(bsample, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-    except Exception as err:
-        print('*Error*: Failed on generating script "' + str(bsample) + '": ' + str(err))
-        sys.exit(1)
+            os.chmod(tool, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+        except Exception as error:
+            print('*Error*: Failed on generating script "' + str(tool) + '": ' + str(error))
+            sys.exit(1)
 
 
 def gen_config_file():
@@ -130,31 +97,13 @@ lmstat_bsub_command = ""
             sys.exit(1)
 
 
-def update_tools():
-    """
-    Update string "LSFMONITOR_INSTALL_PATH_STRING" into environment variable LSFMONITOR_INSTALL_PATH.
-    """
-    expected_python = os.path.abspath(sys.executable)
-    tool_list = [str(CWD) + '/monitor/tools/check_issue_reason.py', str(CWD) + '/monitor/tools/message.py', str(CWD) + '/monitor/tools/seedb.py', str(CWD) + '/monitor/tools/process_tracer.py', str(CWD) + '/monitor/tools/show_license_feature_usage.py']
-
-    for tool in tool_list:
-        with open(tool, 'r+') as TOOL:
-            lines = TOOL.read()
-            TOOL.seek(0)
-            lines = lines.replace('EXPECTED_PYTHON', expected_python)
-            lines = lines.replace('LSFMONITOR_INSTALL_PATH_STRING', CWD)
-            TOOL.write(lines)
-
-
 ################
 # Main Process #
 ################
 def main():
     check_python_version()
-    gen_bmonitor()
-    gen_bsample()
+    gen_shell_tools()
     gen_config_file()
-    update_tools()
 
     print('')
     print('Done, Please enjoy it.')

@@ -1,4 +1,3 @@
-#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 ################################
 # File Name   : show_license_feature_usage.py
@@ -14,12 +13,9 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGrid
 from PyQt5.QtGui import QBrush
 from PyQt5.QtCore import Qt
 
-if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
-
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
-from common import pyqt5_common
-from common import license_common
+from common import common_pyqt5
+from common import common_license
 from conf import config
 
 # Import local config file if exists.
@@ -72,7 +68,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
         if config.lmstat_path:
             os.environ['PATH'] = str(config.lmstat_path) + ':' + str(os.environ['PATH'])
 
-        my_get_license_info = license_common.GetLicenseInfo(specified_feature=self.feature, bsub_command=config.lmstat_bsub_command)
+        my_get_license_info = common_license.GetLicenseInfo(specified_feature=self.feature, bsub_command=config.lmstat_bsub_command)
         license_dic = my_get_license_info.get_license_info()
         license_feature_usage_dic_list = []
 
@@ -104,7 +100,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
         self.setWindowTitle('"' + str(self.feature) + '" usage on ' + str(self.server) + '/' + str(self.vendor))
 
         self.resize(900, 400)
-        pyqt5_common.center_window(self)
+        common_pyqt5.center_window(self)
 
     def gen_main_frame(self):
         self.main_table = QTableWidget(self.main_frame)
@@ -140,7 +136,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
                 item = QTableWidgetItem()
                 item.setText(license_feature_usage_dic[title])
 
-                if (column == 5) and license_common.check_long_runtime(license_feature_usage_dic[title]):
+                if (column == 5) and common_license.check_long_runtime(license_feature_usage_dic[title]):
                     item.setForeground(QBrush(Qt.red))
 
                 self.main_table.setItem(row, column, item)

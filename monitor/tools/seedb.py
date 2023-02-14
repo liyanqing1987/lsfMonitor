@@ -1,4 +1,3 @@
-#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 ################################
 # File Name   : seedb.py
@@ -11,11 +10,8 @@ import re
 import sys
 import argparse
 
-if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
-
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
-from common import sqlite3_common
+from common import common_sqlite3
 from conf import config
 
 # Import local config file if exists.
@@ -88,7 +84,7 @@ def seedb(db_file, table_list, key_list, number):
     print('DB FILE : ' + str(db_file))
 
     if len(table_list) == 0:
-        table_list = sqlite3_common.get_sql_table_list(db_file, '')
+        table_list = common_sqlite3.get_sql_table_list(db_file, '')
 
         print('TABLES :')
         print('========')
@@ -102,7 +98,7 @@ def seedb(db_file, table_list, key_list, number):
             print('TABLE : ' + str(table))
             print('========')
 
-            data_dic = sqlite3_common.get_sql_table_data(db_file, '', table, key_list, number)
+            data_dic = common_sqlite3.get_sql_table_data(db_file, '', table, key_list, number)
             key_list = list(data_dic.keys())
 
             if len(key_list) == 0:

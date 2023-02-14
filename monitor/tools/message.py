@@ -1,7 +1,6 @@
-#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 ################################
-# File Name   : process_tracer.py
+# File Name   : message.py
 # Author      : liyanqing
 # Created On  : 2021-11-30 00:00:00
 # Description :
@@ -13,11 +12,8 @@ import argparse
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QLabel
 from PyQt5.QtCore import Qt
 
-if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
-
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
-from common import pyqt5_common
+from common import common_pyqt5
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -29,16 +25,19 @@ def read_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-t', '--title',
-                        default='Message',
+                        nargs='+',
+                        default=['Message',],
                         help='Specify message title, default is "Message".')
     parser.add_argument('-m', '--message',
                         required=True,
-                        default='',
+                        nargs='+',
                         help='Required argument, specified message (text).')
 
     args = parser.parse_args()
+    title_string = ' '.join(args.title)
+    message_string = ' '.join(args.message)
 
-    return (args.title, args.message)
+    return (title_string, message_string)
 
 
 class ShowMessage(QMainWindow):
@@ -67,7 +66,7 @@ class ShowMessage(QMainWindow):
         # Show main window
         self.setWindowTitle(self.title)
         self.resize(400, 50)
-        pyqt5_common.center_window(self)
+        common_pyqt5.center_window(self)
 
     def gen_main_frame(self):
         self.message_label = QLabel(self.main_frame)

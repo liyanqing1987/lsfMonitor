@@ -1,4 +1,3 @@
-#!EXPECTED_PYTHON
 # -*- coding: utf-8 -*-
 ################################
 # File Name   : check_issue_reason.py
@@ -14,12 +13,9 @@ import argparse
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QLabel, QLineEdit, QComboBox, QPushButton, QTextEdit
 from PyQt5.QtCore import QThread
 
-if 'LSFMONITOR_INSTALL_PATH' not in os.environ:
-    os.environ['LSFMONITOR_INSTALL_PATH'] = 'LSFMONITOR_INSTALL_PATH_STRING'
-
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
-from common import lsf_common
-from common import pyqt5_common
+from common import common_lsf
+from common import common_pyqt5
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -90,7 +86,7 @@ class MainWindow(QMainWindow):
         # Show main window
         self.setWindowTitle('Check Issue Reason')
         self.resize(600, 300)
-        pyqt5_common.center_window(self)
+        common_pyqt5.center_window(self)
 
     def process_args(self):
         """
@@ -165,7 +161,7 @@ class MainWindow(QMainWindow):
             self.info_text.append('<font color="#FF0000">*Error*: Please specify "Job" first.</font>')
         else:
             command = 'bjobs -UF ' + str(job)
-            job_dic = lsf_common.get_bjobs_uf_info(command)
+            job_dic = common_lsf.get_bjobs_uf_info(command)
 
             if job not in job_dic:
                 self.info_text.append('<font color="#FF0000">*Error*: "' + str(job) + '": No such job.</font>')
@@ -269,14 +265,14 @@ class MainWindow(QMainWindow):
 
 class ProcessTracer(QThread):
     """
-    Start tool process_tracer.py to trace job process.
+    Start tool process_tracer to trace job process.
     """
     def __init__(self, job):
         super(ProcessTracer, self).__init__()
         self.job = job
 
     def run(self):
-        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer.py -j ' + str(self.job)
+        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer -j ' + str(self.job)
         os.system(command)
 
 
