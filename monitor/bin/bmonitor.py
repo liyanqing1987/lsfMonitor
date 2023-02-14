@@ -20,10 +20,10 @@ from matplotlib.figure import Figure
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
-from common import lsf_common
-from common import license_common
-from common import pyqt5_common
-from common import sqlite3_common
+from common import common_lsf
+from common import common_license
+from common import common_pyqt5
+from common import common_sqlite3
 from conf import config
 
 # Import local config file if exists.
@@ -51,7 +51,7 @@ def check_tool():
     """
     Make sure LSF or Openlava environment exists.
     """
-    tool = lsf_common.get_tool_name()
+    tool = common_lsf.get_tool_name()
 
     if tool == '':
         print('*Error*: Not find any LSF or Openlava environment!')
@@ -89,7 +89,7 @@ def read_args():
         args.tab = 'JOB'
 
         command = 'bjobs -w ' + str(args.jobid)
-        job_dic = lsf_common.get_bjobs_info(command)
+        job_dic = common_lsf.get_bjobs_info(command)
 
         if not job_dic:
             args.jobid = None
@@ -158,7 +158,7 @@ class MainWindow(QMainWindow):
         if config.lmstat_path:
             os.environ['PATH'] = str(config.lmstat_path) + ':' + str(os.environ['PATH'])
 
-        my_get_license_info = license_common.GetLicenseInfo(bsub_command=config.lmstat_bsub_command)
+        my_get_license_info = common_license.GetLicenseInfo(bsub_command=config.lmstat_bsub_command)
         self.license_dic = my_get_license_info.get_license_info()
 
         # Print loading license informaiton message with GUI. (END)
@@ -196,8 +196,8 @@ class MainWindow(QMainWindow):
 
         # Get LSF queue/host information.
         print('* Loading LSF information, please wait a moment ...')
-        self.queue_list = lsf_common.get_queue_list()
-        self.host_list = lsf_common.get_host_list()
+        self.queue_list = common_lsf.get_queue_list()
+        self.host_list = common_lsf.get_host_list()
 
         # Get license information.
         self.get_license_dic()
@@ -213,7 +213,7 @@ class MainWindow(QMainWindow):
         # Show main window
         self.setWindowTitle('lsfMonitor')
         self.resize(1111, 620)
-        pyqt5_common.center_window(self)
+        common_pyqt5.center_window(self)
 
     def switch_tab(self, specified_tab):
         """
@@ -485,7 +485,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.job_tab_frame1.setLayout(job_tab_frame1_grid)
 
     def process_tracer(self):
-        # Call script process_tracer.py to get job process information.
+        # Call script process_tracer to get job process information.
         self.current_job = self.job_tab_job_line.text().strip()
 
         if self.current_job:
@@ -540,7 +540,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Get job info
         my_show_message = ShowMessage('Info', '* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
         my_show_message.start()
-        self.job_info_dic = lsf_common.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
+        self.job_info_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
         my_show_message.terminate()
 
         if self.job_info_dic:
@@ -641,7 +641,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         if not init:
             self.job_tab_job_info_text.insertPlainText(self.job_info_dic[self.current_job]['job_info'])
-            pyqt5_common.text_edit_visible_position(self.job_tab_job_info_text, 'Start')
+            common_pyqt5.text_edit_visible_position(self.job_tab_job_info_text, 'Start')
 
     def get_job_mem_list(self):
         """
@@ -658,7 +658,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if not os.path.exists(job_db_file):
             common.print_warning('*Warning*: Job memory usage information is missing for "' + str(self.current_job) + '".')
         else:
-            (job_db_file_connect_result, job_db_conn) = sqlite3_common.connect_db_file(job_db_file)
+            (job_db_file_connect_result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file)
 
             if job_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting job database file "' + str(job_db_file) + '".')
@@ -666,7 +666,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 print('Getting history of job memory usage for job "' + str(self.current_job) + '".')
 
                 table_name = 'job_' + str(self.current_job)
-                data_dic = sqlite3_common.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
+                data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
 
                 if not data_dic:
                     common.print_warning('*Warning*: job memory usage information is empty for "' + str(self.current_job) + '".')
@@ -856,7 +856,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Run command to get expected jobs information.
         my_show_message = ShowMessage('Info', '* Loading LSF jobs information, please wait a moment ...')
         my_show_message.start()
-        orig_job_dic = lsf_common.get_bjobs_uf_info(command)
+        orig_job_dic = common_lsf.get_bjobs_uf_info(command)
         my_show_message.terminate()
 
         # Filter job_dic.
@@ -1116,11 +1116,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         print('* Loading LSF hosts information, please wait a moment ...')
 
-        bhosts_dic = lsf_common.get_bhosts_info()
-        bhosts_load_dic = lsf_common.get_bhosts_load_info()
-        lshosts_dic = lsf_common.get_lshosts_info()
-        lsload_dic = lsf_common.get_lsload_info()
-        host_queue_dic = lsf_common.get_host_queue_info()
+        bhosts_dic = common_lsf.get_bhosts_info()
+        bhosts_load_dic = common_lsf.get_bhosts_load_info()
+        lshosts_dic = common_lsf.get_lshosts_info()
+        lsload_dic = common_lsf.get_lsload_info()
+        host_queue_dic = common_lsf.get_host_queue_info()
 
         # Get expected host list
         self.queue_host_list = []
@@ -1369,6 +1369,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 host_list.remove(host)
                 host_list.insert(0, host)
                 self.set_load_tab_host_combo(host_list)
+                self.update_load_tab_load_info()
                 self.main_tab.setCurrentWidget(self.load_tab)
             elif item.column() == 5:
                 if int(njobs_num) > 0:
@@ -1461,7 +1462,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.queues_tab_table.setRowCount(len(self.queue_list)+1)
 
         print('* Loading LSF queue information, please wait a moment ...')
-        queues_dic = lsf_common.get_bqueues_info()
+        queues_dic = common_lsf.get_bqueues_info()
         queue_list = copy.deepcopy(self.queue_list)
 
         queue_list.append('ALL')
@@ -1612,7 +1613,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             line = line.strip()
             self.queues_tab_text.insertPlainText(str(line) + '\n')
 
-        pyqt5_common.text_edit_visible_position(self.queues_tab_text, 'Start')
+        common_pyqt5.text_edit_visible_position(self.queues_tab_text, 'Start')
 
     def get_queue_job_num_list(self, queue):
         """
@@ -1629,7 +1630,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if not os.path.exists(queue_db_file):
             common.print_warning('*Warning*: queue pend/run job number information is missing for "' + str(queue) + '".')
         else:
-            (queue_db_file_connect_result, queue_db_conn) = sqlite3_common.connect_db_file(queue_db_file)
+            (queue_db_file_connect_result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file)
 
             if queue_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting queue database file "' + str(self.queue_db_file) + '".')
@@ -1637,7 +1638,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 print('Getting history of queue PEND/RUN job number for queue "' + str(queue) + '".')
 
                 table_name = 'queue_' + str(queue)
-                data_dic = sqlite3_common.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'PEND', 'RUN'])
+                data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'PEND', 'RUN'])
 
                 if not data_dic:
                     common.print_warning('*Warning*: queue pend/run job number information is empty for "' + str(queue) + '".')
@@ -1836,7 +1837,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if not os.path.exists(load_db_file):
             common.print_warning('*Warning*: load database "' + str(load_db_file) + '" is missing.')
         else:
-            (load_db_file_connect_result, load_db_conn) = sqlite3_common.connect_db_file(load_db_file)
+            (load_db_file_connect_result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file)
 
             if load_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting load database file "' + str(load_db_file) + '".')
@@ -1845,7 +1846,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     print('Getting history of load information for host "' + str(self.specified_host) + '".')
 
                     table_name = 'load_' + str(self.specified_host)
-                    data_dic = sqlite3_common.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'])
+                    data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'])
 
                     if not data_dic:
                         common.print_warning('*Warning*: load information is empty for "' + str(self.specified_host) + '".')
@@ -2096,7 +2097,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             specified_license_feature_list = self.license_tab_feature_line.text().strip().split()
             show_mode = self.license_tab_show_combo.currentText().strip()
 
-            filter_license_dic = license_common.FilterLicenseDic()
+            filter_license_dic = common_license.FilterLicenseDic()
             filtered_license_dic = filter_license_dic.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, show_mode=show_mode)
 
             # Update self.license_tab_feature_table and self.license_tab_expires_table.
@@ -2216,7 +2217,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                         expires = expires_dic['expires']
                         item = QTableWidgetItem(expires)
-                        expires_mark = license_common.check_expire_date(expires)
+                        expires_mark = common_license.check_expire_date(expires)
 
                         if expires_mark == 0:
                             pass
@@ -2236,7 +2237,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
 class CheckIssueReason(QThread):
     """
-    Start tool check_issue_reason.py to debug issue job.
+    Start tool check_issue_reason to debug issue job.
     """
     def __init__(self, job='', issue='PEND'):
         super(CheckIssueReason, self).__init__()
@@ -2244,7 +2245,7 @@ class CheckIssueReason(QThread):
         self.issue = issue
 
     def run(self):
-        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/check_issue_reason.py -i ' + str(self.issue)
+        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/check_issue_reason -i ' + str(self.issue)
 
         if self.job:
             command = str(command) + ' -j ' + str(self.job)
@@ -2254,20 +2255,20 @@ class CheckIssueReason(QThread):
 
 class ProcessTracer(QThread):
     """
-    Start tool process_tracer.py to trace job process.
+    Start tool process_tracer to trace job process.
     """
     def __init__(self, job):
         super(ProcessTracer, self).__init__()
         self.job = job
 
     def run(self):
-        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/process_tracer.py -j ' + str(self.job)
+        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/process_tracer -j ' + str(self.job)
         os.system(command)
 
 
 class ShowLicenseFeatureUsage(QThread):
     """
-    Start tool show_license_feature_usage.py to show license feature usage information.
+    Start tool show_license_feature_usage to show license feature usage information.
     """
     def __init__(self, server, vendor, feature):
         super(ShowLicenseFeatureUsage, self).__init__()
@@ -2276,13 +2277,13 @@ class ShowLicenseFeatureUsage(QThread):
         self.feature = feature
 
     def run(self):
-        command = str(str(os.environ['LSFMONITOR_INSTALL_PATH'])) + '/monitor/tools/show_license_feature_usage.py -s ' + str(self.server) + ' -v ' + str(self.vendor) + ' -f ' + str(self.feature)
+        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/show_license_feature_usage -s ' + str(self.server) + ' -v ' + str(self.vendor) + ' -f ' + str(self.feature)
         os.system(command)
 
 
 class ShowMessage(QThread):
     """
-    Show message with tool message.py.
+    Show message with tool message.
     """
     def __init__(self, title, message):
         super(ShowMessage, self).__init__()
@@ -2290,7 +2291,7 @@ class ShowMessage(QThread):
         self.message = message
 
     def run(self):
-        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
+        command = 'python3 ' + str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
         os.system(command)
 
 
