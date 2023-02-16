@@ -308,7 +308,9 @@ class FilterLicenseDic():
                                                                                                         'expires': {}
                                                                                                        })
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature])
-                            new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature])
+
+                            if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
+                                new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature])
 
         return (new_license_dic)
 
