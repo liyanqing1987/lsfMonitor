@@ -219,14 +219,12 @@ class MainWindow(QMainWindow):
         """
         Switch to the specified Tab.
         """
-        tab_dic = {
-                   'JOB': self.job_tab,
+        tab_dic = {'JOB': self.job_tab,
                    'JOBS': self.jobs_tab,
                    'HOSTS': self.hosts_tab,
                    'QUEUES': self.queues_tab,
                    'LOAD': self.load_tab,
-                   'LICENSE': self.license_tab,
-                  }
+                   'LICENSE': self.license_tab}
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
 
@@ -1168,8 +1166,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "Ncpus" item.
             j = j+1
-            index = lshosts_dic['HOST_NAME'].index(host)
-            ncpus = lshosts_dic['ncpus'][index]
+            ncpus = 0
+
+            if host in lshosts_dic['HOST_NAME']:
+                index = lshosts_dic['HOST_NAME'].index(host)
+                ncpus = lshosts_dic['ncpus'][index]
 
             if not re.match(r'^[0-9]+$', ncpus):
                 common.print_warning('*Warning*: host(' + str(host) + ') ncpus info "' + str(ncpus) + '": invalid value, reset it to "0".')
@@ -1231,8 +1232,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "MaxMem" item.
             j = j+1
-            index = lshosts_dic['HOST_NAME'].index(host)
-            maxmem = lshosts_dic['maxmem'][index]
+            maxmem = 0
+
+            if host in lshosts_dic['HOST_NAME']:
+                index = lshosts_dic['HOST_NAME'].index(host)
+                maxmem = lshosts_dic['maxmem'][index]
 
             if re.search(r'M', maxmem):
                 maxmem = re.sub(r'M', '', maxmem)
@@ -1281,8 +1285,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "MaxSwp" item.
             j = j+1
-            index = lshosts_dic['HOST_NAME'].index(host)
-            maxswp = lshosts_dic['maxswp'][index]
+            maxswp = 0
+
+            if host in lshosts_dic['HOST_NAME']:
+                index = lshosts_dic['HOST_NAME'].index(host)
+                maxswp = lshosts_dic['maxswp'][index]
 
             if re.search(r'M', maxswp):
                 maxswp = re.sub(r'M', '', maxswp)
