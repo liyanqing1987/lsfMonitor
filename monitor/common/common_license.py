@@ -369,18 +369,20 @@ class FilterLicenseDic():
                         if license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use'] == '0':
                             continue
                         else:
-                            for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
-                                expire_dic_list.append(expire_dic)
+                            if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
+                                for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
+                                    expire_dic_list.append(expire_dic)
                     elif show_mode in ['Expired', 'Nearly_Expired', 'Unexpired']:
-                        for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
-                            expire_mark = check_expire_date(expire_dic['expires'])
+                        if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
+                            for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
+                                expire_mark = check_expire_date(expire_dic['expires'])
 
-                            if (show_mode == 'Expired') and (expire_mark == -1):
-                                expire_dic_list.append(expire_dic)
-                            elif (show_mode == 'Nearly_Expired') and ((expire_mark != -1) and (expire_mark != 0)):
-                                expire_dic_list.append(expire_dic)
-                            elif (show_mode == 'Unexpired') and (expire_mark == 0):
-                                expire_dic_list.append(expire_dic)
+                                if (show_mode == 'Expired') and (expire_mark == -1):
+                                    expire_dic_list.append(expire_dic)
+                                elif (show_mode == 'Nearly_Expired') and ((expire_mark != -1) and (expire_mark != 0)):
+                                    expire_dic_list.append(expire_dic)
+                                elif (show_mode == 'Unexpired') and (expire_mark == 0):
+                                    expire_dic_list.append(expire_dic)
 
                         if not expire_dic_list:
                             continue
