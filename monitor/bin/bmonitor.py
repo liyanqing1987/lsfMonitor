@@ -1166,7 +1166,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "Ncpus" item.
             j = j+1
-            ncpus = 0
+            ncpus = '0'
 
             if host in lshosts_dic['HOST_NAME']:
                 index = lshosts_dic['HOST_NAME'].index(host)
@@ -1232,7 +1232,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "MaxMem" item.
             j = j+1
-            maxmem = 0
+            maxmem = '0'
 
             if host in lshosts_dic['HOST_NAME']:
                 index = lshosts_dic['HOST_NAME'].index(host)
@@ -1285,7 +1285,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "MaxSwp" item.
             j = j+1
-            maxswp = 0
+            maxswp = '0'
 
             if host in lshosts_dic['HOST_NAME']:
                 index = lshosts_dic['HOST_NAME'].index(host)
