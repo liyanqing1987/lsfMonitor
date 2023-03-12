@@ -178,7 +178,7 @@ class MainWindow(QMainWindow):
         self.main_tab = QTabWidget(self)
         self.setCentralWidget(self.main_tab)
 
-        # Define four sub-tabs (JOB/JOBS/HOSTS/QUEUES)
+        # Define sub-tabs
         self.job_tab = QWidget()
         self.jobs_tab = QWidget()
         self.hosts_tab = QWidget()
