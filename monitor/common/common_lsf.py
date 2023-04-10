@@ -411,7 +411,7 @@ def get_lsf_bjobs_uf_info(command):
                         my_match = job_compile_dic['cpu_time_compile'].match(line)
                         my_dic[job]['cpu_time'] = my_match.group(1)
 
-                    if job_compile_dic['mem_compile'].match(line):
+                    if job_compile_dic['mem_compile'].match(line) and (not my_dic[job]['mem']):
                         my_match = job_compile_dic['mem_compile'].match(line)
                         my_dic[job]['mem'] = my_match.group(1)
                         unit = my_match.group(3)
