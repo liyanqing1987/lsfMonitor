@@ -265,7 +265,7 @@ class FilterLicenseDic():
                             exact_feature_list.append(feature)
 
                     for specified_feature in feature_list:
-                        if re.search(specified_feature.lower(), feature.lower()):
+                        if re.search(re.escape(specified_feature.lower()), feature.lower()):
                             if feature not in fuzzy_feature_list:
                                 fuzzy_feature_list.append(feature)
 
