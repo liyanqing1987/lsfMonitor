@@ -2172,7 +2172,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if item is not None:
             if item.column() == 4:
                 current_row = self.license_tab_feature_table.currentRow()
-                in_use_num = int(self.license_tab_feature_table.item(current_row, 3).text().strip())
+                in_use_num = int(self.license_tab_feature_table.item(current_row, 4).text().strip())
 
                 if in_use_num > 0:
                     license_server = self.license_tab_feature_table.item(current_row, 0).text().strip()

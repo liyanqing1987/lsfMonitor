@@ -63,8 +63,8 @@ class GetLicenseInfo():
                                                           'vendor_daemon_status': 'UP',
                                                           'vendor_daemon_version': '',
                                                           'feature': {feature: {
-                                                                                'issued': 0,
-                                                                                'in_use': 0,
+                                                                                'issued': '0',
+                                                                                'in_use': '0',
                                                                                 'in_use_info_string': [],
                                                                                 'in_use_info': [],
                                                                                },
@@ -99,6 +99,7 @@ class GetLicenseInfo():
                                'vendor_daemon_up': re.compile(r'^\s*(\S+): UP (\S+)\s*$'),
                                'vendor_daemon_down': re.compile(r'^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
                                'users_of_feature': re.compile(r'^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
+                               'users_of_feature_uncounted': re.compile(r'^Users of (\S+):  \(Uncounted,.*\)\s*$'),
                                'in_use_info': re.compile(r'^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
                                'reservation': re.compile(r'^\s*(\d+)\s+RESERVATION for (HOST|HOST_GROUP)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
                                'feature_expires': re.compile(r'^Feature .* Expires\s*$'),
@@ -126,6 +127,16 @@ class GetLicenseInfo():
                 feature = my_match.group(1)
                 issued_num = my_match.group(2)
                 in_use_num = my_match.group(4)
+
+                license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, {'issued': issued_num,
+                                                                                                            'in_use': in_use_num,
+                                                                                                            'in_use_info_string': [],
+                                                                                                            'in_use_info': []})
+            elif license_compile_dic['users_of_feature_uncounted'].match(line):
+                my_match = license_compile_dic['users_of_feature_uncounted'].match(line)
+                feature = my_match.group(1)
+                issued_num = 'Uncounted'
+                in_use_num = '0'
 
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, {'issued': issued_num,
                                                                                                             'in_use': in_use_num,
@@ -161,6 +172,10 @@ class GetLicenseInfo():
 
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(line.strip())
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info'].append(usage_dic)
+
+                # Update in_use num with "Uncounted" issued num.
+                if license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['issued'] == 'Uncounted':
+                    license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use'] = str(int(license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']) + int(usage_dic['license_num']))
             elif license_compile_dic['reservation'].match(line):
                 my_match = license_compile_dic['reservation'].match(line)
                 usage_dic = {'user': 'N/A',
