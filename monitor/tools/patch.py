@@ -106,7 +106,7 @@ class Patch():
                     except Exception as error:
                         print('*Error*: Failed on copying file "' + str(abs_patch_py) + '" into "' + str(abs_install_py) + '".')
                         print('         ' + str(error))
-                    sys.exit(1)
+                        sys.exit(1)
 
 
 ################
