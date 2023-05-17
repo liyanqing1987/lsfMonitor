@@ -1,6 +1,6 @@
 Below is the usage of bsample.py.
 ====
-usage: bmonitor.py [-h] [-j JOBID] [-u USER] [-f FEATURE] [-t {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}]
+usage: bmonitor.py [-h] [-j JOBID] [-u USER] [-f FEATURE] [-t {JOB,JOBS,HOSTS,QUEUES,LOAD,UTILIZATION,LICENSE}] [-dl]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -9,19 +9,22 @@ optional arguments:
   -u USER, --user USER  Specify the user show how's job information on "JOBS" tab.
   -f FEATURE, --feature FEATURE
                         Specify license feature which you want to see on "LICENSE" tab.
-  -t {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}, --tab {JOB,JOBS,HOSTS,QUEUES,LOAD,LICENSE}
-                        Specify the current tab, default is "JOB" tab.
+  -t {JOB,JOBS,HOSTS,QUEUES,LOAD,UTILIZATION,LICENSE}, --tab {JOB,JOBS,HOSTS,QUEUES,LOAD,UTILIZATION,LICENSE}
+                        Specify current tab, default is "JOB" tab.
+  -dl, --disable_license
+                        Disable license check function.
 ====
 
 
 bmonitor.py have only a graphical interface window, contains five tabs, JOB/JOBS/HOSTS/QUEUES/LOAD.
 
-JOB     : job information and job memory curve.
-JOBS    : job list and basic job information.
-HOSTS   : host list and basic host information.
-QUEUES  : queue list, queue information and queue RUN/PEND job number curve.
-LOAD    : host load information, could show ut/mem curve for specified host.
-LICENSE : EDA license feature usage and expiration information.
+JOB         : job information and job memory curve.
+JOBS        : job list and basic job information.
+HOSTS       : host list and basic host information.
+QUEUES      : queue list, queue information and queue RUN/PEND job number curve.
+LOAD        : host load information, could show ut/mem curve for specified host.
+UTILIZATION : slot/cpu/memory utilization information, could show slot/cpu/mem utilization curve for specified hosts.
+LICENSE     : EDA license feature usage and expiration information.
 
 
 For the menu bar:
@@ -64,8 +67,18 @@ For some behaviors:
 * If the PEND job number is larger than 0, it will be red.
 
 ** LOAD tab
-* Choice host name on "Host" combo, it will show the host ut/mem curve.
-* Choice date range on "Date" combo.
+* Choice host name on "Host" combo.
+* Choice begin date on "Begin_Date" combo.
+* Choice end date on "End_Date" combo.
+* Click "Check" button to show ut/mem curve.
+
+** UTILIZATION tab
+* Choice queues on "Queue" combo. (used for choicing hosts)
+* Choice hosts on "Host" combo.
+* Choice resources on "Resource" combo.
+* Choice begin date on "Begin_Date" combo.
+* Choice end date on "End_Date" combo.
+* Click "Check" button to show slot/cpu//mem curve.
 
 ** LICENSE tab
 * Choice license server on "License Server" combo, it will show all license server related features information.

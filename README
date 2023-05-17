@@ -32,8 +32,8 @@ normal -Is". (It is forbidden to run lmstat on login server.)
 
 
 SAMPLING:
-Use monitor/bin/bsample sample job/queue data first, then bmonitor
-can show the job/queue info with saved database.
+Use monitor/bin/bsample sample job/queue/load/utilization data first, then bmonitor
+can show the job/queue/load/utilization info with saved database.
 Below is the suggested crontab setting on sampling data.
 
 SHELL=/bin/csh
@@ -41,8 +41,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
 */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
 */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
 */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
-
-Suggested sampling frequency is 5 minutes.
+0 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
 
 
 BMONITORING:
