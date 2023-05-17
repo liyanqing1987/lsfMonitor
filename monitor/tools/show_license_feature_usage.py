@@ -79,7 +79,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
                         for usage_dic in license_dic[self.server]['vendor_daemon'][self.vendor]['feature'][self.feature]['in_use_info']:
                             license_feature_usage_dic_list.append(usage_dic)
 
-        return (license_feature_usage_dic_list)
+        return license_feature_usage_dic_list
 
     def init_ui(self):
         # Add main_tab

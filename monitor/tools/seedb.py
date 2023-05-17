@@ -77,16 +77,16 @@ def get_length(input_list):
         if item_length > length:
             length = item_length
 
-    return (length)
+    return length
 
 
 def seedb(db_file, table_list, key_list, number):
-    print('DB FILE : ' + str(db_file))
+    print('DB_FILE : ' + str(db_file))
 
     if len(table_list) == 0:
         table_list = common_sqlite3.get_sql_table_list(db_file, '')
 
-        print('TABLES :')
+        print('TABLES  :')
         print('========')
 
         for table in table_list:
@@ -95,10 +95,15 @@ def seedb(db_file, table_list, key_list, number):
         print('========')
     else:
         for table in table_list:
-            print('TABLE : ' + str(table))
+            print('TABLE   : ' + str(table))
             print('========')
 
-            data_dic = common_sqlite3.get_sql_table_data(db_file, '', table, key_list, number)
+            select_condition = ''
+
+            if number > 0:
+                select_condition = 'limit ' + str(number)
+
+            data_dic = common_sqlite3.get_sql_table_data(db_file, '', table, key_list, select_condition)
             key_list = list(data_dic.keys())
 
             if len(key_list) == 0:

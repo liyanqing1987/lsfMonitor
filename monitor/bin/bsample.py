@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import argparse
 import datetime
@@ -41,26 +42,21 @@ def read_args():
                         help='Sample host info with command "bhosts".')
     parser.add_argument("-l", "--load",
                         action="store_true", default=False,
-                        help='Sample host load info with command "lsload".')
+                        help='Sample host load (ut/tmp/swp/mem) info with command "lsload".')
     parser.add_argument("-u", "--user",
                         action="store_true", default=False,
                         help='Sample user info with command "busers".')
-    parser.add_argument("-i", "--interval",
-                        type=int,
-                        default=0,
-                        help='Specify the sampling interval, unit is second. Sampling only once by default".')
+    parser.add_argument("-U", "--utilization",
+                        action="store_true", default=False,
+                        help='Sample utilization (slot/cpu/mem) info with command "lsload/bhosts/lshosts".')
 
     args = parser.parse_args()
 
-    if (not args.job) and (not args.queue) and (not args.host) and (not args.load) and (not args.user):
-        common.print_error('*Error*: at least one argument of "job/queue/host/load/user" must be selected.')
+    if (not args.job) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization):
+        common.print_error('*Error*: at least one argument of "job/queue/host/load/user/utilization" must be selected.')
         sys.exit(1)
 
-    if args.interval < 0:
-        common.print_error('*Error*: interval "' + str(args.interval) + '": Cannot be less than "0".')
-        sys.exit(1)
-
-    return (args.job, args.queue, args.host, args.load, args.user, args.interval)
+    return (args.job, args.queue, args.host, args.load, args.user, args.utilization)
 
 
 class Sampling:
@@ -68,14 +64,14 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, job_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, interval):
+    def __init__(self, job_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling):
         self.job_sampling = job_sampling
         self.queue_sampling = queue_sampling
         self.host_sampling = host_sampling
         self.load_sampling = load_sampling
         self.user_sampling = user_sampling
+        self.utilization_sampling = utilization_sampling
 
-        self.interval = interval
         self.db_path = str(config.db_path) + '/monitor'
         job_db_path = str(self.db_path) + '/job'
 
@@ -88,8 +84,8 @@ class Sampling:
                 sys.exit(1)
 
     def get_date_info(self):
+        self.sample_second = int(time.time())
         self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
-        self.current_seconds = int(time.time())
 
     def sample_job_info(self):
         """
@@ -105,7 +101,8 @@ class Sampling:
         job_range_dic = common.get_job_range_dic(job_list)
         job_sql_dic = {}
 
-        key_list = ['sample_time', 'mem']
+        key_list = ['sample_second', 'sample_time', 'mem']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT']
 
         for job_range in job_range_dic.keys():
             job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
@@ -129,25 +126,24 @@ class Sampling:
 
                 # If job table (with old data) has been on the job_db_file, drop it.
                 if job_table_name in job_table_list:
-                    data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_time'])
+                    data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_second'])
 
                     if data_dic:
-                        if len(data_dic['sample_time']) > 0:
-                            last_sample_time = data_dic['sample_time'][-1]
-                            last_seconds = int(time.mktime(datetime.datetime.strptime(str(last_sample_time), "%Y%m%d_%H%M%S").timetuple()))
+                        if len(data_dic['sample_second']) > 0:
+                            last_sample_second = int(data_dic['sample_second'][-1])
 
-                            if self.current_seconds-last_seconds > 3600:
+                            if self.sample_second - last_sample_second > 3600:
                                 common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
                                 job_sql_dic[job]['drop'] = True
                                 job_table_list.remove(job_table_name)
 
                 # If job table is not on the job_db_file, create it.
                 if job_table_name not in job_table_list:
-                    key_string = common_sqlite3.gen_sql_table_key_string(key_list)
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                     job_sql_dic[job]['key_string'] = key_string
 
                 # Insert sql table value.
-                value_list = [self.sample_time, bjobs_dic[job]['mem']]
+                value_list = [self.sample_second, self.sample_time, bjobs_dic[job]['mem']]
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 job_sql_dic[job]['value_string'] = value_string
 
@@ -199,7 +195,8 @@ class Sampling:
         queue_list.append('ALL')
         queue_sql_dic = {}
 
-        key_list = ['sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
+        key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(queue_list)):
             queue = queue_list[i]
@@ -213,14 +210,14 @@ class Sampling:
 
             # Generate sql table.
             if queue_table_name not in queue_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list)
+                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                 queue_sql_dic[queue]['key_string'] = key_string
 
             # Insert sql table value.
             if queue == 'ALL':
-                value_list = [self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
+                value_list = [self.sample_second, self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
             else:
-                value_list = [self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
+                value_list = [self.sample_second, self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
 
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
             queue_sql_dic[queue]['value_string'] = value_string
@@ -272,7 +269,8 @@ class Sampling:
         host_list = bhosts_dic['HOST_NAME']
         host_sql_dic = {}
 
-        key_list = ['sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
+        key_list = ['sample_second', 'sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(host_list)):
             host = host_list[i]
@@ -286,11 +284,11 @@ class Sampling:
 
             # Generate sql table.
             if host_table_name not in host_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list)
+                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                 host_sql_dic[host]['key_string'] = key_string
 
             # Insert sql table value.
-            value_list = [self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
+            value_list = [self.sample_second, self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
             host_sql_dic[host]['value_string'] = value_string
 
@@ -341,7 +339,8 @@ class Sampling:
         host_list = lsload_dic['HOST_NAME']
         load_sql_dic = {}
 
-        key_list = ['sample_time', 'ut', 'tmp', 'swp', 'mem']
+        key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(host_list)):
             host = host_list[i]
@@ -355,11 +354,11 @@ class Sampling:
 
             # Generate sql table.
             if load_table_name not in load_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list)
+                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                 load_sql_dic[host]['key_string'] = key_string
 
             # Insert sql table value.
-            value_list = [self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
+            value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
             load_sql_dic[host]['value_string'] = value_string
 
@@ -374,18 +373,18 @@ class Sampling:
 
         print('    Committing the update to sqlite3 ...')
 
-        # Clean up load database, only keep 10000 items.
+        # Clean up load database, only keep 100000 items.
         for host in host_list:
             load_table_name = 'load_' + str(host)
             load_table_count = int(common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name))
 
             if load_table_count != 'N/A':
-                if int(load_table_count) > 10000:
+                if int(load_table_count) > 100000:
                     row_id = 'sample_time'
                     begin_line = 0
-                    end_line = int(load_table_count) - 10000
+                    end_line = int(load_table_count) - 100000
 
-                    print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
                     common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
 
@@ -410,7 +409,8 @@ class Sampling:
         user_list = busers_dic['USER/GROUP']
         user_sql_dic = {}
 
-        key_list = ['sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
+        key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(user_list)):
             user = user_list[i]
@@ -424,11 +424,11 @@ class Sampling:
 
             # Generate sql table.
             if user_table_name not in user_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list)
+                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                 user_sql_dic[user]['key_string'] = key_string
 
             # Insert sql table value.
-            value_list = [self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
+            value_list = [self.sample_second, self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
             user_sql_dic[user]['value_string'] = value_string
 
@@ -443,60 +443,172 @@ class Sampling:
 
         print('    Committing the update to sqlite3 ...')
 
-        # Clean up user database, only keep 10000 items.
+        # Clean up user database, only keep 100000 items.
         for user in user_list:
             user_table_name = 'user_' + str(user)
             user_table_count = int(common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name))
 
             if user_table_count != 'N/A':
-                if int(user_table_count) > 10000:
+                if int(user_table_count) > 100000:
                     row_id = 'sample_time'
                     begin_line = 0
-                    end_line = int(user_table_count) - 10000
+                    end_line = int(user_table_count) - 100000
 
-                    print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                    print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
                     common_sqlite3.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
 
         user_db_conn.commit()
         user_db_conn.close()
 
+    def sample_utilization_info(self):
+        """
+        Sample host resource utilization info and save it into sqlite db.
+        """
+        self.get_date_info()
+        utilization_db_file = str(self.db_path) + '/utilization.db'
+        (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
+
+        if result != 'passed':
+            return
+
+        print('>>> Sampling host utilization info into ' + str(utilization_db_file) + ' ...')
+
+        utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
+        bhosts_dic = common_lsf.get_bhosts_info()
+        lshosts_dic = common_lsf.get_lshosts_info()
+        lsload_dic = common_lsf.get_lsload_info()
+        host_list = lsload_dic['HOST_NAME']
+        utilization_sql_dic = {}
+
+        key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
+        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+
+        for i in range(len(host_list)):
+            host = host_list[i]
+            utilization_sql_dic[host] = {
+                                         'key_string': '',
+                                         'value_string': '',
+                                        }
+            utilization_table_name = 'utilization_' + str(host)
+
+            print('    Sampling for host "' + str(host) + '" ...')
+
+            # Generate sql table.
+            if utilization_table_name not in utilization_table_list:
+                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                utilization_sql_dic[host]['key_string'] = key_string
+
+            # Get slot_utilization.
+            slot_utilization = 0
+
+            for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
+                if (host_name == host) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]):
+                    slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
+                    break
+
+            # Get cpu_utilization.
+            cpu_utilization = 0
+
+            if re.match(r'^\d+%$', lsload_dic['ut'][i]):
+                cpu_utilization = re.sub('%', '', lsload_dic['ut'][i])
+
+            # Get mem_utilization.
+            mem_utilization = 0
+
+            for (k, host_name) in enumerate(lshosts_dic['HOST_NAME']):
+                if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
+                    # Get maxmem with MB.
+                    maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
+                    maxmem = maxmem_match.group(1)
+                    maxmem_unit = maxmem_match.group(3)
+
+                    if maxmem_unit == 'G':
+                        maxmem = float(maxmem)*1024
+                    elif maxmem_unit == 'T':
+                        maxmem = float(maxmem)*1024*1024
+
+                    # Get mem with MB.
+                    mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
+                    mem = mem_match.group(1)
+                    mem_unit = mem_match.group(3)
+
+                    if mem_unit == 'G':
+                        mem = float(mem)*1024
+                    elif mem_unit == 'T':
+                        mem = float(mem)*1024*1024
+
+                    mem_utilization = round((maxmem-mem)*100/maxmem, 1)
+                    break
+
+            # Insert sql table value.
+            value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
+            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+            utilization_sql_dic[host]['value_string'] = value_string
+
+        for host in host_list:
+            utilization_table_name = 'utilization_' + str(host)
+
+            if utilization_sql_dic[host]['key_string'] != '':
+                common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, utilization_sql_dic[host]['key_string'], commit=False)
+
+            if utilization_sql_dic[host]['value_string'] != '':
+                common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, utilization_sql_dic[host]['value_string'], commit=False)
+
+        print('    Committing the update to sqlite3 ...')
+
+        # Clean up utilization database, only keep 100000 items.
+        for host in host_list:
+            utilization_table_name = 'utilization_' + str(host)
+            utilization_table_count = int(common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name))
+
+            if utilization_table_count != 'N/A':
+                if int(utilization_table_count) > 100000:
+                    row_id = 'sample_time'
+                    begin_line = 0
+                    end_line = int(utilization_table_count) - 100000
+
+                    print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+
+                    common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
+
+        utilization_db_conn.commit()
+        utilization_db_conn.close()
+
     def sampling(self):
-        while True:
-            if self.job_sampling:
-                p = Process(target=self.sample_job_info)
-                p.start()
+        if self.job_sampling:
+            p = Process(target=self.sample_job_info)
+            p.start()
 
-            if self.queue_sampling:
-                p = Process(target=self.sample_queue_info)
-                p.start()
+        if self.queue_sampling:
+            p = Process(target=self.sample_queue_info)
+            p.start()
 
-            if self.host_sampling:
-                p = Process(target=self.sample_host_info)
-                p.start()
+        if self.host_sampling:
+            p = Process(target=self.sample_host_info)
+            p.start()
 
-            if self.load_sampling:
-                p = Process(target=self.sample_load_info)
-                p.start()
+        if self.load_sampling:
+            p = Process(target=self.sample_load_info)
+            p.start()
 
-            if self.user_sampling:
-                p = Process(target=self.sample_user_info)
-                p.start()
+        if self.user_sampling:
+            p = Process(target=self.sample_user_info)
+            p.start()
 
-            p.join()
+        if self.utilization_sampling:
+            p = Process(target=self.sample_utilization_info)
+            p.start()
 
-            if self.interval == 0:
-                break
-            elif self.interval > 0:
-                time.sleep(self.interval)
+        p.join()
 
 
 #################
 # Main Function #
 #################
 def main():
-    (job, queue, host, load, user, interval) = read_args()
-    my_sampling = Sampling(job, queue, host, load, user, interval)
+    (job, queue, host, load, user, utilization) = read_args()
+    my_sampling = Sampling(job, queue, host, load, user, utilization)
     my_sampling.sampling()
 
 

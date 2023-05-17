@@ -94,7 +94,7 @@ class ProcessTracer(QMainWindow):
             common.print_error('*Error*: No valid pid was found.')
             sys.exit(1)
 
-        return (pid_list)
+        return pid_list
 
     def get_process_info(self):
         process_dic = {
@@ -111,7 +111,11 @@ class ProcessTracer(QMainWindow):
 
         if self.job:
             bsub_command = self.get_bsub_command()
-            command = str(bsub_command) + " '" + str(command) + "'"
+
+            if bsub_command:
+                command = str(bsub_command) + " '" + str(command) + "'"
+            else:
+                return process_dic
 
         (return_code, stdout, stderr) = common.run_command(command)
 
@@ -138,7 +142,7 @@ class ProcessTracer(QMainWindow):
             else:
                 continue
 
-        return (process_dic)
+        return process_dic
 
     def get_bsub_command(self):
         bsub_command = 'bsub -Is '
@@ -150,9 +154,19 @@ class ProcessTracer(QMainWindow):
 
         if started_on:
             started_on_list = started_on.split()
-            bsub_command = str(bsub_command) + ' -m ' + str(started_on_list[0])
+            first_started_on_host = started_on_list[0]
+            bhosts_dic = common_lsf.get_bhosts_info('bhosts ' + str(first_started_on_host))
 
-        return (bsub_command)
+            if first_started_on_host in bhosts_dic['HOST_NAME']:
+                host_status = bhosts_dic['STATUS'][0]
+
+                if host_status != 'ok':
+                    common.print_warning('*Warning*: host "' + str(first_started_on_host) + '" is ' + str(host_status) + ' status, cannot submit job on it.')
+                    return ''
+
+            bsub_command = str(bsub_command) + ' -m ' + str(first_started_on_host)
+
+        return bsub_command
 
     def init_ui(self):
         # Gen menubar
@@ -275,7 +289,11 @@ class ProcessTracer(QMainWindow):
 
                 if self.job:
                     bsub_command = self.get_bsub_command()
-                    command = str(bsub_command) + " '" + str(command) + "'"
+
+                    if bsub_command:
+                        command = str(bsub_command) + " '" + str(command) + "'"
+                    else:
+                        return
 
                 os.system(command)
 

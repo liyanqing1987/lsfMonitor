@@ -53,7 +53,7 @@ def get_sql_table_list(db_file, orig_conn):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return (table_list)
+        return table_list
 
     try:
         command = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -71,7 +71,7 @@ def get_sql_table_list(db_file, orig_conn):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_list) : Failed on getting table list on db_file "' + str(db_file) + '": ' + str(error))
 
-    return (table_list)
+    return table_list
 
 
 def get_sql_table_count(db_file, orig_conn, table_name):
@@ -83,7 +83,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return (count)
+        return count
 
     try:
         command = "SELECT count(*) FROM '" + str(table_name) + "'"
@@ -98,7 +98,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_count) : Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '": ' + str(error))
 
-    return (count)
+    return count
 
 
 def get_sql_table_key_list(db_file, orig_conn, table_name):
@@ -110,7 +110,7 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return (key_list)
+        return key_list
 
     try:
         command = "SELECT * FROM '" + str(table_name) + "'"
@@ -123,10 +123,10 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_key_list) : Failed on getting table key list on db_file "' + str(db_file) + '": ' + str(error))
 
-    return (key_list)
+    return key_list
 
 
-def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
+def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condition=''):
     """
     With specified db_file-table_name, get all data from specified key_list.
     """
@@ -134,13 +134,13 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
     if result == 'failed':
-        return (data_dic)
+        return data_dic
 
     try:
         command = "SELECT * FROM '" + str(table_name) + "'"
 
-        if limit != 0:
-            command = str(command) + ' limit ' + str(limit)
+        if select_condition:
+            command = str(command) + ' ' + str(select_condition)
 
         results = curs.execute(command)
         all_items = results.fetchall()
@@ -156,7 +156,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
             for key in key_list:
                 if key not in table_key_list:
                     common.print_error('*Error* (get_sql_table_data) : "' + str(key) + '": invalid key on specified key list.')
-                    return (data_dic)
+                    return data_dic
 
         for item in all_items:
             value_list = list(item)
@@ -174,7 +174,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], limit=0):
     except Exception as error:
         common.print_error('*Error* (get_sql_table_data) : Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '": ' + str(error))
 
-    return (data_dic)
+    return data_dic
 
 
 def delete_sql_table_rows(db_file, orig_conn, table_name, row_id, begin_line, end_line, commit=True):
@@ -281,7 +281,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
         if len(key_type_list) == len(key_list):
             key_type = key_type_list[i]
         else:
-            key_type = 'VARCHAR(255)'
+            key_type = 'TEXT'
 
         if i == 0:
             if auto_increment:
@@ -293,7 +293,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
         else:
             key_string = str(key_string) + " '" + str(key) + "' " + str(key_type) + ","
 
-    return (key_string)
+    return key_string
 
 
 def gen_sql_table_value_string(value_list, auto_increment=False):
@@ -318,4 +318,4 @@ def gen_sql_table_value_string(value_list, auto_increment=False):
         else:
             value_string = str(value_string) + " '" + str(value) + "',"
 
-    return (value_string)
+    return value_string

@@ -31,7 +31,7 @@ class GetLicenseInfo():
         elif 'lmstat_bsub_command' in os.environ:
             lmstat_command = str(os.environ['lmstat_bsub_command']) + ' "' + str(lmstat_command) + '"'
 
-        return (lmstat_command)
+        return lmstat_command
 
     def init_license_dic(self):
         """
@@ -49,7 +49,7 @@ class GetLicenseInfo():
                                                     'license_server_version': '',
                                                     'vendor_daemon': {}}
 
-        return (license_dic)
+        return license_dic
 
     def get_license_info(self):
         """
@@ -232,7 +232,7 @@ class GetLicenseInfo():
                                                                                              'feature': {},
                                                                                              'expires': {}})
 
-        return (license_dic)
+        return license_dic
 
 
 class FilterLicenseDic():
@@ -250,7 +250,7 @@ class FilterLicenseDic():
             if (license_server in server_list) or ('ALL' in server_list):
                 new_license_dic.setdefault(license_server, license_dic[license_server])
 
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_vendor(self, license_dic, vendor_list):
         new_license_dic = {}
@@ -264,7 +264,7 @@ class FilterLicenseDic():
                                                                 'vendor_daemon': {}})
                     new_license_dic[license_server]['vendor_daemon'].setdefault(vendor_daemon, license_dic[license_server]['vendor_daemon'][vendor_daemon])
 
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_feature(self, license_dic, feature_list):
         # Get filtered_feature_list from exact_feature_list/fuzzy_feature_list.
@@ -310,7 +310,7 @@ class FilterLicenseDic():
                             if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires']:
                                 new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature])
 
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_feature_usage_attribute(self, license_dic, feature_usage_attribute, feature_usage_attribute_list):
         new_license_dic = {}
@@ -335,19 +335,19 @@ class FilterLicenseDic():
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'][i])
                             new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info'].append(usage_dic)
 
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_submit_host(self, license_dic, submit_host_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'submit_host', submit_host_list)
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_execute_host(self, license_dic, execute_host_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'execute_host', execute_host_list)
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_by_user(self, license_dic, user_list):
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'user', user_list)
-        return (new_license_dic)
+        return new_license_dic
 
     def filter_show_mode_feature(self, license_dic, show_mode):
         new_license_dic = {}
@@ -390,7 +390,7 @@ class FilterLicenseDic():
                     new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].setdefault(feature, license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature])
                     new_license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].setdefault(feature, expire_dic_list)
 
-        return (new_license_dic)
+        return new_license_dic
 
     def run(self, license_dic, server_list=[], vendor_list=[], feature_list=[], submit_host_list=[], execute_host_list=[], user_list=[], show_mode='ALL'):
         filtered_license_dic = license_dic
@@ -416,7 +416,7 @@ class FilterLicenseDic():
         if show_mode != 'ALL':
             filtered_license_dic = self.filter_show_mode_feature(filtered_license_dic, show_mode)
 
-        return (filtered_license_dic)
+        return filtered_license_dic
 
 
 def switch_start_time(start_time):
@@ -442,7 +442,7 @@ def switch_start_time(start_time):
         # Switch start_seconds to expected time format.
         new_start_time = time.strftime('%Y-%m-%d %H:%M', time.localtime(start_seconds))
 
-    return (new_start_time)
+    return new_start_time
 
 
 def switch_expires_date(expires_date):
@@ -451,7 +451,7 @@ def switch_expires_date(expires_date):
     if re.match(r'^\d+-[a-zA-Z]+-\d{4}$', expires_date):
         new_expires_date = datetime.datetime.strptime(expires_date, '%d-%b-%Y').strftime('%Y-%m-%d')
 
-    return (new_expires_date)
+    return new_expires_date
 
 
 def check_long_runtime(start_time, second_threshold=259200):
@@ -471,9 +471,9 @@ def check_long_runtime(start_time, second_threshold=259200):
             start_seconds = int(time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M')))
 
         if current_seconds - start_seconds >= second_threshold:
-            return (True)
+            return True
 
-    return (False)
+    return False
 
 
 def check_expire_date(expire_date, second_threshold=1209600):
@@ -483,18 +483,18 @@ def check_expire_date(expire_date, second_threshold=1209600):
     Expire later than second_threshold (default is 14 days), return 0.
     """
     if re.search(r'permanent', expire_date):
-        return (0)
+        return 0
     else:
         expire_seconds = int(time.mktime(time.strptime(expire_date, '%d-%b-%Y')))
         expire_seconds = expire_seconds + 86400
         current_seconds = int(time.time())
 
         if expire_seconds < current_seconds:
-            return (-1)
+            return -1
         elif expire_seconds - current_seconds <= second_threshold:
             return ((expire_seconds - current_seconds)//86400 + 1)
         else:
-            return (0)
+            return 0
 
 
 def parse_license_file(license_file):
@@ -525,4 +525,4 @@ def parse_license_file(license_file):
                 license_file_dic['vendor'] = {'vendor': my_match.group(2),
                                               'vendor_daemon_path': my_match.group(3)}
 
-    return (license_file_dic)
+    return license_file_dic

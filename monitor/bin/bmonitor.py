@@ -10,9 +10,9 @@ import getpass
 import datetime
 import argparse
 
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView, QDateEdit
 from PyQt5.QtGui import QBrush, QFont
-from PyQt5.QtCore import Qt, QTimer, QThread
+from PyQt5.QtCore import Qt, QTimer, QThread, QDate
 
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -75,7 +75,7 @@ def read_args():
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
                         default='JOBS',
-                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'LICENSE'],
+                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'UTILIZATION', 'LICENSE'],
                         help='Specify current tab, default is "JOB" tab.')
     parser.add_argument("-dl", "--disable_license",
                         action='store_true',
@@ -126,13 +126,34 @@ class MainWindow(QMainWindow):
     """
     def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license):
         super().__init__()
-        self.license_dic = {}
-        self.license_dic_second = 0
 
+        # Init variables.
         self.specified_job = specified_job
         self.specified_user = specified_user
         self.specified_feature = specified_feature
         self.disable_license = disable_license
+
+        # Get LSF queue/host information.
+        print('* Loading LSF information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading LSF information, please wait a moment ...')
+        my_show_message.start()
+
+        self.bhosts_dic = common_lsf.get_bhosts_info()
+        self.host_list = self.bhosts_dic['HOST_NAME']
+        self.queues_dic = common_lsf.get_bqueues_info()
+        self.queue_list = self.queues_dic['QUEUE_NAME']
+        self.host_queue_dic = common_lsf.get_host_queue_info()
+        self.queue_host_dic = common_lsf.get_queue_host_info()
+        self.bhosts_load_dic = common_lsf.get_bhosts_load_info()
+        self.lshosts_dic = common_lsf.get_lshosts_info()
+        self.lsload_dic = common_lsf.get_lsload_info()
+
+        my_show_message.terminate()
+
+        # Get license information.
+        self.license_dic = {}
+        self.license_dic_second = 0
+        self.get_license_dic()
 
         self.init_ui()
         self.switch_tab(specified_tab)
@@ -141,10 +162,10 @@ class MainWindow(QMainWindow):
         if self.disable_license:
             return
 
-        # Not update license_dic repeatedly in 100 seconds.
+        # Not update license_dic repeatedly in 300 seconds.
         current_second = int(time.time())
 
-        if current_second - self.license_dic_second <= 100:
+        if current_second - self.license_dic_second <= 300:
             return
 
         self.license_dic_second = current_second
@@ -184,6 +205,7 @@ class MainWindow(QMainWindow):
         self.hosts_tab = QWidget()
         self.queues_tab = QWidget()
         self.load_tab = QWidget()
+        self.utilization_tab = QWidget()
         self.license_tab = QWidget()
 
         # Add the sub-tabs into main Tab widget
@@ -192,15 +214,8 @@ class MainWindow(QMainWindow):
         self.main_tab.addTab(self.hosts_tab, 'HOSTS')
         self.main_tab.addTab(self.queues_tab, 'QUEUES')
         self.main_tab.addTab(self.load_tab, 'LOAD')
+        self.main_tab.addTab(self.utilization_tab, 'UTILIZATION')
         self.main_tab.addTab(self.license_tab, 'LICENSE')
-
-        # Get LSF queue/host information.
-        print('* Loading LSF information, please wait a moment ...')
-        self.queue_list = common_lsf.get_queue_list()
-        self.host_list = common_lsf.get_host_list()
-
-        # Get license information.
-        self.get_license_dic()
 
         # Generate the sub-tabs
         self.gen_job_tab()
@@ -208,6 +223,7 @@ class MainWindow(QMainWindow):
         self.gen_hosts_tab()
         self.gen_queues_tab()
         self.gen_load_tab()
+        self.gen_utilization_tab()
         self.gen_license_tab()
 
         # Show main window
@@ -224,6 +240,7 @@ class MainWindow(QMainWindow):
                    'HOSTS': self.hosts_tab,
                    'QUEUES': self.queues_tab,
                    'LOAD': self.load_tab,
+                   'UTILIZATION': self.utilization_tab,
                    'LICENSE': self.license_tab}
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
@@ -321,7 +338,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.2'
+        version = 'V1.3'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -350,8 +367,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         Generate the job tab on lsfMonitor GUI, show job informations.
         """
         # Init var
-        self.current_job = ''
-        self.job_info_dic = {}
+        self.job_tab_current_job = ''
+        self.job_tab_current_job_dic = {}
 
         # self.job_tab
         self.job_tab_frame0 = QFrame(self.job_tab)
@@ -379,6 +396,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         job_tab_grid.setRowStretch(0, 1)
         job_tab_grid.setRowStretch(1, 14)
         job_tab_grid.setRowStretch(2, 6)
+
         job_tab_grid.setColumnStretch(0, 1)
         job_tab_grid.setColumnStretch(1, 10)
 
@@ -403,12 +421,14 @@ lsfMonitor is an open source software for LSF information data-collection, data-
     def gen_job_tab_frame0(self):
         # self.job_tab_frame0
         job_tab_job_label = QLabel(self.job_tab_frame0)
+        job_tab_job_label.setStyleSheet("font-weight: bold;")
         job_tab_job_label.setText('Job')
 
         self.job_tab_job_line = QLineEdit()
         self.job_tab_job_line.returnPressed.connect(self.check_job)
 
         job_tab_check_button = QPushButton('Check', self.job_tab_frame0)
+        job_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
         job_tab_check_button.clicked.connect(self.check_job)
 
         # self.job_tab_frame0 - Grid
@@ -423,36 +443,47 @@ lsfMonitor is an open source software for LSF information data-collection, data-
     def gen_job_tab_frame1(self):
         # self.job_tab_frame1
         job_tab_user_label = QLabel('User', self.job_tab_frame1)
+        job_tab_user_label.setStyleSheet("font-weight: bold;")
         self.job_tab_user_line = QLineEdit()
 
         job_tab_status_label = QLabel('Status', self.job_tab_frame1)
+        job_tab_status_label.setStyleSheet("font-weight: bold;")
         self.job_tab_status_line = QLineEdit()
 
         job_tab_queue_label = QLabel('Queue', self.job_tab_frame1)
+        job_tab_queue_label.setStyleSheet("font-weight: bold;")
         self.job_tab_queue_line = QLineEdit()
 
         job_tab_started_on_label = QLabel('Host', self.job_tab_frame1)
+        job_tab_started_on_label.setStyleSheet("font-weight: bold;")
         self.job_tab_started_on_line = QLineEdit()
 
         job_tab_project_label = QLabel('Project', self.job_tab_frame1)
+        job_tab_project_label.setStyleSheet("font-weight: bold;")
         self.job_tab_project_line = QLineEdit()
 
         job_tab_processors_requested_label = QLabel('Processors', self.job_tab_frame1)
+        job_tab_processors_requested_label.setStyleSheet("font-weight: bold;")
         self.job_tab_processors_requested_line = QLineEdit()
 
         job_tab_rusage_mem_label = QLabel('Rusage', self.job_tab_frame1)
+        job_tab_rusage_mem_label.setStyleSheet("font-weight: bold;")
         self.job_tab_rusage_mem_line = QLineEdit()
 
         job_tab_mem_label = QLabel('Mem', self.job_tab_frame1)
+        job_tab_mem_label.setStyleSheet("font-weight: bold;")
         self.job_tab_mem_line = QLineEdit()
 
         job_tab_avg_mem_label = QLabel('avg_mem', self.job_tab_frame1)
+        job_tab_avg_mem_label.setStyleSheet("font-weight: bold;")
         self.job_tab_avg_mem_line = QLineEdit()
 
         job_tab_max_mem_label = QLabel('max_mem', self.job_tab_frame1)
+        job_tab_max_mem_label.setStyleSheet("font-weight: bold;")
         self.job_tab_max_mem_line = QLineEdit()
 
         process_tracer_button = QPushButton('Process  Tracer', self.job_tab_frame1)
+        process_tracer_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
         process_tracer_button.clicked.connect(self.process_tracer)
 
         # self.job_tab_frame1 - Grid
@@ -484,10 +515,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def process_tracer(self):
         # Call script process_tracer to get job process information.
-        self.current_job = self.job_tab_job_line.text().strip()
+        self.job_tab_current_job = self.job_tab_job_line.text().strip()
 
-        if self.current_job:
-            self.my_process_tracer = ProcessTracer(self.current_job)
+        if self.job_tab_current_job:
+            self.my_process_tracer = ProcessTracer(self.job_tab_current_job)
             self.my_process_tracer.start()
 
     def gen_job_tab_frame2(self):
@@ -501,23 +532,23 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_job_tab_frame3(self):
         # self.job_tab_frame3
-        self.job_mem_figure_canvas = FigureCanvas()
-        self.job_mem_navigation_toolbar = NavigationToolbar2QT(self.job_mem_figure_canvas, self)
+        self.job_tab_mem_canvas = FigureCanvas()
+        self.job_tab_mem_toolbar = NavigationToolbar2QT(self.job_tab_mem_canvas, self)
 
         # self.job_tab_frame3 - Grid
         job_tab_frame3_grid = QGridLayout()
-        job_tab_frame3_grid.addWidget(self.job_mem_navigation_toolbar, 0, 0)
-        job_tab_frame3_grid.addWidget(self.job_mem_figure_canvas, 1, 0)
+        job_tab_frame3_grid.addWidget(self.job_tab_mem_toolbar, 0, 0)
+        job_tab_frame3_grid.addWidget(self.job_tab_mem_canvas, 1, 0)
         self.job_tab_frame3.setLayout(job_tab_frame3_grid)
 
     def check_job(self):
         """
-        Get job information with "bjobs -UF <job_id>", save the infomation into dict self.job_info_dic.
+        Get job information with "bjobs -UF <job_id>", save the infomation into dict self.job_tab_current_job_dic.
         Update self.job_tab_frame1 and self.job_tab_frame3.
         """
-        self.current_job = self.job_tab_job_line.text().strip()
+        self.job_tab_current_job = self.job_tab_job_line.text().strip()
 
-        print('* Checking job "' + str(self.current_job) + '".')
+        print('* Checking job "' + str(self.job_tab_current_job) + '".')
 
         # Initicalization
         self.update_job_tab_frame1(init=True)
@@ -525,10 +556,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.update_job_tab_frame3(init=True)
 
         # Job name must be a string of numbers.
-        current_job = self.current_job
+        current_job = self.job_tab_current_job
 
-        if re.match(r'^(\d+)(\[\d+\])?$', self.current_job):
-            my_match = re.match(r'^(\d+)(\[\d+\])?$', self.current_job)
+        if re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job):
+            my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
             current_job = my_match.group(1)
         else:
             warning_message = '*Warning*: No valid job is specified!'
@@ -538,10 +569,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Get job info
         my_show_message = ShowMessage('Info', '* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
         my_show_message.start()
-        self.job_info_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
+        self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
         my_show_message.terminate()
 
-        if self.job_info_dic:
+        if self.job_tab_current_job_dic:
             # Update the related frames with the job info.
             self.update_job_tab_frame1()
             self.update_job_tab_frame2()
@@ -557,50 +588,50 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if init:
             self.job_tab_user_line.setText('')
         else:
-            self.job_tab_user_line.setText(self.job_info_dic[self.current_job]['user'])
+            self.job_tab_user_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['user'])
             self.job_tab_user_line.setCursorPosition(0)
 
         # For "Status" item.
         if init:
             self.job_tab_status_line.setText('')
         else:
-            self.job_tab_status_line.setText(self.job_info_dic[self.current_job]['status'])
+            self.job_tab_status_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['status'])
             self.job_tab_status_line.setCursorPosition(0)
 
         # For "Queue" item.
         if init:
             self.job_tab_queue_line.setText('')
         else:
-            self.job_tab_queue_line.setText(self.job_info_dic[self.current_job]['queue'])
+            self.job_tab_queue_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['queue'])
             self.job_tab_queue_line.setCursorPosition(0)
 
         # For "Host" item.
         if init:
             self.job_tab_started_on_line.setText('')
         else:
-            self.job_tab_started_on_line.setText(self.job_info_dic[self.current_job]['started_on'])
+            self.job_tab_started_on_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['started_on'])
             self.job_tab_started_on_line.setCursorPosition(0)
 
         # For "Processors" item.
         if init:
             self.job_tab_processors_requested_line.setText('')
         else:
-            self.job_tab_processors_requested_line.setText(self.job_info_dic[self.current_job]['processors_requested'])
+            self.job_tab_processors_requested_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['processors_requested'])
             self.job_tab_processors_requested_line.setCursorPosition(0)
 
         # For "Project" item.
         if init:
             self.job_tab_project_line.setText('')
         else:
-            self.job_tab_project_line.setText(self.job_info_dic[self.current_job]['project'])
+            self.job_tab_project_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['project'])
             self.job_tab_project_line.setCursorPosition(0)
 
         # For "Rusage" item.
         if init:
             self.job_tab_rusage_mem_line.setText('')
         else:
-            if self.job_info_dic[self.current_job]['rusage_mem'] != '':
-                rusage_mem_value = round(int(self.job_info_dic[self.current_job]['rusage_mem'])/1024, 1)
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'] != '':
+                rusage_mem_value = round(int(self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'])/1024, 1)
                 self.job_tab_rusage_mem_line.setText(str(rusage_mem_value) + ' G')
                 self.job_tab_rusage_mem_line.setCursorPosition(0)
 
@@ -608,8 +639,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if init:
             self.job_tab_mem_line.setText('')
         else:
-            if self.job_info_dic[self.current_job]['mem'] != '':
-                mem_value = round(float(self.job_info_dic[self.current_job]['mem'])/1024, 1)
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['mem'] != '':
+                mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['mem'])/1024, 1)
                 self.job_tab_mem_line.setText(str(mem_value) + ' G')
                 self.job_tab_mem_line.setCursorPosition(0)
 
@@ -617,8 +648,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if init:
             self.job_tab_avg_mem_line.setText('')
         else:
-            if self.job_info_dic[self.current_job]['avg_mem'] != '':
-                avg_mem_value = round(float(self.job_info_dic[self.current_job]['avg_mem'])/1024, 1)
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['avg_mem'] != '':
+                avg_mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['avg_mem'])/1024, 1)
                 self.job_tab_avg_mem_line.setText(str(avg_mem_value) + ' G')
                 self.job_tab_avg_mem_line.setCursorPosition(0)
 
@@ -626,8 +657,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if init:
             self.job_tab_max_mem_line.setText('')
         else:
-            if self.job_info_dic[self.current_job]['max_mem'] != '':
-                max_mem_value = round(float(self.job_info_dic[self.current_job]['max_mem'])/1024, 1)
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['max_mem'] != '':
+                max_mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['max_mem'])/1024, 1)
                 self.job_tab_max_mem_line.setText(str(max_mem_value) + ' G')
                 self.job_tab_max_mem_line.setCursorPosition(0)
 
@@ -638,36 +669,36 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.job_tab_job_info_text.clear()
 
         if not init:
-            self.job_tab_job_info_text.insertPlainText(self.job_info_dic[self.current_job]['job_info'])
+            self.job_tab_job_info_text.insertPlainText(self.job_tab_current_job_dic[self.job_tab_current_job]['job_info'])
             common_pyqt5.text_edit_visible_position(self.job_tab_job_info_text, 'Start')
 
     def get_job_mem_list(self):
         """
-        Get job sample-time mem list for self.current_job.
+        Get job sample-time mem list for self.job_tab_current_job.
         """
         runtime_list = []
         real_mem_list = []
 
-        job_range_dic = common.get_job_range_dic([self.current_job, ])
+        job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_list = list(job_range_dic.keys())
         job_range = job_range_list[0]
         job_db_file = str(config.db_path) + '/monitor/job/' + str(job_range) + '.db'
 
         if not os.path.exists(job_db_file):
-            common.print_warning('*Warning*: Job memory usage information is missing for "' + str(self.current_job) + '".')
+            common.print_warning('*Warning*: Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".')
         else:
             (job_db_file_connect_result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file)
 
             if job_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting job database file "' + str(job_db_file) + '".')
             else:
-                print('Getting history of job memory usage for job "' + str(self.current_job) + '".')
+                print('Getting history of job memory usage for job "' + str(self.job_tab_current_job) + '".')
 
-                table_name = 'job_' + str(self.current_job)
+                table_name = 'job_' + str(self.job_tab_current_job)
                 data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
 
                 if not data_dic:
-                    common.print_warning('*Warning*: job memory usage information is empty for "' + str(self.current_job) + '".')
+                    common.print_warning('*Warning*: job memory usage information is empty for "' + str(self.job_tab_current_job) + '".')
                 else:
                     sample_time_list = data_dic['sample_time']
                     mem_list = data_dic['mem']
@@ -694,29 +725,29 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         """
         Draw memory curve for current job on self.job_tab_frame3.
         """
-        fig = self.job_mem_figure_canvas.figure
+        fig = self.job_tab_mem_canvas.figure
         fig.clear()
-        self.job_mem_figure_canvas.draw()
+        self.job_tab_mem_canvas.draw()
 
         if not init:
-            if self.job_info_dic[self.current_job]['status'] != 'PEND':
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['status'] != 'PEND':
                 (runtime_list, mem_list) = self.get_job_mem_list()
 
                 if runtime_list and mem_list:
-                    self.draw_job_mem_curve(fig, runtime_list, mem_list)
+                    self.draw_job_tab_mem_curve(fig, runtime_list, mem_list)
 
-    def draw_job_mem_curve(self, fig, runtime_list, mem_list):
+    def draw_job_tab_mem_curve(self, fig, runtime_list, mem_list):
         """
         Draw memory curve for specified job.
         """
         fig.subplots_adjust(bottom=0.2)
         axes = fig.add_subplot(111)
-        axes.set_title('job "' + str(self.current_job) + '" memory curve')
+        axes.set_title('memory usage for job "' + str(self.job_tab_current_job) + '"')
         axes.set_xlabel('Runtime (Minutes)')
         axes.set_ylabel('Memory Usage (G)')
         axes.plot(runtime_list, mem_list, 'ro-')
         axes.grid()
-        self.job_mem_figure_canvas.draw()
+        self.job_tab_mem_canvas.draw()
 # For job TAB (end) #
 
 # For jobs TAB (start) #
@@ -755,21 +786,25 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # self.jobs_tab_frame0
         jobs_tab_status_label = QLabel('Status', self.jobs_tab_frame0)
         jobs_tab_status_label.setStyleSheet("font-weight: bold;")
+        jobs_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.jobs_tab_status_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
 
-        jobs_tab_queue_label = QLabel('       Queue', self.jobs_tab_frame0)
+        jobs_tab_queue_label = QLabel('Queue', self.jobs_tab_frame0)
         jobs_tab_queue_label.setStyleSheet("font-weight: bold;")
+        jobs_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.jobs_tab_queue_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_queue_combo()
 
-        jobs_tab_started_on_label = QLabel('       Host', self.jobs_tab_frame0)
+        jobs_tab_started_on_label = QLabel('Host', self.jobs_tab_frame0)
         jobs_tab_started_on_label.setStyleSheet("font-weight: bold;")
+        jobs_tab_started_on_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.jobs_tab_started_on_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_started_on_combo()
 
-        jobs_tab_user_label = QLabel('       User', self.jobs_tab_frame0)
+        jobs_tab_user_label = QLabel('User', self.jobs_tab_frame0)
         jobs_tab_user_label.setStyleSheet("font-weight: bold;")
+        jobs_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.jobs_tab_user_line = QLineEdit()
         self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
@@ -778,6 +813,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_started_on_combo.activated.connect(self.gen_jobs_tab_table)
 
         jobs_tab_check_button = QPushButton('Check', self.jobs_tab_frame0)
+        jobs_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
         jobs_tab_check_button.clicked.connect(self.gen_jobs_tab_table)
 
         # self.jobs_tab_frame0 - Grid
@@ -793,10 +829,15 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         jobs_tab_frame0_grid.addWidget(self.jobs_tab_user_line, 0, 7)
         jobs_tab_frame0_grid.addWidget(jobs_tab_check_button, 0, 8)
 
+        jobs_tab_frame0_grid.setColumnStretch(0, 1)
         jobs_tab_frame0_grid.setColumnStretch(1, 1)
+        jobs_tab_frame0_grid.setColumnStretch(2, 1)
         jobs_tab_frame0_grid.setColumnStretch(3, 1)
+        jobs_tab_frame0_grid.setColumnStretch(4, 1)
         jobs_tab_frame0_grid.setColumnStretch(5, 1)
+        jobs_tab_frame0_grid.setColumnStretch(6, 1)
         jobs_tab_frame0_grid.setColumnStretch(7, 1)
+        jobs_tab_frame0_grid.setColumnStretch(8, 1)
 
         self.jobs_tab_frame0.setLayout(jobs_tab_frame0_grid)
 
@@ -870,11 +911,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Fill self.jobs_tab_table items.
         self.jobs_tab_table.setRowCount(0)
         self.jobs_tab_table.setRowCount(len(job_dic.keys()))
-        jobs = list(job_dic.keys())
+        job_list = list(job_dic.keys())
 
-        for i in range(len(jobs)):
+        for i in range(len(job_list)):
             # Fill "Job"
-            job = jobs[i]
+            job = job_list[i]
             j = 0
             item = QTableWidgetItem(job)
             item.setFont(QFont('song', 9, QFont.Bold))
@@ -973,7 +1014,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # Switch start_seconds to expected time format.
             new_start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_seconds))
 
-        return (new_start_time)
+        return new_start_time
 
     def jobs_tab_check_click(self, item=None):
         """
@@ -1071,11 +1112,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_hosts_tab_frame0(self):
         # self.hosts_tab_frame0
-        hosts_tab_queue_label = QLabel('       Queue', self.hosts_tab_frame0)
+        hosts_tab_queue_label = QLabel('Queue', self.hosts_tab_frame0)
         hosts_tab_queue_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.hosts_tab_queue_combo = QComboBox(self.hosts_tab_frame0)
         self.set_hosts_tab_queue_combo()
         self.hosts_tab_queue_combo.activated.connect(self.gen_hosts_tab_table)
+
         hosts_tab_empty_label = QLabel('')
 
         # self.hosts_tab_frame0 - Grid
@@ -1112,32 +1155,24 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.hosts_tab_table.setColumnWidth(10, 75)
         self.hosts_tab_table.setColumnWidth(11, 75)
 
-        print('* Loading LSF hosts information, please wait a moment ...')
-
-        bhosts_dic = common_lsf.get_bhosts_info()
-        bhosts_load_dic = common_lsf.get_bhosts_load_info()
-        lshosts_dic = common_lsf.get_lshosts_info()
-        lsload_dic = common_lsf.get_lsload_info()
-        host_queue_dic = common_lsf.get_host_queue_info()
-
         # Get expected host list
-        self.queue_host_list = []
+        self.hosts_tab_queue_host_list = []
         specified_queue = self.hosts_tab_queue_combo.currentText().strip()
 
         if specified_queue == 'ALL':
-            self.queue_host_list = self.host_list
+            self.hosts_tab_queue_host_list = self.host_list
         else:
             for host in self.host_list:
-                if host in host_queue_dic:
-                    if specified_queue in host_queue_dic[host]:
-                        self.queue_host_list.append(host)
+                if host in self.host_queue_dic:
+                    if specified_queue in self.host_queue_dic[host]:
+                        self.hosts_tab_queue_host_list.append(host)
 
         # Fill self.hosts_tab_table items.
         self.hosts_tab_table.setRowCount(0)
-        self.hosts_tab_table.setRowCount(len(self.queue_host_list))
+        self.hosts_tab_table.setRowCount(len(self.hosts_tab_queue_host_list))
 
-        for i in range(len(self.queue_host_list)):
-            host = self.queue_host_list[i]
+        for i in range(len(self.hosts_tab_queue_host_list)):
+            host = self.hosts_tab_queue_host_list[i]
 
             # For "Host" item.
             j = 0
@@ -1147,8 +1182,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "Status" item.
             j = j+1
-            index = bhosts_dic['HOST_NAME'].index(host)
-            status = bhosts_dic['STATUS'][index]
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            status = self.bhosts_dic['STATUS'][index]
             item = QTableWidgetItem(status)
 
             if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
@@ -1159,8 +1194,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # For "Queue" item.
             j = j+1
 
-            if host in host_queue_dic.keys():
-                queues = ' '.join(host_queue_dic[host])
+            if host in self.host_queue_dic.keys():
+                queues = ' '.join(self.host_queue_dic[host])
                 item = QTableWidgetItem(queues)
                 self.hosts_tab_table.setItem(i, j, item)
 
@@ -1168,9 +1203,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             j = j+1
             ncpus = '0'
 
-            if host in lshosts_dic['HOST_NAME']:
-                index = lshosts_dic['HOST_NAME'].index(host)
-                ncpus = lshosts_dic['ncpus'][index]
+            if host in self.lshosts_dic['HOST_NAME']:
+                index = self.lshosts_dic['HOST_NAME'].index(host)
+                ncpus = self.lshosts_dic['ncpus'][index]
 
             if not re.match(r'^[0-9]+$', ncpus):
                 common.print_warning('*Warning*: host(' + str(host) + ') ncpus info "' + str(ncpus) + '": invalid value, reset it to "0".')
@@ -1182,8 +1217,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "MAX" item.
             j = j+1
-            index = bhosts_dic['HOST_NAME'].index(host)
-            max = bhosts_dic['MAX'][index]
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            max = self.bhosts_dic['MAX'][index]
 
             if not re.match(r'^[0-9]+$', max):
                 common.print_warning('*Warning*: host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".')
@@ -1195,8 +1230,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # For "Njobs" item.
             j = j+1
-            index = bhosts_dic['HOST_NAME'].index(host)
-            njobs = bhosts_dic['NJOBS'][index]
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            njobs = self.bhosts_dic['NJOBS'][index]
 
             if not re.match(r'^[0-9]+$', njobs):
                 common.print_warning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
@@ -1210,11 +1245,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # For "Ut" item.
             j = j+1
 
-            if (host in bhosts_load_dic) and ('Total' in bhosts_load_dic[host]) and ('ut' in bhosts_load_dic[host]['Total']) and (bhosts_load_dic[host]['Total']['ut'] != '-'):
-                ut = bhosts_load_dic[host]['Total']['ut']
+            if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
+                ut = self.bhosts_load_dic[host]['Total']['ut']
             else:
-                index = lsload_dic['HOST_NAME'].index(host)
-                ut = lsload_dic['ut'][index]
+                index = self.lsload_dic['HOST_NAME'].index(host)
+                ut = self.lsload_dic['ut'][index]
 
             ut = re.sub(r'%', '', ut)
 
@@ -1234,9 +1269,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             j = j+1
             maxmem = '0'
 
-            if host in lshosts_dic['HOST_NAME']:
-                index = lshosts_dic['HOST_NAME'].index(host)
-                maxmem = lshosts_dic['maxmem'][index]
+            if host in self.lshosts_dic['HOST_NAME']:
+                index = self.lshosts_dic['HOST_NAME'].index(host)
+                maxmem = self.lshosts_dic['maxmem'][index]
 
             if re.search(r'M', maxmem):
                 maxmem = re.sub(r'M', '', maxmem)
@@ -1257,11 +1292,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # For "Mem" item.
             j = j+1
 
-            if (host in bhosts_load_dic) and ('Total' in bhosts_load_dic[host]) and ('mem' in bhosts_load_dic[host]['Total']) and (bhosts_load_dic[host]['Total']['mem'] != '-'):
-                mem = bhosts_load_dic[host]['Total']['mem']
+            if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
+                mem = self.bhosts_load_dic[host]['Total']['mem']
             else:
-                index = lsload_dic['HOST_NAME'].index(host)
-                mem = lsload_dic['mem'][index]
+                index = self.lsload_dic['HOST_NAME'].index(host)
+                mem = self.lsload_dic['mem'][index]
 
             if re.search(r'M', mem):
                 mem = re.sub(r'M', '', mem)
@@ -1287,9 +1322,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             j = j+1
             maxswp = '0'
 
-            if host in lshosts_dic['HOST_NAME']:
-                index = lshosts_dic['HOST_NAME'].index(host)
-                maxswp = lshosts_dic['maxswp'][index]
+            if host in self.lshosts_dic['HOST_NAME']:
+                index = self.lshosts_dic['HOST_NAME'].index(host)
+                maxswp = self.lshosts_dic['maxswp'][index]
 
             if re.search(r'M', maxswp):
                 maxswp = re.sub(r'M', '', maxswp)
@@ -1310,11 +1345,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # For "Swp" item.
             j = j+1
 
-            if (host in bhosts_load_dic) and ('Total' in bhosts_load_dic[host]) and ('swp' in bhosts_load_dic[host]['Total']) and (bhosts_load_dic[host]['Total']['swp'] != '-'):
-                swp = bhosts_load_dic[host]['Total']['swp']
+            if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
+                swp = self.bhosts_load_dic[host]['Total']['swp']
             else:
-                index = lsload_dic['HOST_NAME'].index(host)
-                swp = lsload_dic['swp'][index]
+                index = self.lsload_dic['HOST_NAME'].index(host)
+                swp = self.lsload_dic['swp'][index]
 
             if re.search(r'M', swp):
                 swp = re.sub(r'M', '', swp)
@@ -1335,11 +1370,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             # For "Tmp" item.
             j = j+1
 
-            if (host in bhosts_load_dic) and ('Total' in bhosts_load_dic[host]) and ('tmp' in bhosts_load_dic[host]['Total']) and (bhosts_load_dic[host]['Total']['tmp'] != '-'):
-                tmp = bhosts_load_dic[host]['Total']['tmp']
+            if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
+                tmp = self.bhosts_load_dic[host]['Total']['tmp']
             else:
-                index = lsload_dic['HOST_NAME'].index(host)
-                tmp = lsload_dic['tmp'][index]
+                index = self.lsload_dic['HOST_NAME'].index(host)
+                tmp = self.lsload_dic['tmp'][index]
 
             if re.search(r'M', tmp):
                 tmp = re.sub(r'M', '', tmp)
@@ -1384,7 +1419,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
                     self.set_jobs_tab_queue_combo()
 
-                    host_list = copy.deepcopy(self.queue_host_list)
+                    host_list = copy.deepcopy(self.hosts_tab_queue_host_list)
                     host_list.remove(host)
                     host_list.insert(0, host)
                     host_list.insert(1, 'ALL')
@@ -1413,8 +1448,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         """
         Generate the queues tab on lsfMonitor GUI, show queues informations.
         """
-        self.bqueues_files_dic = {}
-
         # self.queues_tab
         self.queues_tab_table = QTableWidget(self.queues_tab)
         self.queues_tab_table.itemClicked.connect(self.queues_tab_check_click)
@@ -1468,10 +1501,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.queues_tab_table.setRowCount(0)
         self.queues_tab_table.setRowCount(len(self.queue_list)+1)
 
-        print('* Loading LSF queue information, please wait a moment ...')
-        queues_dic = common_lsf.get_bqueues_info()
         queue_list = copy.deepcopy(self.queue_list)
-
         queue_list.append('ALL')
 
         pend_sum = 0
@@ -1482,7 +1512,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             index = 0
 
             if i < len(queue_list)-1:
-                index = queues_dic['QUEUE_NAME'].index(queue)
+                index = self.queues_dic['QUEUE_NAME'].index(queue)
 
             # For "QUEUE" item.
             j = 0
@@ -1495,7 +1525,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if i == len(queue_list)-1:
                 pend = str(pend_sum)
             else:
-                pend = queues_dic['PEND'][index]
+                pend = self.queues_dic['PEND'][index]
                 pend_sum += int(pend)
 
             item = QTableWidgetItem(pend)
@@ -1512,7 +1542,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if i == len(queue_list)-1:
                 run = str(run_sum)
             else:
-                run = queues_dic['RUN'][index]
+                run = self.queues_dic['RUN'][index]
                 run_sum += int(run)
 
             item = QTableWidgetItem(run)
@@ -1521,13 +1551,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_queues_tab_frame0(self):
         # self.queues_tab_frame0
-        self.queue_job_num_figure_canvas = FigureCanvas()
-        self.queue_job_num_navigation_toolbar = NavigationToolbar2QT(self.queue_job_num_figure_canvas, self)
+        self.queue_tab_num_canvas = FigureCanvas()
+        self.queue_tab_num_toolbar = NavigationToolbar2QT(self.queue_tab_num_canvas, self)
 
         # self.queues_tab_frame0 - Grid
         queues_tab_frame0_grid = QGridLayout()
-        queues_tab_frame0_grid.addWidget(self.queue_job_num_navigation_toolbar, 0, 0)
-        queues_tab_frame0_grid.addWidget(self.queue_job_num_figure_canvas, 1, 0)
+        queues_tab_frame0_grid.addWidget(self.queue_tab_num_toolbar, 0, 0)
+        queues_tab_frame0_grid.addWidget(self.queue_tab_num_canvas, 1, 0)
         self.queues_tab_frame0.setLayout(queues_tab_frame0_grid)
 
     def gen_queues_tab_frame1(self):
@@ -1595,9 +1625,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         """
         Draw queue (PEND/RUN) job number current job on self.queues_tab_frame0.
         """
-        fig = self.queue_job_num_figure_canvas.figure
+        fig = self.queue_tab_num_canvas.figure
         fig.clear()
-        self.queue_job_num_figure_canvas.draw()
+        self.queue_tab_num_canvas.draw()
 
         (date_list, pend_list, run_list) = self.get_queue_job_num_list(queue)
 
@@ -1605,7 +1635,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             for i in range(len(date_list)):
                 date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d')
 
-            self.draw_queue_job_num_curve(fig, queue, date_list, pend_list, run_list)
+            self.draw_queue_tab_num_curve(fig, queue, date_list, pend_list, run_list)
 
     def update_queue_tab_frame1(self, queue):
         """
@@ -1687,18 +1717,18 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         return (date_list, pend_list, run_list)
 
-    def draw_queue_job_num_curve(self, fig, queue, date_list, pend_list, run_list):
+    def draw_queue_tab_num_curve(self, fig, queue, date_list, pend_list, run_list):
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
-        axes.set_title('queue "' + str(queue) + '" PEND/RUN slots number curve')
+        axes.set_title('trends of RUN/PEND slots for queue "' + str(queue) + '"')
         axes.set_xlabel('Sample Date')
         axes.set_ylabel('Slots Num')
-        axes.plot(date_list, pend_list, 'ro-', label='PEND')
         axes.plot(date_list, run_list, 'go-', label='RUN')
+        axes.plot(date_list, pend_list, 'ro-', label='PEND')
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
-        self.queue_job_num_figure_canvas.draw()
+        self.queue_tab_num_canvas.draw()
 # For queues TAB (end) #
 
 # For load TAB (start) #
@@ -1738,57 +1768,77 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_load_tab_frame0(self):
         # self.load_tab_frame0
-        load_tab_host_label = QLabel('          Host', self.load_tab_frame0)
+        load_tab_host_label = QLabel('Host', self.load_tab_frame0)
         load_tab_host_label.setStyleSheet("font-weight: bold;")
+        load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
         self.set_load_tab_host_combo()
-        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
 
-        load_tab_date_label = QLabel('          Date', self.load_tab_frame0)
-        load_tab_date_label.setStyleSheet("font-weight: bold;")
-        self.load_tab_date_combo = QComboBox(self.load_tab_frame0)
-        self.set_load_tab_date_combo()
-        self.load_tab_date_combo.activated.connect(self.update_load_tab_load_info)
+        load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
+        load_tab_begin_date_label.setStyleSheet("font-weight: bold;")
+        load_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.load_tab_begin_date_edit = QDateEdit(self.load_tab_frame0)
+        self.load_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.load_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.load_tab_begin_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
+        self.load_tab_begin_date_edit.setCalendarPopup(True)
+        self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
 
-        load_tab_empty_label = QLabel('')
+        load_tab_end_date_label = QLabel('End_Date', self.load_tab_frame0)
+        load_tab_end_date_label.setStyleSheet("font-weight: bold;")
+        load_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.load_tab_end_date_edit = QDateEdit(self.load_tab_frame0)
+        self.load_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.load_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.load_tab_end_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
+        self.load_tab_end_date_edit.setCalendarPopup(True)
+        self.load_tab_end_date_edit.setDate(QDate.currentDate())
+
+        load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
+        load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
 
         # self.load_tab_frame0 - Grid
         load_tab_frame0_grid = QGridLayout()
 
-        load_tab_frame0_grid.addWidget(load_tab_host_label, 0, 1)
-        load_tab_frame0_grid.addWidget(self.load_tab_host_combo, 0, 2)
-        load_tab_frame0_grid.addWidget(load_tab_date_label, 0, 3)
-        load_tab_frame0_grid.addWidget(self.load_tab_date_combo, 0, 4)
-        load_tab_frame0_grid.addWidget(load_tab_empty_label, 0, 5)
+        load_tab_frame0_grid.addWidget(load_tab_host_label, 0, 0)
+        load_tab_frame0_grid.addWidget(self.load_tab_host_combo, 0, 1)
+        load_tab_frame0_grid.addWidget(load_tab_begin_date_label, 0, 2)
+        load_tab_frame0_grid.addWidget(self.load_tab_begin_date_edit, 0, 3)
+        load_tab_frame0_grid.addWidget(load_tab_end_date_label, 0, 4)
+        load_tab_frame0_grid.addWidget(self.load_tab_end_date_edit, 0, 5)
+        load_tab_frame0_grid.addWidget(load_tab_check_button, 0, 6)
 
+        load_tab_frame0_grid.setColumnStretch(0, 1)
         load_tab_frame0_grid.setColumnStretch(1, 1)
         load_tab_frame0_grid.setColumnStretch(2, 1)
         load_tab_frame0_grid.setColumnStretch(3, 1)
         load_tab_frame0_grid.setColumnStretch(4, 1)
-        load_tab_frame0_grid.setColumnStretch(5, 10)
+        load_tab_frame0_grid.setColumnStretch(5, 1)
+        load_tab_frame0_grid.setColumnStretch(6, 1)
 
         self.load_tab_frame0.setLayout(load_tab_frame0_grid)
 
     def gen_load_tab_frame1(self):
         # self.load_tab_frame1
-        self.host_ut_figure_canvas = FigureCanvas()
-        self.host_ut_navigation_toolbar = NavigationToolbar2QT(self.host_ut_figure_canvas, self)
+        self.load_tab_ut_canvas = FigureCanvas()
+        self.host_tab_ut_toolbar = NavigationToolbar2QT(self.load_tab_ut_canvas, self)
 
         # self.load_tab_frame1 - Grid
         load_tab_frame1_grid = QGridLayout()
-        load_tab_frame1_grid.addWidget(self.host_ut_navigation_toolbar, 0, 0)
-        load_tab_frame1_grid.addWidget(self.host_ut_figure_canvas, 1, 0)
+        load_tab_frame1_grid.addWidget(self.host_tab_ut_toolbar, 0, 0)
+        load_tab_frame1_grid.addWidget(self.load_tab_ut_canvas, 1, 0)
         self.load_tab_frame1.setLayout(load_tab_frame1_grid)
 
     def gen_load_tab_frame2(self):
         # self.load_tab_frame2
-        self.host_mem_figure_canvas = FigureCanvas()
-        self.host_mem_navigation_toolbar = NavigationToolbar2QT(self.host_mem_figure_canvas, self)
+        self.load_tab_mem_canvas = FigureCanvas()
+        self.host_tab_mem_toolbar = NavigationToolbar2QT(self.load_tab_mem_canvas, self)
 
         # self.load_tab_frame2 - Grid
         load_tab_frame2_grid = QGridLayout()
-        load_tab_frame2_grid.addWidget(self.host_mem_navigation_toolbar, 0, 0)
-        load_tab_frame2_grid.addWidget(self.host_mem_figure_canvas, 1, 0)
+        load_tab_frame2_grid.addWidget(self.host_tab_mem_toolbar, 0, 0)
+        load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
         self.load_tab_frame2.setLayout(load_tab_frame2_grid)
 
     def set_load_tab_host_combo(self, host_list=[]):
@@ -1804,34 +1854,25 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         for host in host_list:
             self.load_tab_host_combo.addItem(host)
 
-    def set_load_tab_date_combo(self):
-        """
-        Set (initialize) self.load_tab_date_combo.
-        """
-        self.load_tab_date_combo.clear()
-
-        date_list = ['Last Day', 'Last Week', 'Last Month', 'Last Year']
-
-        for date in date_list:
-            self.load_tab_date_combo.addItem(date)
-
     def update_load_tab_load_info(self):
         """
         Update self.load_tab_frame1 (ut information) and self.load_tab_frame2 (memory information).
         """
-        self.specified_host = self.load_tab_host_combo.currentText().strip()
-        self.specified_date = self.load_tab_date_combo.currentText().strip()
+        specified_host = self.load_tab_host_combo.currentText().strip()
 
-        self.update_load_tab_frame1([], [])
-        self.update_load_tab_frame2([], [])
+        self.update_load_tab_frame1(specified_host, [], [])
+        self.update_load_tab_frame2(specified_host, [], [])
 
-        (sample_time_list, ut_list, mem_list) = self.get_load_info()
+        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
+        my_show_message.start()
+        (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
+        my_show_message.terminate()
 
         if sample_time_list:
-            self.update_load_tab_frame1(sample_time_list, ut_list)
-            self.update_load_tab_frame2(sample_time_list, mem_list)
+            self.update_load_tab_frame1(specified_host, sample_time_list, ut_list)
+            self.update_load_tab_frame2(specified_host, sample_time_list, mem_list)
 
-    def get_load_info(self):
+    def get_load_info(self, specified_host):
         """
         Get sample_time/ut/mem list for specified host.
         """
@@ -1849,109 +1890,405 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if load_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting load database file "' + str(load_db_file) + '".')
             else:
-                if self.specified_host:
-                    print('Getting history of load information for host "' + str(self.specified_host) + '".')
+                if specified_host:
+                    print('Getting history of load information for host "' + str(specified_host) + '".')
 
-                    table_name = 'load_' + str(self.specified_host)
-                    data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'])
+                    table_name = 'load_' + str(specified_host)
+                    begin_date = self.load_tab_begin_date_edit.date().toString(Qt.ISODate)
+                    begin_time = str(begin_date) + ' 00:00:00'
+                    begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
+                    end_date = self.load_tab_end_date_edit.date().toString(Qt.ISODate)
+                    end_time = str(end_date) + ' 23:59:59'
+                    end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
+                    select_condition = "where sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+                    data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
 
                     if not data_dic:
-                        common.print_warning('*Warning*: load information is empty for "' + str(self.specified_host) + '".')
+                        common.print_warning('*Warning*: load information is empty for "' + str(specified_host) + '".')
                     else:
-                        specified_date_second = 0
-
-                        if self.specified_date == 'Last Day':
-                            specified_date_second = time.mktime((datetime.datetime.now()-datetime.timedelta(days=1)).timetuple())
-                        elif self.specified_date == 'Last Week':
-                            specified_date_second = time.mktime((datetime.datetime.now()-datetime.timedelta(days=7)).timetuple())
-                        elif self.specified_date == 'Last Month':
-                            specified_date_second = time.mktime((datetime.datetime.now()-datetime.timedelta(days=30)).timetuple())
-                        elif self.specified_date == 'Last Year':
-                            specified_date_second = time.mktime((datetime.datetime.now()-datetime.timedelta(days=365)).timetuple())
-
                         for i in range(len(data_dic['sample_time'])-1, -1, -1):
-                            sample_time_second = time.mktime(datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S').timetuple())
+                            sample_time = data_dic['sample_time'][i]
 
-                            if sample_time_second > specified_date_second:
-                                # For sample_time
-                                sample_time = datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S')
-                                sample_time_list.append(sample_time)
+                            # For sample_time
+                            sample_time = datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S')
+                            sample_time_list.append(sample_time)
 
-                                # For ut
-                                ut = data_dic['ut'][i]
+                            # For ut
+                            ut = data_dic['ut'][i]
 
-                                if ut:
-                                    ut = int(re.sub(r'%', '', ut))
-                                else:
-                                    ut = 0
+                            if ut:
+                                ut = int(re.sub(r'%', '', ut))
+                            else:
+                                ut = 0
 
-                                ut_list.append(ut)
+                            ut_list.append(ut)
 
-                                # For mem
-                                mem = data_dic['mem'][i]
+                            # For mem
+                            mem = data_dic['mem'][i]
 
-                                if mem:
-                                    if re.match(r'.*M', mem):
-                                        mem = round(float(re.sub(r'M', '', mem))/1024, 1)
-                                    elif re.match(r'.*G', mem):
-                                        mem = round(float(re.sub(r'G', '', mem)), 1)
-                                    elif re.match(r'.*T', mem):
-                                        mem = round(float(re.sub(r'T', '', mem))*1024, 1)
-                                else:
-                                    mem = 0
+                            if mem:
+                                if re.match(r'.*M', mem):
+                                    mem = round(float(re.sub(r'M', '', mem))/1024, 1)
+                                elif re.match(r'.*G', mem):
+                                    mem = round(float(re.sub(r'G', '', mem)), 1)
+                                elif re.match(r'.*T', mem):
+                                    mem = round(float(re.sub(r'T', '', mem))*1024, 1)
+                            else:
+                                mem = 0
 
-                                mem_list.append(mem)
+                            mem_list.append(mem)
 
                     load_db_conn.close()
 
         return (sample_time_list, ut_list, mem_list)
 
-    def update_load_tab_frame1(self, sample_time_list, ut_list):
+    def update_load_tab_frame1(self, specified_host, sample_time_list, ut_list):
         """
         Draw Ut curve for specified host on self.load_tab_frame1.
         """
-        fig = self.host_ut_figure_canvas.figure
+        fig = self.load_tab_ut_canvas.figure
         fig.clear()
-        self.host_ut_figure_canvas.draw()
+        self.load_tab_ut_canvas.draw()
 
         if sample_time_list and ut_list:
-            self.draw_host_ut_curve(fig, sample_time_list, ut_list)
+            self.draw_load_tab_ut_curve(fig, specified_host, sample_time_list, ut_list)
 
-    def draw_host_ut_curve(self, fig, sample_time_list, ut_list):
-        # Fil self.host_ut_figure_canvas.
+    def draw_load_tab_ut_curve(self, fig, specified_host, sample_time_list, ut_list):
+        # Fil self.load_tab_ut_canvas.
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
-        axes.set_title('host "' + str(self.specified_host) + '" ut curve')
+        axes.set_title('ut curve for host "' + str(specified_host) + '"')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Cpu Utilization (%)')
         axes.plot(sample_time_list, ut_list, 'ro-')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
-        self.host_ut_figure_canvas.draw()
+        self.load_tab_ut_canvas.draw()
 
-    def update_load_tab_frame2(self, sample_time_list, mem_list):
+    def update_load_tab_frame2(self, specified_host, sample_time_list, mem_list):
         """
         Draw mem curve for specified host on self.load_tab_frame2.
         """
-        fig = self.host_mem_figure_canvas.figure
+        fig = self.load_tab_mem_canvas.figure
         fig.clear()
-        self.host_mem_figure_canvas.draw()
+        self.load_tab_mem_canvas.draw()
 
         if sample_time_list and mem_list:
-            self.draw_host_mem_curve(fig, sample_time_list, mem_list)
+            self.draw_load_tab_mem_curve(fig, specified_host, sample_time_list, mem_list)
 
-    def draw_host_mem_curve(self, fig, sample_time_list, mem_list):
-        # Fill self.host_mem_figure_canvas.
+    def draw_load_tab_mem_curve(self, fig, specified_host, sample_time_list, mem_list):
+        # Fill self.load_tab_mem_canvas.
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
-        axes.set_title('host "' + str(self.specified_host) + '" available mem curve')
+        axes.set_title('available mem curve for host "' + str(specified_host) + '"')
         axes.set_xlabel('Sample Time')
-        axes.set_ylabel('Available RAM (G)')
+        axes.set_ylabel('Available Mem (G)')
         axes.plot(sample_time_list, mem_list, 'go-')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
-        self.host_mem_figure_canvas.draw()
+        self.load_tab_mem_canvas.draw()
 # For load TAB (end) #
+
+# For utilization TAB (start) #
+    def gen_utilization_tab(self):
+        """
+        Generate the utilization tab on lsfMonitor GUI, show host utilization (slot/cpu/mem) information.
+        """
+        # self.utilization_tab
+        self.utilization_tab_frame0 = QFrame(self.utilization_tab)
+        self.utilization_tab_frame1 = QFrame(self.utilization_tab)
+
+        self.utilization_tab_frame0.setFrameShadow(QFrame.Raised)
+        self.utilization_tab_frame0.setFrameShape(QFrame.Box)
+        self.utilization_tab_frame1.setFrameShadow(QFrame.Raised)
+        self.utilization_tab_frame1.setFrameShape(QFrame.Box)
+
+        # self.utilization_tab - Grid
+        utilization_tab_grid = QGridLayout()
+
+        utilization_tab_grid.addWidget(self.utilization_tab_frame0, 0, 0)
+        utilization_tab_grid.addWidget(self.utilization_tab_frame1, 1, 0)
+
+        utilization_tab_grid.setRowStretch(0, 1)
+        utilization_tab_grid.setRowStretch(1, 10)
+
+        self.utilization_tab.setLayout(utilization_tab_grid)
+
+        # Generate sub-frame
+        self.gen_utilization_tab_frame0()
+        self.gen_utilization_tab_frame1()
+
+    def gen_utilization_tab_frame0(self):
+        # self.utilization_tab_frame0
+        utilization_tab_queue_label = QLabel('Queue', self.utilization_tab_frame0)
+        utilization_tab_queue_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
+        self.set_utilization_tab_queue_combo()
+        self.utilization_tab_queue_combo.currentTextChanged.connect(self.update_utilization_tab_host_combo)
+
+        utilization_tab_host_label = QLabel('Host', self.utilization_tab_frame0)
+        utilization_tab_host_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
+        self.set_utilization_tab_host_combo()
+
+        utilization_tab_resource_label = QLabel('Resource', self.utilization_tab_frame0)
+        utilization_tab_resource_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_resource_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.utilization_tab_resource_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
+        self.set_utilization_tab_resource_combo()
+
+        utilization_tab_check_button = QPushButton('Check', self.utilization_tab_frame0)
+        utilization_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        utilization_tab_check_button.clicked.connect(self.update_utilization_tab_frame1)
+
+        utilization_tab_begin_date_label = QLabel('Begin_Date', self.utilization_tab_frame0)
+        utilization_tab_begin_date_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.utilization_tab_begin_date_edit = QDateEdit(self.utilization_tab_frame0)
+        self.utilization_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.utilization_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.utilization_tab_begin_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
+        self.utilization_tab_begin_date_edit.setCalendarPopup(True)
+        self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
+
+        utilization_tab_end_date_label = QLabel('End_Date', self.utilization_tab_frame0)
+        utilization_tab_end_date_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.utilization_tab_end_date_edit = QDateEdit(self.utilization_tab_frame0)
+        self.utilization_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.utilization_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.utilization_tab_end_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
+        self.utilization_tab_end_date_edit.setCalendarPopup(True)
+        self.utilization_tab_end_date_edit.setDate(QDate.currentDate())
+
+        # self.utilization_tab_frame0 - Grid
+        utilization_tab_frame0_grid = QGridLayout()
+
+        utilization_tab_frame0_grid.addWidget(utilization_tab_queue_label, 0, 0)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_queue_combo, 0, 1)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_host_label, 0, 2)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_host_combo, 0, 3)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_resource_label, 0, 4)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_resource_combo, 0, 5)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_check_button, 0, 6)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_begin_date_label, 1, 0)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_begin_date_edit, 1, 1)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_end_date_label, 1, 2)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_end_date_edit, 1, 3)
+
+        utilization_tab_frame0_grid.setColumnStretch(0, 1)
+        utilization_tab_frame0_grid.setColumnStretch(1, 1)
+        utilization_tab_frame0_grid.setColumnStretch(2, 1)
+        utilization_tab_frame0_grid.setColumnStretch(3, 1)
+        utilization_tab_frame0_grid.setColumnStretch(4, 1)
+        utilization_tab_frame0_grid.setColumnStretch(5, 1)
+        utilization_tab_frame0_grid.setColumnStretch(6, 1)
+
+        self.utilization_tab_frame0.setLayout(utilization_tab_frame0_grid)
+
+    def gen_utilization_tab_frame1(self):
+        # self.utilization_tab_frame1
+        self.utilization_tab_utilization_canvas = FigureCanvas()
+        self.utilization_tab_utilization_toolbar = NavigationToolbar2QT(self.utilization_tab_utilization_canvas, self)
+
+        # self.utilization_tab_frame1 - Grid
+        utilization_tab_frame1_grid = QGridLayout()
+        utilization_tab_frame1_grid.addWidget(self.utilization_tab_utilization_toolbar, 0, 0)
+        utilization_tab_frame1_grid.addWidget(self.utilization_tab_utilization_canvas, 1, 0)
+        self.utilization_tab_frame1.setLayout(utilization_tab_frame1_grid)
+
+    def set_utilization_tab_queue_combo(self, queue_list=[]):
+        """
+        Set (initialize) self.utilization_tab_queue_combo.
+        """
+        self.utilization_tab_queue_combo.clear()
+
+        # "ALL" is used to select all queues/hosts.
+        if not queue_list:
+            queue_list = copy.deepcopy(self.queue_list)
+            queue_list.insert(0, 'ALL')
+
+        for queue in queue_list:
+            self.utilization_tab_queue_combo.addCheckBoxItem(queue)
+
+    def set_utilization_tab_host_combo(self, host_list=[], select_all=False):
+        """
+        Set (initialize) self.utilization_tab_host_combo.
+        """
+        self.utilization_tab_host_combo.clear()
+
+        if not host_list:
+            host_list = copy.deepcopy(self.host_list)
+
+        for host in host_list:
+            self.utilization_tab_host_combo.addCheckBoxItem(host)
+
+        if select_all:
+            self.utilization_tab_host_combo.selectAllItems()
+
+    def set_utilization_tab_resource_combo(self):
+        """
+        Set (initialize) self.utilization_tab_date_combo.
+        """
+        self.utilization_tab_resource_combo.clear()
+
+        resource_list = ['slot', 'cpu', 'mem']
+
+        for resource in resource_list:
+            self.utilization_tab_resource_combo.addCheckBoxItem(resource)
+
+    def update_utilization_tab_host_combo(self):
+        """
+        Update self.utilization_tab_host_combo with self.utilization_tab_queue_combo value.
+        """
+        # Get host_list based on selected queue info.
+        selected_host_list = []
+        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+
+        if 'ALL' in selected_queue_dic.values():
+            selected_host_list = copy.deepcopy(self.host_list)
+        else:
+            for selected_queue in selected_queue_dic.values():
+                host_list = self.queue_host_dic[selected_queue]
+
+                for host in host_list:
+                    if host not in selected_host_list:
+                        selected_host_list.append(host)
+
+        # Update self.utilization_tab_host_combo with new host_list.
+        if selected_host_list:
+            self.set_utilization_tab_host_combo(host_list=selected_host_list, select_all=True)
+        else:
+            self.set_utilization_tab_host_combo()
+
+    def get_utilization_info(self, selected_host_list, selected_resource_list):
+        """
+        Get sample_time/ut/mem list for specified host.
+        """
+        utilization_dic = {}
+        utilization_db_file = str(config.db_path) + '/monitor/utilization.db'
+
+        if not os.path.exists(utilization_db_file):
+            common.print_warning('*Warning*: utilization database "' + str(utilization_db_file) + '" is missing.')
+        else:
+            (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
+
+            if utilization_db_file_connect_result == 'failed':
+                common.print_warning('*Warning*: Failed on connecting utilization database file "' + str(utilization_db_file) + '".')
+            else:
+                if selected_host_list:
+                    for selected_host in selected_host_list:
+                        print('Getting history of utilization information for host "' + str(selected_host) + '".')
+
+                        table_name = 'utilization_' + str(selected_host)
+                        key_list = copy.deepcopy(selected_resource_list)
+                        key_list.insert(0, 'sample_time')
+                        begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
+                        begin_time = str(begin_date) + ' 00:00:00'
+                        begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
+                        end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
+                        end_time = str(end_date) + ' 23:59:59'
+                        end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
+                        select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+                        data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
+
+                        if not data_dic:
+                            common.print_warning('*Warning*: utilization information is empty for "' + str(selected_host) + '".')
+                        else:
+                            for (i, sample_time) in enumerate(data_dic['sample_time']):
+                                for selected_resource in selected_resource_list:
+                                    sample_date = re.sub('_.*', '', data_dic['sample_time'][i])
+
+                                    if i == 0:
+                                        utilization_dic.setdefault(selected_resource, {})
+
+                                    utilization = float(data_dic[selected_resource][i])
+                                    utilization_dic[selected_resource].setdefault(sample_date, {})
+                                    utilization_dic[selected_resource][sample_date].setdefault(selected_host, [])
+                                    utilization_dic[selected_resource][sample_date][selected_host].append(utilization)
+
+            utilization_db_conn.close()
+
+        # Organize utilization info, get host daily average utilization.
+        organized_utilization_dic = {}
+
+        for selected_resource in utilization_dic.keys():
+            organized_utilization_dic.setdefault(selected_resource, {})
+
+            for sample_date in utilization_dic[selected_resource].keys():
+                organized_utilization_dic[selected_resource].setdefault(sample_date, {})
+
+                for selected_host in utilization_dic[selected_resource][sample_date].keys():
+                    utilization_list = utilization_dic[selected_resource][sample_date][selected_host]
+                    organized_utilization_dic[selected_resource][sample_date][selected_host] = round((sum(utilization_list)/len(utilization_list)), 1)
+
+        # Organize utilization info, get average utlization for sample_date.
+        for selected_resource in organized_utilization_dic.keys():
+            for sample_date in organized_utilization_dic[selected_resource].keys():
+                utilization_list = list(organized_utilization_dic[selected_resource][sample_date].values())
+                organized_utilization_dic[selected_resource][sample_date] = round((sum(utilization_list)/len(utilization_list)), 1)
+
+        return organized_utilization_dic
+
+    def update_utilization_tab_frame1(self):
+        """
+        Draw Ut curve for specified host on self.utilization_tab_frame1.
+        """
+        # Generate figure.
+        fig = self.utilization_tab_utilization_canvas.figure
+        fig.clear()
+        self.utilization_tab_utilization_canvas.draw()
+
+        # Update figure.
+        selected_host_dic = self.utilization_tab_host_combo.selectedItems()
+        selected_host_list = list(selected_host_dic.values())
+        selected_resource_dic = self.utilization_tab_resource_combo.selectedItems()
+        selected_resource_list = list(selected_resource_dic.values())
+
+        if selected_host_list and selected_resource_list:
+            my_show_message = ShowMessage('Info', 'Loading resource utilization information, please wait a moment ...')
+            my_show_message.start()
+            (utilization_dic) = self.get_utilization_info(selected_host_list, selected_resource_list)
+            my_show_message.terminate()
+
+            if utilization_dic:
+                self.draw_utilization_tab_utilization_curve(fig, utilization_dic)
+
+    def draw_utilization_tab_utilization_curve(self, fig, utilization_dic):
+        # Fil self.utilization_tab_utilization_canvas.
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+
+        title = ''
+
+        for selected_resource in utilization_dic.keys():
+            utilization_list = list(utilization_dic[selected_resource].values())
+            avg_utilization = round((sum(utilization_list)/len(utilization_list)), 1)
+            title_line = str(selected_resource) + ' utilization : ' + str(avg_utilization) + '%'
+
+            if title:
+                title = str(title) + ';    ' + str(title_line)
+            else:
+                title = title_line
+
+        axes.set_title(title)
+        axes.set_xlabel('Sample Date')
+        axes.set_ylabel('Utilization (%)')
+
+        color_list = ['ro-', 'bo-', 'yo-']
+
+        for (i, selected_resource) in enumerate(utilization_dic.keys()):
+            sample_date_list = list(utilization_dic[selected_resource].keys())
+            utilization_list = list(utilization_dic[selected_resource].values())
+            axes.plot(sample_date_list, utilization_list, color_list[i], label=selected_resource)
+
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.utilization_tab_utilization_canvas.draw()
+# For utilization TAB (end) #
 
 # For license TAB (start) #
     def gen_license_tab(self):
@@ -1965,10 +2302,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.license_tab_feature_label = QLabel('Feature Information', self.license_tab)
         self.license_tab_feature_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_feature_label.setAlignment(Qt.AlignCenter)
+        self.license_tab_feature_label.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+
         self.license_tab_expires_label = QLabel('Expires Information', self.license_tab)
         self.license_tab_expires_label.setStyleSheet("font-weight: bold;")
-        self.license_tab_expires_label.setAlignment(Qt.AlignCenter)
+        self.license_tab_expires_label.setAlignment(Qt.AlignCenter | Qt.AlignVCenter)
 
         self.license_tab_feature_table = QTableWidget(self.license_tab)
         self.license_tab_feature_table.itemClicked.connect(self.license_tab_check_click)
@@ -2001,38 +2339,43 @@ lsfMonitor is an open source software for LSF information data-collection, data-
     def gen_license_tab_frame0(self):
         # self.license_tab_frame0
         # Show
-        license_tab_show_label = QLabel('       Show', self.license_tab_frame0)
+        license_tab_show_label = QLabel('Show', self.license_tab_frame0)
         license_tab_show_label.setStyleSheet("font-weight: bold;")
+        license_tab_show_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_show_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_show_combo()
         self.license_tab_show_combo.activated.connect(self.filter_license_feature)
 
         # License Server
-        license_tab_server_label = QLabel('     Server', self.license_tab_frame0)
+        license_tab_server_label = QLabel('Server', self.license_tab_frame0)
         license_tab_server_label.setStyleSheet("font-weight: bold;")
+        license_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_server_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_server_combo()
         self.license_tab_server_combo.activated.connect(self.update_license_tab_vendor_combo)
 
         # Vendor Daemon
-        license_tab_vendor_label = QLabel('     Vendor', self.license_tab_frame0)
+        license_tab_vendor_label = QLabel('Vendor', self.license_tab_frame0)
         license_tab_vendor_label.setStyleSheet("font-weight: bold;")
+        license_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_vendor_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_vendor_combo()
         self.license_tab_vendor_combo.activated.connect(self.check_license_tab_vendor_combo)
 
         # License Feature
-        license_tab_feature_label = QLabel('    Feature', self.license_tab_frame0)
+        license_tab_feature_label = QLabel('Feature', self.license_tab_frame0)
         license_tab_feature_label.setStyleSheet("font-weight: bold;")
+        license_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_feature_line = QLineEdit()
         self.license_tab_feature_line.returnPressed.connect(self.filter_license_feature)
 
         # Filter Button
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
+        license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
 
         # self.license_tab_frame0 - Grid
@@ -2048,10 +2391,15 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_frame0_grid.addWidget(self.license_tab_feature_line, 0, 7)
         license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 8)
 
+        license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
+        license_tab_frame0_grid.setColumnStretch(2, 1)
         license_tab_frame0_grid.setColumnStretch(3, 1)
+        license_tab_frame0_grid.setColumnStretch(4, 1)
         license_tab_frame0_grid.setColumnStretch(5, 1)
+        license_tab_frame0_grid.setColumnStretch(6, 1)
         license_tab_frame0_grid.setColumnStretch(7, 1)
+        license_tab_frame0_grid.setColumnStretch(8, 1)
 
         self.license_tab_frame0.setLayout(license_tab_frame0_grid)
 
@@ -2180,6 +2528,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     license_feature = self.license_tab_feature_table.item(current_row, 2).text().strip()
 
                     print('* Getting license feature "' + str(license_feature) + '" usage on license server ' + str(license_server) + ' ...')
+
                     self.my_show_license_feature_usage = ShowLicenseFeatureUsage(server=license_server, vendor=vendor_daemon, feature=license_feature)
                     self.my_show_license_feature_usage.start()
 
