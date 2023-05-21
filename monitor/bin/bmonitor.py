@@ -567,7 +567,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             return
 
         # Get job info
-        my_show_message = ShowMessage('Info', '* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
         my_show_message.start()
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
         my_show_message.terminate()
@@ -893,7 +893,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             command = str(command) + ' -m ' + str(specified_host)
 
         # Run command to get expected jobs information.
-        my_show_message = ShowMessage('Info', '* Loading LSF jobs information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading LSF jobs information, please wait a moment ...')
         my_show_message.start()
         orig_job_dic = common_lsf.get_bjobs_uf_info(command)
         my_show_message.terminate()
