@@ -77,7 +77,7 @@ class Sampling:
 
         if not os.path.exists(job_db_path):
             try:
-                os.system('mkdir -p ' + str(job_db_path))
+                os.makedirs(job_db_path)
             except Exception as error:
                 common.print_error('*Error*: Failed on creating sqlite job db directory "' + str(job_db_path) + '".')
                 common.print_error('         ' + str(error))
