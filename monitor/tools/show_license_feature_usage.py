@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-################################
-# File Name   : show_license_feature_usage.py
-# Author      : liyanqing
-# Created On  : 2022-06-15 00:00:00
-# Description :
-################################
 import os
 import sys
 import argparse

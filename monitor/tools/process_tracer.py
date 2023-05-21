@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-################################
-# File Name   : process_tracer.py
-# Author      : liyanqing
-# Created On  : 2021-11-30 00:00:00
-# Description :
-################################
 import os
 import re
 import sys

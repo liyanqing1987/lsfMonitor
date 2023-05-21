@@ -1,12 +1,4 @@
-#!/ic/software/tools/python3/3.8.8/bin/python3
 # -*- coding: utf-8 -*-
-################################
-# File Name   : patch.py
-# Author      : liyanqing.1987
-# Created On  : 2023-05-16 21:22:52
-# Description : This script is used for replacing all changed python files from
-#               patch path to current install path.
-################################
 import os
 import re
 import sys

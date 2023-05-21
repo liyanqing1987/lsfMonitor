@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-################################
-# File Name   : seedb.py
-# Author      : liyanqing
-# Created On  : 2020-10-01 00:00:00
-# Description :
-################################
 import os
 import re
 import sys

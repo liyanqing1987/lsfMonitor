@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-################################
-# File Name   : check_issue_reason.py
-# Author      : liyanqing
-# Created On  : 2022-04-13 00:00:00
-# Description :
-################################
 import os
 import re
 import sys
