@@ -55,29 +55,30 @@ class GetLicenseInfo():
         """
         Get EDA liecnse feature usage and expires information on license_dic.
         license_dic format is like below:
-        license_dic = {
-                       'license_files': '',
-                       'license_server_status': 'UNKNOWN',
-                       'license_server_version': '',
-                       'vendor_daemon': { vendor_daemon: {
-                                                          'vendor_daemon_status': 'UP',
-                                                          'vendor_daemon_version': '',
-                                                          'feature': {feature: {
-                                                                                'issued': '0',
-                                                                                'in_use': '0',
-                                                                                'in_use_info_string': [],
-                                                                                'in_use_info': [],
-                                                                               },
-                                                                     },
-                                                          'expires': {feature: {
-                                                                                'version': '',
-                                                                                'license': '',
-                                                                                'vendor': '',
-                                                                                'expires': '',
-                                                                               },
-                                                                     },
+        license_dic = {license_server: {
+                                        'license_files': '',
+                                        'license_server_status': 'UNKNOWN',
+                                        'license_server_version': '',
+                                        'vendor_daemon': { vendor_daemon: {
+                                                                           'vendor_daemon_status': 'UP',
+                                                                           'vendor_daemon_version': '',
+                                                                           'feature': {feature: {
+                                                                                                 'issued': '0',
+                                                                                                 'in_use': '0',
+                                                                                                 'in_use_info_string': [],
+                                                                                                 'in_use_info': [],
+                                                                                                },
+                                                                                      },
+                                                                           'expires': {feature: {
+                                                                                                 'version': '',
+                                                                                                 'license': '',
+                                                                                                 'vendor': '',
+                                                                                                 'expires': '',
+                                                                                                },
+                                                                                      },
+                                                                          },
                                                          },
-                                        },
+                                       },
                       }
         """
         # Get lmstat output message.
