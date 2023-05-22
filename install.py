@@ -87,7 +87,7 @@ def gen_config_file():
                 CF.write('''# Specify the database directory.
 db_path = "''' + str(db_path) + '''"
 
-# Specify lmstat path, example "/*/*/bin".
+# Specify lmstat path, example "/eda/synopsys/scl/2021.03/linux64/bin/lmstat".
 lmstat_path = ""
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
