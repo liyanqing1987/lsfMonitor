@@ -72,6 +72,11 @@ class Sampling:
         self.user_sampling = user_sampling
         self.utilization_sampling = utilization_sampling
 
+        # Get sample time.
+        self.sample_second = int(time.time())
+        self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
+
+        # Create db path.
         self.db_path = str(config.db_path) + '/monitor'
         job_db_path = str(self.db_path) + '/job'
 
@@ -83,16 +88,10 @@ class Sampling:
                 common.print_error('         ' + str(error))
                 sys.exit(1)
 
-    def get_date_info(self):
-        self.sample_second = int(time.time())
-        self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
-
     def sample_job_info(self):
         """
         Sample job info, especially the memory usage info.
         """
-        self.get_date_info()
-
         print('>>> Sampling job info ...')
 
         command = 'bjobs -u all -r -UF'
@@ -180,7 +179,6 @@ class Sampling:
         """
         Sample queue info and save it into sqlite db.
         """
-        self.get_date_info()
         queue_db_file = str(self.db_path) + '/queue.db'
         (result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file, mode='write')
 
@@ -255,7 +253,6 @@ class Sampling:
         """
         Sample host info and save it into sqlite db.
         """
-        self.get_date_info()
         host_db_file = str(self.db_path) + '/host.db'
         (result, host_db_conn) = common_sqlite3.connect_db_file(host_db_file, mode='write')
 
@@ -325,7 +322,6 @@ class Sampling:
         """
         Sample host load info and save it into sqlite db.
         """
-        self.get_date_info()
         load_db_file = str(self.db_path) + '/load.db'
         (result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file, mode='write')
 
@@ -395,7 +391,6 @@ class Sampling:
         """
         Sample user info and save it into sqlite db.
         """
-        self.get_date_info()
         user_db_file = str(self.db_path) + '/user.db'
         (result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file, mode='write')
 
@@ -465,7 +460,6 @@ class Sampling:
         """
         Sample host resource utilization info and save it into sqlite db.
         """
-        self.get_date_info()
         utilization_db_file = str(self.db_path) + '/utilization.db'
         (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
 
