@@ -497,7 +497,7 @@ class Sampling:
             slot_utilization = 0
 
             for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
-                if (host_name == host) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]):
+                if (host_name == host) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and (int(bhosts_dic['MAX'][j]) != 0):
                     slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
                     break
 
