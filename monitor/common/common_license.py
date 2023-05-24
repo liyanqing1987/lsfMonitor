@@ -102,7 +102,7 @@ class GetLicenseInfo():
                                'users_of_feature': re.compile(r'^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
                                'users_of_feature_uncounted': re.compile(r'^Users of (\S+):  \(Uncounted,.*\)\s*$'),
                                'in_use_info': re.compile(r'^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
-                               'reservation': re.compile(r'^\s*(\d+)\s+RESERVATION for (HOST|HOST_GROUP)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
+                               'reservation': re.compile(r'^\s*(\d+)\s+RESERVATION(s)? for (\S+)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
                                'feature_expires': re.compile(r'^Feature .* Expires\s*$'),
                                'expire_info': re.compile(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$')}
 
@@ -179,12 +179,21 @@ class GetLicenseInfo():
                     license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use'] = str(int(license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']) + int(usage_dic['license_num']))
             elif license_compile_dic['reservation'].match(line):
                 my_match = license_compile_dic['reservation'].match(line)
-                usage_dic = {'user': 'N/A',
-                             'execute_host': my_match.group(3),
+                reservation_type = my_match.group(3)
+                user = 'N/A'
+                execute_host = 'N/A'
+
+                if (reservation_type == 'USER') or (reservation_type == 'GROUP'):
+                    user = my_match.group(4)
+                elif (reservation_type == 'HOST') or (reservation_type == 'HOST_GROUP'):
+                    execute_host = my_match.group(4)
+
+                usage_dic = {'user': user,
+                             'execute_host': execute_host,
                              'submit_host': 'N/A',
                              'version': 'N/A',
-                             'license_server': my_match.group(4),
-                             'start_time': 'N/A',
+                             'license_server': my_match.group(5),
+                             'start_time': 'RESERVATION',
                              'license_num': my_match.group(1)}
 
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(line.strip())
@@ -423,7 +432,7 @@ class FilterLicenseDic():
 def switch_start_time(start_time):
     new_start_time = start_time
 
-    if start_time and (start_time != 'N/A'):
+    if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
         # Switch start_time to start_seconds.
         current_year = datetime.date.today().year
         start_time_with_year = str(current_year) + ' ' + str(start_time)
@@ -460,7 +469,7 @@ def check_long_runtime(start_time, second_threshold=259200):
     Runtime is more than second_threshold (default is 3 days), return True.
     Runtime is less than second_threshold (default is 3 days), return False.
     """
-    if start_time and (start_time != 'N/A'):
+    if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
         current_year = datetime.date.today().year
         start_time_with_year = str(current_year) + ' ' + str(start_time)
         start_seconds = int(time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M')))
