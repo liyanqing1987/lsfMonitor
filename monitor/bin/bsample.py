@@ -234,7 +234,7 @@ class Sampling:
         # Clean up queue database, only keep 10000 items.
         for queue in queue_list:
             queue_table_name = 'queue_' + str(queue)
-            queue_table_count = int(common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name))
+            queue_table_count = common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name)
 
             if queue_table_count != 'N/A':
                 if int(queue_table_count) > 10000:
@@ -303,7 +303,7 @@ class Sampling:
         # Clean up host database, only keep 10000 items.
         for host in host_list:
             host_table_name = 'host_' + str(host)
-            host_table_count = int(common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name))
+            host_table_count = common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name)
 
             if host_table_count != 'N/A':
                 if int(host_table_count) > 10000:
@@ -372,7 +372,7 @@ class Sampling:
         # Clean up load database, only keep 100000 items.
         for host in host_list:
             load_table_name = 'load_' + str(host)
-            load_table_count = int(common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name))
+            load_table_count = common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name)
 
             if load_table_count != 'N/A':
                 if int(load_table_count) > 100000:
@@ -441,7 +441,7 @@ class Sampling:
         # Clean up user database, only keep 100000 items.
         for user in user_list:
             user_table_name = 'user_' + str(user)
-            user_table_count = int(common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name))
+            user_table_count = common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name)
 
             if user_table_count != 'N/A':
                 if int(user_table_count) > 100000:
@@ -554,7 +554,7 @@ class Sampling:
         # Clean up utilization database, only keep 100000 items.
         for host in host_list:
             utilization_table_name = 'utilization_' + str(host)
-            utilization_table_count = int(common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name))
+            utilization_table_count = common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name)
 
             if utilization_table_count != 'N/A':
                 if int(utilization_table_count) > 100000:
