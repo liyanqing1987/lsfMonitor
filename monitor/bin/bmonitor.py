@@ -1901,7 +1901,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     end_date = self.load_tab_end_date_edit.date().toString(Qt.ISODate)
                     end_time = str(end_date) + ' 23:59:59'
                     end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
-                    select_condition = "where sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+                    select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
                     data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
 
                     if not data_dic:

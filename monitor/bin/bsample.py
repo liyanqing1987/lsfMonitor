@@ -98,7 +98,6 @@ class Sampling:
         bjobs_dic = common_lsf.get_bjobs_uf_info(command)
         job_list = list(bjobs_dic.keys())
         job_range_dic = common.get_job_range_dic(job_list)
-        job_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'mem']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT']
@@ -117,12 +116,6 @@ class Sampling:
 
                 print('    Sampling for job "' + str(job) + '" ...')
 
-                job_sql_dic[job] = {
-                                    'drop': False,
-                                    'key_string': '',
-                                    'value_string': '',
-                                   }
-
                 # If job table (with old data) has been on the job_db_file, drop it.
                 if job_table_name in job_table_list:
                     data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_second'])
@@ -133,44 +126,22 @@ class Sampling:
 
                             if self.sample_second - last_sample_second > 3600:
                                 common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
-                                job_sql_dic[job]['drop'] = True
+                                common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
                                 job_table_list.remove(job_table_name)
 
                 # If job table is not on the job_db_file, create it.
                 if job_table_name not in job_table_list:
                     key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                    job_sql_dic[job]['key_string'] = key_string
+                    common_sqlite3.create_sql_table(job_db_file, job_db_conn, job_table_name, key_string, commit=False)
 
                 # Insert sql table value.
                 value_list = [self.sample_second, self.sample_time, bjobs_dic[job]['mem']]
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-                job_sql_dic[job]['value_string'] = value_string
+                common_sqlite3.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, value_string, commit=False)
 
             if result == 'passed':
                 job_db_conn.commit()
                 job_db_conn.close()
-
-        for job_range in job_range_dic.keys():
-            job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
-            (result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file, mode='write')
-
-            if result != 'passed':
-                return
-
-            for job in job_range_dic[job_range]:
-                job_table_name = 'job_' + str(job)
-
-                if job_sql_dic[job]['drop']:
-                    common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
-
-                if job_sql_dic[job]['key_string'] != '':
-                    common_sqlite3.create_sql_table(job_db_file, job_db_conn, job_table_name, job_sql_dic[job]['key_string'], commit=False)
-
-                if job_sql_dic[job]['value_string'] != '':
-                    common_sqlite3.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, job_sql_dic[job]['value_string'], commit=False)
-
-            job_db_conn.commit()
-            job_db_conn.close()
 
         print('    Committing the update to sqlite3 ...')
         print('    Done (' + str(len(job_list)) + ' jobs).')
@@ -191,17 +162,12 @@ class Sampling:
         bqueues_dic = common_lsf.get_bqueues_info()
         queue_list = bqueues_dic['QUEUE_NAME']
         queue_list.append('ALL')
-        queue_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(queue_list)):
             queue = queue_list[i]
-            queue_sql_dic[queue] = {
-                                    'key_string': '',
-                                    'value_string': '',
-                                   }
             queue_table_name = 'queue_' + str(queue)
 
             print('    Sampling for queue "' + str(queue) + '" ...')
@@ -209,7 +175,7 @@ class Sampling:
             # Generate sql table.
             if queue_table_name not in queue_table_list:
                 key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                queue_sql_dic[queue]['key_string'] = key_string
+                common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, key_string, commit=False)
 
             # Insert sql table value.
             if queue == 'ALL':
@@ -218,16 +184,7 @@ class Sampling:
                 value_list = [self.sample_second, self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
 
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            queue_sql_dic[queue]['value_string'] = value_string
-
-        for queue in queue_list:
-            queue_table_name = 'queue_' + str(queue)
-
-            if queue_sql_dic[queue]['key_string'] != '':
-                common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, queue_sql_dic[queue]['key_string'], commit=False)
-
-            if queue_sql_dic[queue]['value_string'] != '':
-                common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, queue_sql_dic[queue]['value_string'], commit=False)
+            common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, value_string, commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
@@ -264,17 +221,12 @@ class Sampling:
         host_table_list = common_sqlite3.get_sql_table_list(host_db_file, host_db_conn)
         bhosts_dic = common_lsf.get_bhosts_info()
         host_list = bhosts_dic['HOST_NAME']
-        host_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(host_list)):
             host = host_list[i]
-            host_sql_dic[host] = {
-                                  'key_string': '',
-                                  'value_string': '',
-                                 }
             host_table_name = 'host_' + str(host)
 
             print('    Sampling for host "' + str(host) + '" ...')
@@ -282,21 +234,12 @@ class Sampling:
             # Generate sql table.
             if host_table_name not in host_table_list:
                 key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                host_sql_dic[host]['key_string'] = key_string
+                common_sqlite3.create_sql_table(host_db_file, host_db_conn, host_table_name, key_string, commit=False)
 
             # Insert sql table value.
             value_list = [self.sample_second, self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            host_sql_dic[host]['value_string'] = value_string
-
-        for host in host_list:
-            host_table_name = 'host_' + str(host)
-
-            if host_sql_dic[host]['key_string'] != '':
-                common_sqlite3.create_sql_table(host_db_file, host_db_conn, host_table_name, host_sql_dic[host]['key_string'], commit=False)
-
-            if host_sql_dic[host]['value_string'] != '':
-                common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, host_sql_dic[host]['value_string'], commit=False)
+            common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, value_string, commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
@@ -333,17 +276,12 @@ class Sampling:
         load_table_list = common_sqlite3.get_sql_table_list(load_db_file, load_db_conn)
         lsload_dic = common_lsf.get_lsload_info()
         host_list = lsload_dic['HOST_NAME']
-        load_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(host_list)):
             host = host_list[i]
-            load_sql_dic[host] = {
-                                  'key_string': '',
-                                  'value_string': '',
-                                 }
             load_table_name = 'load_' + str(host)
 
             print('    Sampling for host "' + str(host) + '" ...')
@@ -351,21 +289,12 @@ class Sampling:
             # Generate sql table.
             if load_table_name not in load_table_list:
                 key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                load_sql_dic[host]['key_string'] = key_string
+                common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
 
             # Insert sql table value.
             value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            load_sql_dic[host]['value_string'] = value_string
-
-        for host in host_list:
-            load_table_name = 'load_' + str(host)
-
-            if load_sql_dic[host]['key_string'] != '':
-                common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, load_sql_dic[host]['key_string'], commit=False)
-
-            if load_sql_dic[host]['value_string'] != '':
-                common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, load_sql_dic[host]['value_string'], commit=False)
+            common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, value_string, commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
@@ -402,17 +331,12 @@ class Sampling:
         user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
         busers_dic = common_lsf.get_busers_info()
         user_list = busers_dic['USER/GROUP']
-        user_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(user_list)):
             user = user_list[i]
-            user_sql_dic[user] = {
-                                  'key_string': '',
-                                  'value_string': '',
-                                 }
             user_table_name = 'user_' + str(user)
 
             print('    Sampling for user "' + str(user) + '" ...')
@@ -420,21 +344,12 @@ class Sampling:
             # Generate sql table.
             if user_table_name not in user_table_list:
                 key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                user_sql_dic[user]['key_string'] = key_string
+                common_sqlite3.create_sql_table(user_db_file, user_db_conn, user_table_name, key_string, commit=False)
 
             # Insert sql table value.
             value_list = [self.sample_second, self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            user_sql_dic[user]['value_string'] = value_string
-
-        for user in user_list:
-            user_table_name = 'user_' + str(user)
-
-            if user_sql_dic[user]['key_string'] != '':
-                common_sqlite3.create_sql_table(user_db_file, user_db_conn, user_table_name, user_sql_dic[user]['key_string'], commit=False)
-
-            if user_sql_dic[user]['value_string'] != '':
-                common_sqlite3.insert_into_sql_table(user_db_file, user_db_conn, user_table_name, user_sql_dic[user]['value_string'], commit=False)
+            common_sqlite3.insert_into_sql_table(user_db_file, user_db_conn, user_table_name, value_string, commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
@@ -473,17 +388,12 @@ class Sampling:
         lshosts_dic = common_lsf.get_lshosts_info()
         lsload_dic = common_lsf.get_lsload_info()
         host_list = lsload_dic['HOST_NAME']
-        utilization_sql_dic = {}
 
         key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
         key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for i in range(len(host_list)):
             host = host_list[i]
-            utilization_sql_dic[host] = {
-                                         'key_string': '',
-                                         'value_string': '',
-                                        }
             utilization_table_name = 'utilization_' + str(host)
 
             print('    Sampling for host "' + str(host) + '" ...')
@@ -491,7 +401,7 @@ class Sampling:
             # Generate sql table.
             if utilization_table_name not in utilization_table_list:
                 key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                utilization_sql_dic[host]['key_string'] = key_string
+                common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, key_string, commit=False)
 
             # Get slot_utilization.
             slot_utilization = 0
@@ -538,16 +448,7 @@ class Sampling:
             # Insert sql table value.
             value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            utilization_sql_dic[host]['value_string'] = value_string
-
-        for host in host_list:
-            utilization_table_name = 'utilization_' + str(host)
-
-            if utilization_sql_dic[host]['key_string'] != '':
-                common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, utilization_sql_dic[host]['key_string'], commit=False)
-
-            if utilization_sql_dic[host]['value_string'] != '':
-                common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, utilization_sql_dic[host]['value_string'], commit=False)
+            common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
 
         print('    Committing the update to sqlite3 ...')
 
