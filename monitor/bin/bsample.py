@@ -94,8 +94,7 @@ class Sampling:
         """
         print('>>> Sampling job info ...')
 
-        command = 'bjobs -u all -r -UF'
-        bjobs_dic = common_lsf.get_bjobs_uf_info(command)
+        bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -r -UF')
         job_list = list(bjobs_dic.keys())
         job_range_dic = common.get_job_range_dic(job_list)
 
@@ -104,104 +103,94 @@ class Sampling:
 
         for job_range in job_range_dic.keys():
             job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
-            (result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file, mode='read')
+            (result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file, mode='write')
 
             if result == 'passed':
                 job_table_list = common_sqlite3.get_sql_table_list(job_db_file, job_db_conn)
-            else:
-                job_table_list = []
 
-            for job in job_range_dic[job_range]:
-                job_table_name = 'job_' + str(job)
+                for job in job_range_dic[job_range]:
+                    job_table_name = 'job_' + str(job)
 
-                print('    Sampling for job "' + str(job) + '" ...')
+                    print('    Sampling for job "' + str(job) + '" ...')
 
-                # If job table (with old data) has been on the job_db_file, drop it.
-                if job_table_name in job_table_list:
-                    data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_second'])
+                    # If job table (with old data) has been on the job_db_file, drop it.
+                    if job_table_name in job_table_list:
+                        data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_second'])
 
-                    if data_dic:
-                        if len(data_dic['sample_second']) > 0:
-                            last_sample_second = int(data_dic['sample_second'][-1])
+                        if data_dic:
+                            if len(data_dic['sample_second']) > 0:
+                                last_sample_second = int(data_dic['sample_second'][-1])
 
-                            if self.sample_second - last_sample_second > 3600:
-                                common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
-                                common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
-                                job_table_list.remove(job_table_name)
+                                if self.sample_second - last_sample_second > 3600:
+                                    common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
+                                    common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
+                                    job_table_list.remove(job_table_name)
 
-                # If job table is not on the job_db_file, create it.
-                if job_table_name not in job_table_list:
-                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                    common_sqlite3.create_sql_table(job_db_file, job_db_conn, job_table_name, key_string, commit=False)
+                    # Generate sql table if not exitst.
+                    if job_table_name not in job_table_list:
+                        key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                        common_sqlite3.create_sql_table(job_db_file, job_db_conn, job_table_name, key_string, commit=False)
 
-                # Insert sql table value.
-                value_list = [self.sample_second, self.sample_time, bjobs_dic[job]['mem']]
-                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-                common_sqlite3.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, value_string, commit=False)
+                    # Insert sql table value.
+                    value_list = [self.sample_second, self.sample_time, bjobs_dic[job]['mem']]
+                    value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                    common_sqlite3.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, value_string, commit=False)
 
-            if result == 'passed':
                 job_db_conn.commit()
                 job_db_conn.close()
 
-        print('    Committing the update to sqlite3 ...')
         print('    Done (' + str(len(job_list)) + ' jobs).')
 
     def sample_queue_info(self):
         """
         Sample queue info and save it into sqlite db.
         """
+        print('>>> Sampling queue info ...')
+
         queue_db_file = str(self.db_path) + '/queue.db'
         (result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file, mode='write')
 
-        if result != 'passed':
-            return
+        if result == 'passed':
+            queue_table_list = common_sqlite3.get_sql_table_list(queue_db_file, queue_db_conn)
+            bqueues_dic = common_lsf.get_bqueues_info()
+            queue_list = bqueues_dic['QUEUE_NAME']
+            queue_list.append('ALL')
 
-        print('>>> Sampling queue info into ' + str(queue_db_file) + ' ...')
+            key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
+            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
-        queue_table_list = common_sqlite3.get_sql_table_list(queue_db_file, queue_db_conn)
-        bqueues_dic = common_lsf.get_bqueues_info()
-        queue_list = bqueues_dic['QUEUE_NAME']
-        queue_list.append('ALL')
+            for i in range(len(queue_list)):
+                queue = queue_list[i]
+                queue_table_name = 'queue_' + str(queue)
 
-        key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+                print('    Sampling for queue "' + str(queue) + '" ...')
 
-        for i in range(len(queue_list)):
-            queue = queue_list[i]
-            queue_table_name = 'queue_' + str(queue)
+                # Clean up queue database, only keep 10000 items.
+                queue_table_count = common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name)
 
-            print('    Sampling for queue "' + str(queue) + '" ...')
+                if queue_table_count != 'N/A':
+                    if int(queue_table_count) > 10000:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(queue_table_count) - 10000
 
-            # Generate sql table.
-            if queue_table_name not in queue_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, key_string, commit=False)
+                        print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-            # Insert sql table value.
-            if queue == 'ALL':
-                value_list = [self.sample_second, self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
-            else:
-                value_list = [self.sample_second, self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
+                        common_sqlite3.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
 
-            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, value_string, commit=False)
+                # Generate sql table if not exitst.
+                if queue_table_name not in queue_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, key_string, commit=False)
 
-        print('    Committing the update to sqlite3 ...')
+                # Insert sql table value.
+                if queue == 'ALL':
+                    value_list = [self.sample_second, self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
+                else:
+                    value_list = [self.sample_second, self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
 
-        # Clean up queue database, only keep 10000 items.
-        for queue in queue_list:
-            queue_table_name = 'queue_' + str(queue)
-            queue_table_count = common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name)
-
-            if queue_table_count != 'N/A':
-                if int(queue_table_count) > 10000:
-                    row_id = 'sample_time'
-                    begin_line = 0
-                    end_line = int(queue_table_count) - 10000
-
-                    print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
-
-                    common_sqlite3.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
+                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, value_string, commit=False)
 
         queue_db_conn.commit()
         queue_db_conn.close()
@@ -210,53 +199,47 @@ class Sampling:
         """
         Sample host info and save it into sqlite db.
         """
+        print('>>> Sampling host info ...')
+
         host_db_file = str(self.db_path) + '/host.db'
         (result, host_db_conn) = common_sqlite3.connect_db_file(host_db_file, mode='write')
 
-        if result != 'passed':
-            return
+        if result == 'passed':
+            host_table_list = common_sqlite3.get_sql_table_list(host_db_file, host_db_conn)
+            bhosts_dic = common_lsf.get_bhosts_info()
+            host_list = bhosts_dic['HOST_NAME']
 
-        print('>>> Sampling host info into ' + str(host_db_file) + ' ...')
+            key_list = ['sample_second', 'sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
+            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
-        host_table_list = common_sqlite3.get_sql_table_list(host_db_file, host_db_conn)
-        bhosts_dic = common_lsf.get_bhosts_info()
-        host_list = bhosts_dic['HOST_NAME']
+            for i in range(len(host_list)):
+                host = host_list[i]
+                host_table_name = 'host_' + str(host)
 
-        key_list = ['sample_second', 'sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+                print('    Sampling for host "' + str(host) + '" ...')
 
-        for i in range(len(host_list)):
-            host = host_list[i]
-            host_table_name = 'host_' + str(host)
+                # Clean up host database, only keep 10000 items.
+                host_table_count = common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name)
 
-            print('    Sampling for host "' + str(host) + '" ...')
+                if host_table_count != 'N/A':
+                    if int(host_table_count) > 10000:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(host_table_count) - 10000
 
-            # Generate sql table.
-            if host_table_name not in host_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                common_sqlite3.create_sql_table(host_db_file, host_db_conn, host_table_name, key_string, commit=False)
+                        print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-            # Insert sql table value.
-            value_list = [self.sample_second, self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
-            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, value_string, commit=False)
+                        common_sqlite3.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
 
-        print('    Committing the update to sqlite3 ...')
+                # Generate sql table if not exists.
+                if host_table_name not in host_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(host_db_file, host_db_conn, host_table_name, key_string, commit=False)
 
-        # Clean up host database, only keep 10000 items.
-        for host in host_list:
-            host_table_name = 'host_' + str(host)
-            host_table_count = common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name)
-
-            if host_table_count != 'N/A':
-                if int(host_table_count) > 10000:
-                    row_id = 'sample_time'
-                    begin_line = 0
-                    end_line = int(host_table_count) - 10000
-
-                    print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
-
-                    common_sqlite3.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
+                # Insert sql table value.
+                value_list = [self.sample_second, self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
+                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, value_string, commit=False)
 
         host_db_conn.commit()
         host_db_conn.close()
@@ -265,53 +248,47 @@ class Sampling:
         """
         Sample host load info and save it into sqlite db.
         """
+        print('>>> Sampling host load info ...')
+
         load_db_file = str(self.db_path) + '/load.db'
         (result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file, mode='write')
 
-        if result != 'passed':
-            return
+        if result == 'passed':
+            load_table_list = common_sqlite3.get_sql_table_list(load_db_file, load_db_conn)
+            lsload_dic = common_lsf.get_lsload_info()
+            host_list = lsload_dic['HOST_NAME']
 
-        print('>>> Sampling host load info into ' + str(load_db_file) + ' ...')
+            key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
+            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
-        load_table_list = common_sqlite3.get_sql_table_list(load_db_file, load_db_conn)
-        lsload_dic = common_lsf.get_lsload_info()
-        host_list = lsload_dic['HOST_NAME']
+            for i in range(len(host_list)):
+                host = host_list[i]
+                load_table_name = 'load_' + str(host)
 
-        key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+                print('    Sampling for host "' + str(host) + '" ...')
 
-        for i in range(len(host_list)):
-            host = host_list[i]
-            load_table_name = 'load_' + str(host)
+                # Clean up load database, only keep 100000 items.
+                load_table_count = common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name)
 
-            print('    Sampling for host "' + str(host) + '" ...')
+                if load_table_count != 'N/A':
+                    if int(load_table_count) > 100000:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(load_table_count) - 100000
 
-            # Generate sql table.
-            if load_table_name not in load_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
+                        print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-            # Insert sql table value.
-            value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
-            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, value_string, commit=False)
+                        common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
 
-        print('    Committing the update to sqlite3 ...')
+                # Generate sql table if not exists.
+                if load_table_name not in load_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
 
-        # Clean up load database, only keep 100000 items.
-        for host in host_list:
-            load_table_name = 'load_' + str(host)
-            load_table_count = common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name)
-
-            if load_table_count != 'N/A':
-                if int(load_table_count) > 100000:
-                    row_id = 'sample_time'
-                    begin_line = 0
-                    end_line = int(load_table_count) - 100000
-
-                    print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
-
-                    common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
+                # Insert sql table value.
+                value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
+                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, value_string, commit=False)
 
         load_db_conn.commit()
         load_db_conn.close()
@@ -320,53 +297,47 @@ class Sampling:
         """
         Sample user info and save it into sqlite db.
         """
+        print('>>> Sampling user info ...')
+
         user_db_file = str(self.db_path) + '/user.db'
         (result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file, mode='write')
 
-        if result != 'passed':
-            return
+        if result == 'passed':
+            user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
+            busers_dic = common_lsf.get_busers_info()
+            user_list = busers_dic['USER/GROUP']
 
-        print('>>> Sampling user info into ' + str(user_db_file) + ' ...')
+            key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
+            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
-        user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
-        busers_dic = common_lsf.get_busers_info()
-        user_list = busers_dic['USER/GROUP']
+            for i in range(len(user_list)):
+                user = user_list[i]
+                user_table_name = 'user_' + str(user)
 
-        key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+                print('    Sampling for user "' + str(user) + '" ...')
 
-        for i in range(len(user_list)):
-            user = user_list[i]
-            user_table_name = 'user_' + str(user)
+                # Clean up user database, only keep 100000 items.
+                user_table_count = common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name)
 
-            print('    Sampling for user "' + str(user) + '" ...')
+                if user_table_count != 'N/A':
+                    if int(user_table_count) > 100000:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(user_table_count) - 100000
 
-            # Generate sql table.
-            if user_table_name not in user_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                common_sqlite3.create_sql_table(user_db_file, user_db_conn, user_table_name, key_string, commit=False)
+                        print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-            # Insert sql table value.
-            value_list = [self.sample_second, self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
-            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            common_sqlite3.insert_into_sql_table(user_db_file, user_db_conn, user_table_name, value_string, commit=False)
+                        common_sqlite3.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
 
-        print('    Committing the update to sqlite3 ...')
+                # Generate sql table if not exists.
+                if user_table_name not in user_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(user_db_file, user_db_conn, user_table_name, key_string, commit=False)
 
-        # Clean up user database, only keep 100000 items.
-        for user in user_list:
-            user_table_name = 'user_' + str(user)
-            user_table_count = common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name)
-
-            if user_table_count != 'N/A':
-                if int(user_table_count) > 100000:
-                    row_id = 'sample_time'
-                    begin_line = 0
-                    end_line = int(user_table_count) - 100000
-
-                    print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
-
-                    common_sqlite3.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
+                # Insert sql table value.
+                value_list = [self.sample_second, self.sample_time, busers_dic['NJOBS'][i], busers_dic['PEND'][i], busers_dic['RUN'][i], busers_dic['SSUSP'][i], busers_dic['USUSP'][i]]
+                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                common_sqlite3.insert_into_sql_table(user_db_file, user_db_conn, user_table_name, value_string, commit=False)
 
         user_db_conn.commit()
         user_db_conn.close()
@@ -375,97 +346,91 @@ class Sampling:
         """
         Sample host resource utilization info and save it into sqlite db.
         """
+        print('>>> Sampling utilization info ...')
+
         utilization_db_file = str(self.db_path) + '/utilization.db'
         (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
 
-        if result != 'passed':
-            return
+        if result == 'passed':
+            utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
+            bhosts_dic = common_lsf.get_bhosts_info()
+            lshosts_dic = common_lsf.get_lshosts_info()
+            lsload_dic = common_lsf.get_lsload_info()
+            host_list = lsload_dic['HOST_NAME']
 
-        print('>>> Sampling host utilization info into ' + str(utilization_db_file) + ' ...')
+            key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
+            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
-        utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
-        bhosts_dic = common_lsf.get_bhosts_info()
-        lshosts_dic = common_lsf.get_lshosts_info()
-        lsload_dic = common_lsf.get_lsload_info()
-        host_list = lsload_dic['HOST_NAME']
+            for i in range(len(host_list)):
+                host = host_list[i]
+                utilization_table_name = 'utilization_' + str(host)
 
-        key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+                print('    Sampling for host "' + str(host) + '" ...')
 
-        for i in range(len(host_list)):
-            host = host_list[i]
-            utilization_table_name = 'utilization_' + str(host)
+                # Clean up utilization database, only keep 100000 items.
+                utilization_table_count = common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name)
 
-            print('    Sampling for host "' + str(host) + '" ...')
+                if utilization_table_count != 'N/A':
+                    if int(utilization_table_count) > 100000:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(utilization_table_count) - 100000
 
-            # Generate sql table.
-            if utilization_table_name not in utilization_table_list:
-                key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, key_string, commit=False)
+                        print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-            # Get slot_utilization.
-            slot_utilization = 0
+                        common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
 
-            for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
-                if (host_name == host) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and (int(bhosts_dic['MAX'][j]) != 0):
-                    slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
-                    break
+                # Generate sql table if not exists.
+                if utilization_table_name not in utilization_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, key_string, commit=False)
 
-            # Get cpu_utilization.
-            cpu_utilization = 0
+                # Get slot_utilization.
+                slot_utilization = 0
 
-            if re.match(r'^\d+%$', lsload_dic['ut'][i]):
-                cpu_utilization = re.sub('%', '', lsload_dic['ut'][i])
+                for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
+                    if (host_name == host) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and (int(bhosts_dic['MAX'][j]) != 0):
+                        slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
+                        break
 
-            # Get mem_utilization.
-            mem_utilization = 0
+                # Get cpu_utilization.
+                cpu_utilization = 0
 
-            for (k, host_name) in enumerate(lshosts_dic['HOST_NAME']):
-                if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
-                    # Get maxmem with MB.
-                    maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
-                    maxmem = maxmem_match.group(1)
-                    maxmem_unit = maxmem_match.group(3)
+                if re.match(r'^\d+%$', lsload_dic['ut'][i]):
+                    cpu_utilization = re.sub('%', '', lsload_dic['ut'][i])
 
-                    if maxmem_unit == 'G':
-                        maxmem = float(maxmem)*1024
-                    elif maxmem_unit == 'T':
-                        maxmem = float(maxmem)*1024*1024
+                # Get mem_utilization.
+                mem_utilization = 0
 
-                    # Get mem with MB.
-                    mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
-                    mem = mem_match.group(1)
-                    mem_unit = mem_match.group(3)
+                for (k, host_name) in enumerate(lshosts_dic['HOST_NAME']):
+                    if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
+                        # Get maxmem with MB.
+                        maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
+                        maxmem = maxmem_match.group(1)
+                        maxmem_unit = maxmem_match.group(3)
 
-                    if mem_unit == 'G':
-                        mem = float(mem)*1024
-                    elif mem_unit == 'T':
-                        mem = float(mem)*1024*1024
+                        if maxmem_unit == 'G':
+                            maxmem = float(maxmem)*1024
+                        elif maxmem_unit == 'T':
+                            maxmem = float(maxmem)*1024*1024
 
-                    mem_utilization = round((maxmem-mem)*100/maxmem, 1)
-                    break
+                        # Get mem with MB.
+                        mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
+                        mem = mem_match.group(1)
+                        mem_unit = mem_match.group(3)
 
-            # Insert sql table value.
-            value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
-            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-            common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
+                        if mem_unit == 'G':
+                            mem = float(mem)*1024
+                        elif mem_unit == 'T':
+                            mem = float(mem)*1024*1024
 
-        print('    Committing the update to sqlite3 ...')
+                        mem_utilization = round((maxmem-mem)*100/maxmem, 1)
+                        break
 
-        # Clean up utilization database, only keep 100000 items.
-        for host in host_list:
-            utilization_table_name = 'utilization_' + str(host)
-            utilization_table_count = common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name)
-
-            if utilization_table_count != 'N/A':
-                if int(utilization_table_count) > 100000:
-                    row_id = 'sample_time'
-                    begin_line = 0
-                    end_line = int(utilization_table_count) - 100000
-
-                    print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
-
-                    common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
+                # Insert sql table value.
+                value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
+                value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
 
         utilization_db_conn.commit()
         utilization_db_conn.close()
