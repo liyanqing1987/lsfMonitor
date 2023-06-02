@@ -101,7 +101,7 @@ class GetLicenseInfo():
                                'vendor_daemon_down': re.compile(r'^\s*(\S+): (The desired vendor daemon is down|Cannot read data from license server system)\..*$'),
                                'users_of_feature': re.compile(r'^Users of (\S+):  \(Total of ([0-9]+) license(s?) issued;  Total of ([0-9]+) license(s?) in use\)\s*$'),
                                'users_of_feature_uncounted': re.compile(r'^Users of (\S+):  \(Uncounted,.*\)\s*$'),
-                               'in_use_info': re.compile(r'^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?\s*$'),
+                               'in_use_info': re.compile(r'^\s*(\S+)\s+(\S+)\s+(\S+)?\s*(.+)?\s*\((\S+)\)\s+\((\S+)\s+(\d+)\), start (.+?)(,\s+(\d+)\s+licenses)?(\s*\(linger:.+\))?\s*$'),
                                'reservation': re.compile(r'^\s*(\d+)\s+RESERVATION(s)? for (\S+)\s+(\S+)\s+\((\S+)(\s+(\d+))?\)\s*$'),
                                'feature_expires': re.compile(r'^Feature .* Expires\s*$'),
                                'expire_info': re.compile(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$')}
@@ -163,12 +163,11 @@ class GetLicenseInfo():
 
                 # Update start_time.
                 if re.match(r'^(.+?)\s*\(.*\)\s*$', usage_dic['start_time']):
-                    my_match = re.match(r'^(.+?)\s*\(.*\)\s*$', usage_dic['start_time'])
-                    usage_dic['start_time'] = my_match.group(1)
+                    start_time_match = re.match(r'^(.+?)\s*\(.*\)\s*$', usage_dic['start_time'])
+                    usage_dic['start_time'] = start_time_match.group(1)
 
-                license_num_setting = my_match.group(9)
-
-                if license_num_setting:
+                # Update license_num.
+                if my_match.group(9):
                     usage_dic['license_num'] = my_match.group(10)
 
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(line.strip())
