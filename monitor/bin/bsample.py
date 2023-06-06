@@ -74,6 +74,7 @@ class Sampling:
 
         # Get sample time.
         self.sample_second = int(time.time())
+        self.sample_date = datetime.datetime.today().strftime('%Y%m%d')
         self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
 
         # Create db path.
@@ -434,6 +435,112 @@ class Sampling:
 
         utilization_db_conn.commit()
         utilization_db_conn.close()
+
+        self.count_utilization_day_info()
+
+    def get_utilization_day_info(self):
+        """
+        Get current day slot/cpu/mem utilizaiton info from sqlite3 database.
+        Reture slot/cpu/mem average utilization info with utilization_day_dic.
+        """
+        utilization_day_dic = {}
+
+        begin_time = str(self.sample_date) + ' 00:00:00'
+        begin_second = time.mktime(time.strptime(begin_time, '%Y%m%d %H:%M:%S'))
+        end_time = str(self.sample_date) + ' 23:59:59'
+        end_second = time.mktime(time.strptime(end_time, '%Y%m%d %H:%M:%S'))
+        select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+
+        utilization_db_file = str(self.db_path) + '/utilization.db'
+        (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
+
+        if result == 'passed':
+            utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
+
+            for utilization_table_name in utilization_table_list:
+                # Get current day issued/in_use/utilization from sqlite3 database.
+                utilization_db_data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, utilization_table_name, ['slot', 'cpu', 'mem'], select_condition)
+
+                if utilization_db_data_dic:
+                    # Get slot_sum/cpu_sum/mem_sum info.
+                    slot_utilization_sum = 0
+                    cpu_utilization_sum = 0
+                    mem_utilization_sum = 0
+
+                    for (i, slot) in enumerate(utilization_db_data_dic['slot']):
+                        slot_utilization_sum += float(utilization_db_data_dic['slot'][i])
+                        cpu_utilization_sum += float(utilization_db_data_dic['cpu'][i])
+                        mem_utilization_sum += float(utilization_db_data_dic['mem'][i])
+
+                    # Get slot_avg/cpu_avg/mem_avg utilizaiton info.
+                    slot_avg_utilization = round(slot_utilization_sum/len(utilization_db_data_dic['slot']), 1)
+                    cpu_avg_utilization = round(cpu_utilization_sum/len(utilization_db_data_dic['slot']), 1)
+                    mem_avg_utilization = round(mem_utilization_sum/len(utilization_db_data_dic['slot']), 1)
+
+                    utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}
+
+        return utilization_day_dic
+
+    def count_utilization_day_info(self):
+        """
+        Count host resource utilization day average info and save it into sqlite db.
+        """
+        print('>>> Counting utilization (day average) info ...')
+
+        utilization_day_db_file = str(self.db_path) + '/utilization_day.db'
+        (result, utilization_day_db_conn) = common_sqlite3.connect_db_file(utilization_day_db_file, mode='write')
+
+        if result == 'passed':
+            utilization_day_table_list = common_sqlite3.get_sql_table_list(utilization_day_db_file, utilization_day_db_conn)
+            utilization_day_dic = self.get_utilization_day_info()
+
+            key_list = ['sample_date', 'slot', 'cpu', 'mem']
+            key_type_list = ['TEXT', 'TEXT', 'TEXT', 'TEXT']
+
+            for (utilization_day_table_name, utilization_day_table_dic) in utilization_day_dic.items():
+                host = re.sub('utilization_', '', utilization_day_table_name)
+
+                print('    Counting utilization (day average) info for host "' + str(host) + '" ...')
+
+                # Clean up utilization database, only keep 3650 items.
+                utilization_day_table_count = common_sqlite3.get_sql_table_count(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name)
+
+                if utilization_day_table_count != 'N/A':
+                    if int(utilization_day_table_count) > 3650:
+                        row_id = 'sample_time'
+                        begin_line = 0
+                        end_line = int(utilization_day_table_count) - 3650
+
+                        print('    Deleting database "' + str(utilization_day_db_file) + '" table "' + str(utilization_day_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+
+                        common_sqlite3.delete_sql_table_rows(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, row_id, begin_line, end_line)
+
+                # Generate sql table.
+                if utilization_day_table_name not in utilization_day_table_list:
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, key_string, commit=False)
+
+                    # Insert sql table value.
+                    value_list = [self.sample_date, utilization_day_table_dic['slot'], utilization_day_table_dic['cpu'], utilization_day_table_dic['mem']]
+                    value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                    common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
+                else:
+                    select_condition = "WHERE sample_date='" + str(self.sample_date) + "'"
+                    utilization_day_db_data_dic = common_sqlite3.get_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, ['slot', 'cpu', 'mem'], select_condition)
+
+                    if utilization_day_db_data_dic:
+                        # Replace sql table value.
+                        set_condition = "slot='" + str(utilization_day_table_dic['slot']) + "', cpu='" + str(utilization_day_table_dic['cpu']) + "', mem='" + str(utilization_day_table_dic['mem']) + "'"
+                        where_condition = "sample_date='" + str(self.sample_date) + "'"
+                        common_sqlite3.update_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, set_condition, where_condition, commit=False)
+                    else:
+                        # Insert sql table value.
+                        value_list = [self.sample_date, utilization_day_table_dic['slot'], utilization_day_table_dic['cpu'], utilization_day_table_dic['mem']]
+                        value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                        common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
+
+            utilization_day_db_conn.commit()
+            utilization_day_db_conn.close()
 
     def sampling(self):
         if self.job_sampling:

@@ -339,7 +339,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.3'
+        version = 'V1.3.1'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -429,7 +429,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.job_tab_job_line.returnPressed.connect(self.check_job)
 
         job_tab_check_button = QPushButton('Check', self.job_tab_frame0)
-        job_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        job_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         job_tab_check_button.clicked.connect(self.check_job)
 
         # self.job_tab_frame0 - Grid
@@ -484,7 +484,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.job_tab_max_mem_line = QLineEdit()
 
         process_tracer_button = QPushButton('Process  Tracer', self.job_tab_frame1)
-        process_tracer_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        process_tracer_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         process_tracer_button.clicked.connect(self.process_tracer)
 
         # self.job_tab_frame1 - Grid
@@ -814,7 +814,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_started_on_combo.activated.connect(self.gen_jobs_tab_table)
 
         jobs_tab_check_button = QPushButton('Check', self.jobs_tab_frame0)
-        jobs_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        jobs_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         jobs_tab_check_button.clicked.connect(self.gen_jobs_tab_table)
 
         # self.jobs_tab_frame0 - Grid
@@ -1719,6 +1719,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         return (date_list, pend_list, run_list)
 
     def draw_queue_tab_num_curve(self, fig, queue, date_list, pend_list, run_list):
+        """
+        Draw RUN/PEND job num curve for specified queue.
+        """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('trends of RUN/PEND slots for queue "' + str(queue) + '"')
@@ -1796,7 +1799,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_end_date_edit.setDate(QDate.currentDate())
 
         load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
-        load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
 
         # self.load_tab_frame0 - Grid
@@ -1955,7 +1958,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             self.draw_load_tab_ut_curve(fig, specified_host, sample_time_list, ut_list)
 
     def draw_load_tab_ut_curve(self, fig, specified_host, sample_time_list, ut_list):
-        # Fil self.load_tab_ut_canvas.
+        """
+        Draw ut curve for specified host.
+        """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('ut curve for host "' + str(specified_host) + '"')
@@ -1978,7 +1983,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             self.draw_load_tab_mem_curve(fig, specified_host, sample_time_list, mem_list)
 
     def draw_load_tab_mem_curve(self, fig, specified_host, sample_time_list, mem_list):
-        # Fill self.load_tab_mem_canvas.
+        """
+        Draw mem curve for specified host.
+        """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
         axes.set_title('available mem curve for host "' + str(specified_host) + '"')
@@ -2041,7 +2048,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.set_utilization_tab_resource_combo()
 
         utilization_tab_check_button = QPushButton('Check', self.utilization_tab_frame0)
-        utilization_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        utilization_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         utilization_tab_check_button.clicked.connect(self.update_utilization_tab_frame1)
 
         utilization_tab_begin_date_label = QLabel('Begin_Date', self.utilization_tab_frame0)
@@ -2169,7 +2176,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         Get sample_time/ut/mem list for specified host.
         """
         utilization_dic = {}
-        utilization_db_file = str(config.db_path) + '/monitor/utilization.db'
+        utilization_db_file = str(config.db_path) + '/monitor/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
             common.print_warning('*Warning*: utilization database "' + str(utilization_db_file) + '" is missing.')
@@ -2185,53 +2192,36 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                         table_name = 'utilization_' + str(selected_host)
                         key_list = copy.deepcopy(selected_resource_list)
-                        key_list.insert(0, 'sample_time')
+                        key_list.insert(0, 'sample_date')
                         begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
-                        begin_time = str(begin_date) + ' 00:00:00'
-                        begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
+                        begin_date = re.sub('-', '', begin_date)
                         end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
-                        end_time = str(end_date) + ' 23:59:59'
-                        end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
-                        select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+                        end_date = re.sub('-', '', end_date)
+                        select_condition = 'WHERE sample_date>=' + str(begin_date) + ' AND sample_date<=' + str(end_date)
                         data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
 
                         if not data_dic:
                             common.print_warning('*Warning*: utilization information is empty for "' + str(selected_host) + '".')
                         else:
-                            for (i, sample_time) in enumerate(data_dic['sample_time']):
+                            for (i, sample_date) in enumerate(data_dic['sample_date']):
                                 for selected_resource in selected_resource_list:
-                                    sample_date = re.sub('_.*', '', data_dic['sample_time'][i])
 
                                     if i == 0:
                                         utilization_dic.setdefault(selected_resource, {})
 
                                     utilization = float(data_dic[selected_resource][i])
                                     utilization_dic[selected_resource].setdefault(sample_date, {})
-                                    utilization_dic[selected_resource][sample_date].setdefault(selected_host, [])
-                                    utilization_dic[selected_resource][sample_date][selected_host].append(utilization)
+                                    utilization_dic[selected_resource][sample_date].setdefault(selected_host, utilization)
 
             utilization_db_conn.close()
 
-        # Organize utilization info, get host daily average utilization.
-        organized_utilization_dic = {}
-
-        for selected_resource in utilization_dic.keys():
-            organized_utilization_dic.setdefault(selected_resource, {})
-
-            for sample_date in utilization_dic[selected_resource].keys():
-                organized_utilization_dic[selected_resource].setdefault(sample_date, {})
-
-                for selected_host in utilization_dic[selected_resource][sample_date].keys():
-                    utilization_list = utilization_dic[selected_resource][sample_date][selected_host]
-                    organized_utilization_dic[selected_resource][sample_date][selected_host] = round((sum(utilization_list)/len(utilization_list)), 1)
-
         # Organize utilization info, get average utlization for sample_date.
-        for selected_resource in organized_utilization_dic.keys():
-            for sample_date in organized_utilization_dic[selected_resource].keys():
-                utilization_list = list(organized_utilization_dic[selected_resource][sample_date].values())
-                organized_utilization_dic[selected_resource][sample_date] = round((sum(utilization_list)/len(utilization_list)), 1)
+        for selected_resource in utilization_dic.keys():
+            for sample_date in utilization_dic[selected_resource].keys():
+                utilization_list = list(utilization_dic[selected_resource][sample_date].values())
+                utilization_dic[selected_resource][sample_date] = round((sum(utilization_list)/len(utilization_list)), 1)
 
-        return organized_utilization_dic
+        return utilization_dic
 
     def update_utilization_tab_frame1(self):
         """
@@ -2258,7 +2248,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.draw_utilization_tab_utilization_curve(fig, utilization_dic)
 
     def draw_utilization_tab_utilization_curve(self, fig, utilization_dic):
-        # Fil self.utilization_tab_utilization_canvas.
+        """
+        Draw slot/cpu/mem utilization curve for specified host(s).
+        """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
 
@@ -2376,7 +2368,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         # Filter Button
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
-        license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
+        license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
 
         # self.license_tab_frame0 - Grid

@@ -8,6 +8,9 @@ from common import common
 
 
 def connect_db_file(db_file, mode='read'):
+    """
+    Connect specified db_file with read/write mode.
+    """
     result = 'passed'
     conn = ''
 
@@ -34,6 +37,9 @@ def connect_db_file(db_file, mode='read'):
 
 
 def connect_preprocess(db_file, orig_conn, mode='read'):
+    """
+    Extension for connect_db_file(), can use orig_conn instead of repeated connection.
+    """
     if orig_conn == '':
         (result, conn) = connect_db_file(db_file, mode)
     else:
@@ -96,7 +102,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
         if orig_conn == '':
             conn.close()
     except Exception as error:
-        common.print_error('*Error* (get_sql_table_count) : Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '": ' + str(error))
+        common.print_warning('*Warning* (get_sql_table_count) : Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '": ' + str(error))
 
     return count
 
@@ -267,6 +273,30 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
                 conn.close()
     except Exception as error:
         common.print_error('*Error* (insert_into_sql_table) : Failed on inserting specified values into table "' + str(table_name) + '" on db file "' + str(db_file) + '": ' + str(error))
+
+
+def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', where_condition='', commit=True):
+    """
+    Update sql table with set_condition on where_condition.
+    """
+    if set_condition and where_condition:
+        (result, conn, curs) = connect_preprocess(db_file, orig_conn, mode='write')
+
+        if (result == 'failed') or (result == 'locked'):
+            return
+
+        try:
+            command = "UPDATE '" + str(table_name) + "' SET " + str(set_condition) + " WHERE " + str(where_condition)
+            curs.execute(command)
+            curs.close()
+
+            if commit:
+                conn.commit()
+
+                if orig_conn == '':
+                    conn.close()
+        except Exception as error:
+            common.print_error('*Error* (update_sql_table_data) : Failed on updating table "' + str(table_name) + '" on db file "' + str(db_file) + '": ' + str(error))
 
 
 def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
