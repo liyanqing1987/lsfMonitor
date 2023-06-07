@@ -135,6 +135,7 @@ class MainWindow(QMainWindow):
 
         # Get LSF queue/host information.
         print('* Loading LSF information, please wait a moment ...')
+
         my_show_message = ShowMessage('Info', 'Loading LSF information, please wait a moment ...')
         my_show_message.start()
 
@@ -172,6 +173,7 @@ class MainWindow(QMainWindow):
 
         # Print loading license message.
         print('* Loading License information, please wait a moment ...')
+
         my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
         my_show_message.start()
 
@@ -568,9 +570,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             return
 
         # Get job info
+        print('* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
+
         my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
         my_show_message.start()
+
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
+
         my_show_message.terminate()
 
         if self.job_tab_current_job_dic:
@@ -894,9 +900,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             command = str(command) + ' -m ' + str(specified_host)
 
         # Run command to get expected jobs information.
+        print('* Loading LSF jobs information, please wait a moment ...')
+
         my_show_message = ShowMessage('Info', 'Loading LSF jobs information, please wait a moment ...')
         my_show_message.start()
+
         orig_job_dic = common_lsf.get_bjobs_uf_info(command)
+
         my_show_message.terminate()
 
         # Filter job_dic.
@@ -1867,9 +1877,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
 
+        print('* Loading ut/mem load information, please wait a moment ...')
+
         my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
         my_show_message.start()
+
         (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
+
         my_show_message.terminate()
 
         if sample_time_list:
@@ -2239,9 +2253,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         selected_resource_list = list(selected_resource_dic.values())
 
         if selected_host_list and selected_resource_list:
+            print('* Loading resource utilization information, please wait a moment ...')
+
             my_show_message = ShowMessage('Info', 'Loading resource utilization information, please wait a moment ...')
             my_show_message.start()
+
             (utilization_dic) = self.get_utilization_info(selected_host_list, selected_resource_list)
+
             my_show_message.terminate()
 
             if utilization_dic:

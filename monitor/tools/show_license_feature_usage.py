@@ -5,7 +5,7 @@ import argparse
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView
 from PyQt5.QtGui import QBrush
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread
 
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common_pyqt5
@@ -54,7 +54,13 @@ class ShowLicenseFreatureUsage(QMainWindow):
         self.vendor = vendor
         self.feature = feature
 
+        my_show_message = ShowMessage('Info', 'Checking "' + str(self.feature) + '" usage info ...')
+        my_show_message.start()
+
         self.license_feature_usage_dic_list = self.get_license_feature_usage()
+
+        my_show_message.terminate()
+
         self.init_ui()
 
     def get_license_feature_usage(self):
@@ -131,6 +137,20 @@ class ShowLicenseFreatureUsage(QMainWindow):
                     item.setForeground(QBrush(Qt.red))
 
                 self.main_table.setItem(row, column, item)
+
+
+class ShowMessage(QThread):
+    """
+    Show message with tool message.
+    """
+    def __init__(self, title, message):
+        super(ShowMessage, self).__init__()
+        self.title = title
+        self.message = message
+
+    def run(self):
+        command = 'python3 ' + str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
+        os.system(command)
 
 
 ################
