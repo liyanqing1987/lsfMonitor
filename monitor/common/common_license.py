@@ -12,6 +12,10 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 
 
 class GetLicenseInfo():
+    """
+    Get license information with tool "lmstat".
+    Save it into a dictory and return.
+    """
     def __init__(self, specified_server='', specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
         self.specified_server = specified_server
         self.specified_feature = specified_feature
@@ -456,6 +460,9 @@ class FilterLicenseDic():
 
 
 def switch_start_time(start_time):
+    """
+    Switch start_time format from "%Y %a %m/%d %H:%M" to "%Y-%m-%d %H:%M".
+    """
     new_start_time = start_time
 
     if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
@@ -482,6 +489,9 @@ def switch_start_time(start_time):
 
 
 def switch_expires_date(expires_date):
+    """
+    Switch expires_date format to "%Y-%m-%d".
+    """
     new_expires_date = expires_date
 
     if re.match(r'^\d+-[a-zA-Z]+-\d{4}$', expires_date):
@@ -534,6 +544,9 @@ def check_expire_date(expire_date, second_threshold=1209600):
 
 
 def parse_license_file(license_file):
+    """
+    Parse license file and get license_file_dic with erver/vendor/feature information.
+    """
     license_file_dic = {'server': {},
                         'vendor': {},
                         'feature': []}

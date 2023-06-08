@@ -27,6 +27,9 @@ def run_command(command, mystdin=subprocess.PIPE, mystdout=subprocess.PIPE, myst
 
 
 def get_job_range_dic(job_list):
+    """
+    Get job range string "***_***" based the jobid.
+    """
     job_range_dic = {}
 
     for job in job_list:
