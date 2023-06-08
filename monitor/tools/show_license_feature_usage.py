@@ -65,7 +65,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
 
     def get_license_feature_usage(self):
         # Get self.license_dic.
-        my_get_license_info = common_license.GetLicenseInfo(specified_feature=self.feature, lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
+        my_get_license_info = common_license.GetLicenseInfo(specified_server=self.server, specified_feature=self.feature, lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
         license_dic = my_get_license_info.get_license_info()
         license_feature_usage_dic_list = []
 

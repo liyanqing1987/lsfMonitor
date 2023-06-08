@@ -3,6 +3,7 @@ import re
 import sys
 import time
 import datetime
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
@@ -11,17 +12,25 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 
 
 class GetLicenseInfo():
-    def __init__(self, specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
+    def __init__(self, specified_server='', specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
+        self.specified_server = specified_server
         self.specified_feature = specified_feature
         self.lmstat_path = lmstat_path
         self.bsub_command = bsub_command
-        self.lmstat_command = self.get_lmstat_command()
 
-    def get_lmstat_command(self):
+        if self.specified_server:
+            os.environ['LM_LICENSE_FILE'] = self.specified_server
+
+    def get_lmstat_command(self, specified_server=''):
         """
         Get reasonable lmstat command, it is used to get license usage information.
         """
         lmstat_command = str(self.lmstat_path) + ' -a -i'
+
+        if specified_server:
+            lmstat_command = str(lmstat_command) + ' -c ' + str(specified_server)
+        elif self.specified_server:
+            lmstat_command = str(lmstat_command) + ' -c ' + str(self.specified_server)
 
         if self.specified_feature:
             lmstat_command = str(lmstat_command) + ' ' + str(self.specified_feature)
@@ -82,7 +91,25 @@ class GetLicenseInfo():
                       }
         """
         # Get lmstat output message.
-        (return_code, stdout, stderr) = common.run_command(self.lmstat_command)
+        if 'LM_LICENSE_FILE' in os.environ:
+            stdout_list = []
+            lm_license_file_list = os.environ['LM_LICENSE_FILE'].split(':')
+
+            with ProcessPoolExecutor(max_workers=len(lm_license_file_list)) as executor:
+                job_list = []
+
+                for lm_license_file in lm_license_file_list:
+                    lmstat_command = self.get_lmstat_command(specified_server=lm_license_file)
+                    job_list.append(executor.submit(common.run_command, lmstat_command))
+
+                for job in as_completed(job_list):
+                    for tuple_line in job.result():
+                        if isinstance(tuple_line, bytes):
+                            stdout_list.extend(str(tuple_line, 'utf-8').split('\n'))
+        else:
+            lmstat_command = self.get_lmstat_command()
+            (return_code, stdout, stderr) = common.run_command(lmstat_command)
+            stdout_list = str(stdout, 'utf-8').split('\n')
 
         # Parse lmstat output message.
         license_dic = self.init_license_dic()
@@ -106,7 +133,7 @@ class GetLicenseInfo():
                                'feature_expires': re.compile(r'^Feature .* Expires\s*$'),
                                'expire_info': re.compile(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(permanent\(no expiration date\)|[0-9]{1,2}-[a-zA-Z]{3}-[0-9]{4})\s*$')}
 
-        for line in str(stdout, 'utf-8').split('\n'):
+        for line in stdout_list:
             line = line.strip()
 
             if license_compile_dic['empty_line'].match(line):

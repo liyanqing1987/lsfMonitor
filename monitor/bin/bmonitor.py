@@ -2472,6 +2472,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_license_tab_feature_table(self, license_dic):
         self.license_tab_feature_table.setShowGrid(True)
+        self.license_tab_feature_table.setSortingEnabled(True)
         self.license_tab_feature_table.setColumnCount(0)
         self.license_tab_feature_table.setColumnCount(5)
         self.license_tab_feature_table.setHorizontalHeaderLabels(['Server', 'Vendor', 'Feature', 'Issued', 'In_Use'])
@@ -2514,13 +2515,25 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                     # For "Issued"
                     issued = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['issued']
-                    item = QTableWidgetItem(issued)
+                    item = QTableWidgetItem()
+
+                    if re.match(r'^\d+$', issued):
+                        item.setData(Qt.DisplayRole, int(issued))
+                    else:
+                        item.setText(issued)
+
                     self.license_tab_feature_table.setItem(row, 3, item)
 
                     # For "In_Use"
                     in_use = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']
-                    item = QTableWidgetItem(in_use)
-                    item.setFont(QFont('song', 9, QFont.Bold))
+                    item = QTableWidgetItem()
+                    item.setData(Qt.DisplayRole, int(in_use))
+
+                    if in_use == '0':
+                        item.setFont(QFont('song', 9))
+                    else:
+                        item.setFont(QFont('song', 9, QFont.Bold))
+
                     self.license_tab_feature_table.setItem(row, 4, item)
 
     def license_tab_check_click(self, item=None):
@@ -2545,13 +2558,14 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_license_tab_expires_table(self, license_dic):
         self.license_tab_expires_table.setShowGrid(True)
+        self.license_tab_expires_table.setSortingEnabled(True)
         self.license_tab_expires_table.setColumnCount(0)
         self.license_tab_expires_table.setColumnCount(4)
         self.license_tab_expires_table.setHorizontalHeaderLabels(['License Server', 'Feature', 'Num', 'Expires'])
 
         self.license_tab_expires_table.setColumnWidth(0, 160)
         self.license_tab_expires_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.license_tab_expires_table.setColumnWidth(2, 40)
+        self.license_tab_expires_table.setColumnWidth(2, 50)
         self.license_tab_expires_table.setColumnWidth(3, 100)
 
         # Get license feature information length.
@@ -2573,15 +2587,21 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'].keys():
                     for expires_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
                         row += 1
+
+                        # For "License Server"
                         self.license_tab_expires_table.setItem(row, 0, QTableWidgetItem(license_server))
 
+                        # For "Feature"
                         item = QTableWidgetItem(feature)
                         item.setForeground(QBrush(Qt.blue))
                         self.license_tab_expires_table.setItem(row, 1, item)
 
-                        license = expires_dic['license']
-                        self.license_tab_expires_table.setItem(row, 2, QTableWidgetItem(license))
+                        # For "Num"
+                        item = QTableWidgetItem()
+                        item.setData(Qt.DisplayRole, int(expires_dic['license']))
+                        self.license_tab_expires_table.setItem(row, 2, item)
 
+                        # For "Expires"
                         expires = expires_dic['expires']
                         item = QTableWidgetItem(expires)
                         expires_mark = common_license.check_expire_date(expires)
