@@ -74,9 +74,9 @@ def read_args():
                         default='',
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
-                        default='JOBS',
+                        default='',
                         choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'UTILIZATION', 'LICENSE'],
-                        help='Specify current tab, default is "JOB" tab.')
+                        help='Specify current tab, default is "JOBS" tab.')
     parser.add_argument("-dl", "--disable_license",
                         action='store_true',
                         default=False,
@@ -86,7 +86,8 @@ def read_args():
 
     # Make sure specified job exists.
     if args.jobid:
-        args.tab = 'JOB'
+        if not args.tab:
+            args.tab = 'JOB'
 
         command = 'bjobs -w ' + str(args.jobid)
         job_dic = common_lsf.get_bjobs_info(command)
@@ -94,19 +95,17 @@ def read_args():
         if not job_dic:
             args.jobid = None
 
-    # Set default tab for args.user.
-    if args.user:
-        if not args.tab:
-            args.tab = 'JOBS'
-
     # Set default tab for args.feature.
-    if args.feature:
-        if not args.tab:
-            args.tab = 'LICENSE'
+    if args.feature and (not args.tab):
+        args.tab = 'LICENSE'
+
+    # Set default tab for args.user.
+    if args.user and (not args.tab):
+        args.tab = 'JOBS'
 
     # Set default tab.
     if not args.tab:
-        args.tab = 'JOB'
+        args.tab = 'JOBS'
 
     return (args.jobid, args.user, args.feature, args.tab, args.disable_license)
 
@@ -156,7 +155,10 @@ class MainWindow(QMainWindow):
         self.license_dic_second = 0
         self.get_license_dic()
 
+        # Generate GUI.
         self.init_ui()
+
+        # Switch tab.
         self.switch_tab(specified_tab)
 
     def get_license_dic(self):
@@ -2345,6 +2347,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         if self.specified_feature:
             self.license_tab_feature_line.setText(str(self.specified_feature))
+            self.license_tab_user_line.setText(str(self.specified_user))
             self.filter_license_feature()
 
     def gen_license_tab_frame0(self):
@@ -2384,6 +2387,14 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.license_tab_feature_line = QLineEdit()
         self.license_tab_feature_line.returnPressed.connect(self.filter_license_feature)
 
+        # License User
+        license_tab_user_label = QLabel('User', self.license_tab_frame0)
+        license_tab_user_label.setStyleSheet("font-weight: bold;")
+        license_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.license_tab_user_line = QLineEdit()
+        self.license_tab_user_line.returnPressed.connect(self.filter_license_feature)
+
         # Filter Button
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
         license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
@@ -2400,7 +2411,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_frame0_grid.addWidget(self.license_tab_vendor_combo, 0, 5)
         license_tab_frame0_grid.addWidget(license_tab_feature_label, 0, 6)
         license_tab_frame0_grid.addWidget(self.license_tab_feature_line, 0, 7)
-        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 8)
+        license_tab_frame0_grid.addWidget(license_tab_user_label, 0, 8)
+        license_tab_frame0_grid.addWidget(self.license_tab_user_line, 0, 9)
+        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 10)
 
         license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
@@ -2411,6 +2424,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_frame0_grid.setColumnStretch(6, 1)
         license_tab_frame0_grid.setColumnStretch(7, 1)
         license_tab_frame0_grid.setColumnStretch(8, 1)
+        license_tab_frame0_grid.setColumnStretch(9, 1)
+        license_tab_frame0_grid.setColumnStretch(10, 1)
 
         self.license_tab_frame0.setLayout(license_tab_frame0_grid)
 
@@ -2461,10 +2476,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             selected_license_server = self.license_tab_server_combo.currentText().strip()
             selected_vendor_daemon = self.license_tab_vendor_combo.currentText().strip()
             specified_license_feature_list = self.license_tab_feature_line.text().strip().split()
+            specified_license_user_list = self.license_tab_user_line.text().strip().split()
             show_mode = self.license_tab_show_combo.currentText().strip()
 
-            filter_license_dic = common_license.FilterLicenseDic()
-            filtered_license_dic = filter_license_dic.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, show_mode=show_mode)
+            filter_license_dic_item = common_license.FilterLicenseDic()
+            filtered_license_dic = filter_license_dic_item.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, user_list=specified_license_user_list, show_mode=show_mode)
 
             # Update self.license_tab_feature_table and self.license_tab_expires_table.
             self.gen_license_tab_feature_table(filtered_license_dic)
