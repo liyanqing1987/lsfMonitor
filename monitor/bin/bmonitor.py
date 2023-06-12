@@ -343,7 +343,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.3.1'
+        version = 'V1.3.2'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -425,6 +425,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_job_tab_frame0(self):
         # self.job_tab_frame0
+        # "Job" item.
         job_tab_job_label = QLabel(self.job_tab_frame0)
         job_tab_job_label.setStyleSheet("font-weight: bold;")
         job_tab_job_label.setText('Job')
@@ -432,6 +433,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.job_tab_job_line = QLineEdit()
         self.job_tab_job_line.returnPressed.connect(self.check_job)
 
+        # "Check" button.
         job_tab_check_button = QPushButton('Check', self.job_tab_frame0)
         job_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         job_tab_check_button.clicked.connect(self.check_job)
@@ -447,46 +449,67 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_job_tab_frame1(self):
         # self.job_tab_frame1
+        # "User" item.
         job_tab_user_label = QLabel('User', self.job_tab_frame1)
         job_tab_user_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_user_line = QLineEdit()
 
+        # "Status" item.
         job_tab_status_label = QLabel('Status', self.job_tab_frame1)
         job_tab_status_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_status_line = QLineEdit()
 
+        # "Queue" item.
         job_tab_queue_label = QLabel('Queue', self.job_tab_frame1)
         job_tab_queue_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_queue_line = QLineEdit()
 
+        # "Host" item.
         job_tab_started_on_label = QLabel('Host', self.job_tab_frame1)
         job_tab_started_on_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_started_on_line = QLineEdit()
 
+        # "Project" item.
         job_tab_project_label = QLabel('Project', self.job_tab_frame1)
         job_tab_project_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_project_line = QLineEdit()
 
+        # "Processors" item.
         job_tab_processors_requested_label = QLabel('Processors', self.job_tab_frame1)
         job_tab_processors_requested_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_processors_requested_line = QLineEdit()
 
+        # "Rusage" item.
         job_tab_rusage_mem_label = QLabel('Rusage', self.job_tab_frame1)
         job_tab_rusage_mem_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_rusage_mem_line = QLineEdit()
 
+        # "Mem" item.
         job_tab_mem_label = QLabel('Mem', self.job_tab_frame1)
         job_tab_mem_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_mem_line = QLineEdit()
 
+        # "avg_mem" item.
         job_tab_avg_mem_label = QLabel('avg_mem', self.job_tab_frame1)
         job_tab_avg_mem_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_avg_mem_line = QLineEdit()
 
+        # "max_mem" item.
         job_tab_max_mem_label = QLabel('max_mem', self.job_tab_frame1)
         job_tab_max_mem_label.setStyleSheet("font-weight: bold;")
+
         self.job_tab_max_mem_line = QLineEdit()
 
+        # "Process Tracer" button.
         process_tracer_button = QPushButton('Process  Tracer', self.job_tab_frame1)
         process_tracer_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         process_tracer_button.clicked.connect(self.process_tracer)
@@ -593,49 +616,49 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         """
         Update self.job_tab_frame1 with job infos.
         """
-        # For "User" item.
+        # Fill "User" item.
         if init:
             self.job_tab_user_line.setText('')
         else:
             self.job_tab_user_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['user'])
             self.job_tab_user_line.setCursorPosition(0)
 
-        # For "Status" item.
+        # Fill "Status" item.
         if init:
             self.job_tab_status_line.setText('')
         else:
             self.job_tab_status_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['status'])
             self.job_tab_status_line.setCursorPosition(0)
 
-        # For "Queue" item.
+        # Fill "Queue" item.
         if init:
             self.job_tab_queue_line.setText('')
         else:
             self.job_tab_queue_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['queue'])
             self.job_tab_queue_line.setCursorPosition(0)
 
-        # For "Host" item.
+        # Fill "Host" item.
         if init:
             self.job_tab_started_on_line.setText('')
         else:
             self.job_tab_started_on_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['started_on'])
             self.job_tab_started_on_line.setCursorPosition(0)
 
-        # For "Processors" item.
+        # Fill "Processors" item.
         if init:
             self.job_tab_processors_requested_line.setText('')
         else:
             self.job_tab_processors_requested_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['processors_requested'])
             self.job_tab_processors_requested_line.setCursorPosition(0)
 
-        # For "Project" item.
+        # Fill "Project" item.
         if init:
             self.job_tab_project_line.setText('')
         else:
             self.job_tab_project_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['project'])
             self.job_tab_project_line.setCursorPosition(0)
 
-        # For "Rusage" item.
+        # Fill "Rusage" item.
         if init:
             self.job_tab_rusage_mem_line.setText('')
         else:
@@ -644,7 +667,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.job_tab_rusage_mem_line.setText(str(rusage_mem_value) + ' G')
                 self.job_tab_rusage_mem_line.setCursorPosition(0)
 
-        # For "Mem" item.
+        # Fill "Mem" item.
         if init:
             self.job_tab_mem_line.setText('')
         else:
@@ -653,7 +676,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.job_tab_mem_line.setText(str(mem_value) + ' G')
                 self.job_tab_mem_line.setCursorPosition(0)
 
-        # For "avg_mem" item.
+        # Fill "avg_mem" item.
         if init:
             self.job_tab_avg_mem_line.setText('')
         else:
@@ -662,7 +685,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.job_tab_avg_mem_line.setText(str(avg_mem_value) + ' G')
                 self.job_tab_avg_mem_line.setCursorPosition(0)
 
-        # For "max_mem" item.
+        # Fill "max_mem" item.
         if init:
             self.job_tab_max_mem_line.setText('')
         else:
@@ -793,34 +816,42 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_jobs_tab_frame0(self):
         # self.jobs_tab_frame0
+        # "Status" item.
         jobs_tab_status_label = QLabel('Status', self.jobs_tab_frame0)
         jobs_tab_status_label.setStyleSheet("font-weight: bold;")
         jobs_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.jobs_tab_status_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
+        self.jobs_tab_status_combo.activated.connect(self.gen_jobs_tab_table)
 
+        # "Queue" item.
         jobs_tab_queue_label = QLabel('Queue', self.jobs_tab_frame0)
         jobs_tab_queue_label.setStyleSheet("font-weight: bold;")
         jobs_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.jobs_tab_queue_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_queue_combo()
+        self.jobs_tab_queue_combo.activated.connect(self.gen_jobs_tab_table)
 
+        # "Host" item.
         jobs_tab_started_on_label = QLabel('Host', self.jobs_tab_frame0)
         jobs_tab_started_on_label.setStyleSheet("font-weight: bold;")
         jobs_tab_started_on_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.jobs_tab_started_on_combo = QComboBox(self.jobs_tab_frame0)
         self.set_jobs_tab_started_on_combo()
+        self.jobs_tab_started_on_combo.activated.connect(self.gen_jobs_tab_table)
 
+        # "User" item.
         jobs_tab_user_label = QLabel('User', self.jobs_tab_frame0)
         jobs_tab_user_label.setStyleSheet("font-weight: bold;")
         jobs_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.jobs_tab_user_line = QLineEdit()
         self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
-        self.jobs_tab_status_combo.activated.connect(self.gen_jobs_tab_table)
-        self.jobs_tab_queue_combo.activated.connect(self.gen_jobs_tab_table)
-        self.jobs_tab_started_on_combo.activated.connect(self.gen_jobs_tab_table)
-
+        # "Check" button.
         jobs_tab_check_button = QPushButton('Check', self.jobs_tab_frame0)
         jobs_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         jobs_tab_check_button.clicked.connect(self.gen_jobs_tab_table)
@@ -927,19 +958,19 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         job_list = list(job_dic.keys())
 
         for i in range(len(job_list)):
-            # Fill "Job"
+            # Fill "Job" item.
             job = job_list[i]
             j = 0
             item = QTableWidgetItem(job)
             item.setFont(QFont('song', 9, QFont.Bold))
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "User"
+            # Fill "User" item.
             j = j+1
             item = QTableWidgetItem(job_dic[job]['user'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Status"
+            # Fill "Status" item.
             j = j+1
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
@@ -949,23 +980,23 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Queue"
+            # Fill "Queue" item.
             j = j+1
             item = QTableWidgetItem(job_dic[job]['queue'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Host"
+            # Fill "Host" item.
             j = j+1
             item = QTableWidgetItem(job_dic[job]['started_on'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Started"
+            # Fill "Started" item.
             j = j+1
             start_time = self.switch_start_time(job_dic[job]['started_time'])
             item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Project"
+            # Fill "Project" item.
             j = j+1
 
             if str(job_dic[job]['project']) != '':
@@ -973,7 +1004,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, job_dic[job]['project'])
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Slot"
+            # Fill "Slot" item.
             j = j+1
 
             if str(job_dic[job]['processors_requested']) != '':
@@ -981,7 +1012,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, int(job_dic[job]['processors_requested']))
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Rusage"
+            # Fill "Rusage" item.
             j = j+1
 
             if str(job_dic[job]['rusage_mem']) != '':
@@ -990,7 +1021,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Mem"
+            # Fill "Mem" item.
             j = j+1
 
             if str(job_dic[job]['mem']) != '':
@@ -1002,7 +1033,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 if ((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value)):
                     item.setForeground(QBrush(Qt.red))
 
-            # Fill "Command"
+            # Fill "Command" item.
             j = j+1
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
@@ -1125,25 +1156,81 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_hosts_tab_frame0(self):
         # self.hosts_tab_frame0
+        # "Status" item.
+        hosts_tab_status_label = QLabel('Status', self.hosts_tab_frame0)
+        hosts_tab_status_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.hosts_tab_status_combo = QComboBox(self.hosts_tab_frame0)
+        self.set_hosts_tab_status_combo()
+        self.hosts_tab_status_combo.activated.connect(self.gen_hosts_tab_table)
+
+        # "Queue" item.
         hosts_tab_queue_label = QLabel('Queue', self.hosts_tab_frame0)
         hosts_tab_queue_label.setStyleSheet("font-weight: bold;")
         hosts_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.hosts_tab_queue_combo = QComboBox(self.hosts_tab_frame0)
         self.set_hosts_tab_queue_combo()
         self.hosts_tab_queue_combo.activated.connect(self.gen_hosts_tab_table)
 
-        hosts_tab_empty_label = QLabel('')
+        # "MAX" item.
+        hosts_tab_max_label = QLabel('MAX', self.hosts_tab_frame0)
+        hosts_tab_max_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_max_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.hosts_tab_max_combo = QComboBox(self.hosts_tab_frame0)
+        self.set_hosts_tab_max_combo()
+        self.hosts_tab_max_combo.activated.connect(self.gen_hosts_tab_table)
+
+        # "MaxMem" item.
+        hosts_tab_maxmem_label = QLabel('MaxMem', self.hosts_tab_frame0)
+        hosts_tab_maxmem_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_maxmem_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.hosts_tab_maxmem_combo = QComboBox(self.hosts_tab_frame0)
+        self.set_hosts_tab_maxmem_combo()
+        self.hosts_tab_maxmem_combo.activated.connect(self.gen_hosts_tab_table)
+
+        # "Host" item.
+        hosts_tab_host_label = QLabel('Host', self.hosts_tab_frame0)
+        hosts_tab_host_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.hosts_tab_host_line = QLineEdit()
+        self.hosts_tab_host_line.returnPressed.connect(self.gen_hosts_tab_table)
+
+        # "Check" button.
+        hosts_tab_check_button = QPushButton('Check', self.hosts_tab_frame0)
+        hosts_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
+        hosts_tab_check_button.clicked.connect(self.gen_hosts_tab_table)
 
         # self.hosts_tab_frame0 - Grid
         hosts_tab_frame0_grid = QGridLayout()
 
-        hosts_tab_frame0_grid.addWidget(hosts_tab_queue_label, 0, 0)
-        hosts_tab_frame0_grid.addWidget(self.hosts_tab_queue_combo, 0, 1)
-        hosts_tab_frame0_grid.addWidget(hosts_tab_empty_label, 0, 2)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_status_label, 0, 0)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_status_combo, 0, 1)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_queue_label, 0, 2)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_queue_combo, 0, 3)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_max_label, 0, 4)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_max_combo, 0, 5)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_maxmem_label, 0, 6)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_maxmem_combo, 0, 7)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_host_label, 0, 8)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_host_line, 0, 9)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_check_button, 0, 10)
 
         hosts_tab_frame0_grid.setColumnStretch(0, 1)
         hosts_tab_frame0_grid.setColumnStretch(1, 1)
-        hosts_tab_frame0_grid.setColumnStretch(2, 12)
+        hosts_tab_frame0_grid.setColumnStretch(2, 1)
+        hosts_tab_frame0_grid.setColumnStretch(3, 1)
+        hosts_tab_frame0_grid.setColumnStretch(4, 1)
+        hosts_tab_frame0_grid.setColumnStretch(5, 1)
+        hosts_tab_frame0_grid.setColumnStretch(6, 1)
+        hosts_tab_frame0_grid.setColumnStretch(7, 1)
+        hosts_tab_frame0_grid.setColumnStretch(8, 1)
+        hosts_tab_frame0_grid.setColumnStretch(9, 1)
+        hosts_tab_frame0_grid.setColumnStretch(10, 1)
 
         self.hosts_tab_frame0.setLayout(hosts_tab_frame0_grid)
 
@@ -1152,8 +1239,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.hosts_tab_table.setShowGrid(True)
         self.hosts_tab_table.setSortingEnabled(True)
         self.hosts_tab_table.setColumnCount(0)
-        self.hosts_tab_table.setColumnCount(12)
-        self.hosts_tab_table.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Ncpus', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'Mem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)'])
+        self.hosts_tab_table.setColumnCount(11)
+        self.hosts_tab_table.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'Mem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)'])
 
         self.hosts_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.hosts_tab_table.setColumnWidth(1, 90)
@@ -1161,39 +1248,27 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.hosts_tab_table.setColumnWidth(3, 60)
         self.hosts_tab_table.setColumnWidth(4, 60)
         self.hosts_tab_table.setColumnWidth(5, 60)
-        self.hosts_tab_table.setColumnWidth(6, 60)
-        self.hosts_tab_table.setColumnWidth(7, 100)
-        self.hosts_tab_table.setColumnWidth(8, 75)
-        self.hosts_tab_table.setColumnWidth(9, 100)
+        self.hosts_tab_table.setColumnWidth(6, 100)
+        self.hosts_tab_table.setColumnWidth(7, 75)
+        self.hosts_tab_table.setColumnWidth(8, 100)
+        self.hosts_tab_table.setColumnWidth(9, 75)
         self.hosts_tab_table.setColumnWidth(10, 75)
-        self.hosts_tab_table.setColumnWidth(11, 75)
-
-        # Get expected host list
-        self.hosts_tab_queue_host_list = []
-        specified_queue = self.hosts_tab_queue_combo.currentText().strip()
-
-        if specified_queue == 'ALL':
-            self.hosts_tab_queue_host_list = self.host_list
-        else:
-            for host in self.host_list:
-                if host in self.host_queue_dic:
-                    if specified_queue in self.host_queue_dic[host]:
-                        self.hosts_tab_queue_host_list.append(host)
 
         # Fill self.hosts_tab_table items.
+        hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
         self.hosts_tab_table.setRowCount(0)
-        self.hosts_tab_table.setRowCount(len(self.hosts_tab_queue_host_list))
+        self.hosts_tab_table.setRowCount(len(hosts_tab_specified_host_list))
 
-        for i in range(len(self.hosts_tab_queue_host_list)):
-            host = self.hosts_tab_queue_host_list[i]
+        for i in range(len(hosts_tab_specified_host_list)):
+            host = hosts_tab_specified_host_list[i]
 
-            # For "Host" item.
+            # Fill "Host" item.
             j = 0
             item = QTableWidgetItem(host)
             item.setFont(QFont('song', 9, QFont.Bold))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Status" item.
+            # Fill "Status" item.
             j = j+1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             status = self.bhosts_dic['STATUS'][index]
@@ -1204,7 +1279,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Queue" item.
+            # Fill "Queue" item.
             j = j+1
 
             if host in self.host_queue_dic.keys():
@@ -1212,23 +1287,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item = QTableWidgetItem(queues)
                 self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Ncpus" item.
-            j = j+1
-            ncpus = '0'
-
-            if host in self.lshosts_dic['HOST_NAME']:
-                index = self.lshosts_dic['HOST_NAME'].index(host)
-                ncpus = self.lshosts_dic['ncpus'][index]
-
-            if not re.match(r'^[0-9]+$', ncpus):
-                common.print_warning('*Warning*: host(' + str(host) + ') ncpus info "' + str(ncpus) + '": invalid value, reset it to "0".')
-                ncpus = 0
-
-            item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(ncpus))
-            self.hosts_tab_table.setItem(i, j, item)
-
-            # For "MAX" item.
+            # Fill "MAX" item.
             j = j+1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             max = self.bhosts_dic['MAX'][index]
@@ -1241,7 +1300,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setData(Qt.DisplayRole, int(max))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Njobs" item.
+            # Fill "Njobs" item.
             j = j+1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             njobs = self.bhosts_dic['NJOBS'][index]
@@ -1255,7 +1314,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setFont(QFont('song', 9, QFont.Bold))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Ut" item.
+            # Fill "Ut" item.
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
@@ -1278,7 +1337,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "MaxMem" item.
+            # Fill "MaxMem" item.
             j = j+1
             maxmem = '0'
 
@@ -1287,13 +1346,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 maxmem = self.lshosts_dic['maxmem'][index]
 
             if re.search(r'M', maxmem):
-                maxmem = re.sub(r'M', '', maxmem)
-                maxmem = float(maxmem)/1024
+                maxmem = float(re.sub(r'M', '', maxmem))/1024
             elif re.search(r'G', maxmem):
                 maxmem = re.sub(r'G', '', maxmem)
             elif re.search(r'T', maxmem):
-                maxmem = re.sub(r'T', '', maxmem)
-                maxmem = float(maxmem)*1024
+                maxmem = float(re.sub(r'T', '', maxmem))*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
                 maxmem = 0
@@ -1302,7 +1359,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setData(Qt.DisplayRole, int(float(maxmem)))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Mem" item.
+            # Fill "Mem" item.
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
@@ -1312,13 +1369,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 mem = self.lsload_dic['mem'][index]
 
             if re.search(r'M', mem):
-                mem = re.sub(r'M', '', mem)
-                mem = float(mem)/1024
+                mem = float(re.sub(r'M', '', mem))/1024
             elif re.search(r'G', mem):
                 mem = re.sub(r'G', '', mem)
             elif re.search(r'T', mem):
-                mem = re.sub(r'T', '', mem)
-                mem = float(mem)*1024
+                mem = float(re.sub(r'T', '', mem))*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
                 mem = 0
@@ -1331,7 +1386,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "MaxSwp" item.
+            # Fill "MaxSwp" item.
             j = j+1
             maxswp = '0'
 
@@ -1340,13 +1395,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 maxswp = self.lshosts_dic['maxswp'][index]
 
             if re.search(r'M', maxswp):
-                maxswp = re.sub(r'M', '', maxswp)
-                maxswp = float(maxswp)/1024
+                maxswp = float(re.sub(r'M', '', maxswp))/1024
             elif re.search(r'G', maxswp):
                 maxswp = re.sub(r'G', '', maxswp)
             elif re.search(r'T', maxswp):
-                maxswp = re.sub(r'T', '', maxswp)
-                maxswp = float(maxswp)*1024
+                maxswp = float(re.sub(r'T', '', maxswp))*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
                 maxswp = 0
@@ -1355,7 +1408,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setData(Qt.DisplayRole, int(float(maxswp)))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Swp" item.
+            # Fill "Swp" item.
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
@@ -1365,13 +1418,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 swp = self.lsload_dic['swp'][index]
 
             if re.search(r'M', swp):
-                swp = re.sub(r'M', '', swp)
-                swp = float(swp)/1024
+                swp = float(re.sub(r'M', '', swp))/1024
             elif re.search(r'G', swp):
                 swp = re.sub(r'G', '', swp)
             elif re.search(r'T', swp):
-                swp = re.sub(r'T', '', swp)
-                swp = float(swp)*1024
+                swp = float(re.sub(r'T', '', swp))*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
                 swp = 0
@@ -1380,7 +1431,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setData(Qt.DisplayRole, int(float(swp)))
             self.hosts_tab_table.setItem(i, j, item)
 
-            # For "Tmp" item.
+            # Fill "Tmp" item.
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
@@ -1390,13 +1441,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 tmp = self.lsload_dic['tmp'][index]
 
             if re.search(r'M', tmp):
-                tmp = re.sub(r'M', '', tmp)
-                tmp = float(tmp)/1024
+                tmp = float(re.sub(r'M', '', tmp))/1024
             elif re.search(r'G', tmp):
                 tmp = re.sub(r'G', '', tmp)
             elif re.search(r'T', tmp):
-                tmp = re.sub(r'T', '', tmp)
-                tmp = float(tmp)*1024
+                tmp = float(re.sub(r'T', '', tmp))*1024
             else:
                 common.print_warning('*Warning*: host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".')
                 tmp = 0
@@ -1408,6 +1457,66 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 item.setForeground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
+
+    def get_hosts_tab_specified_host_list(self):
+        """
+        Filter host list with specified queue/status/max/maxmem/host.
+        """
+        specified_status = self.hosts_tab_status_combo.currentText().strip()
+        specified_queue = self.hosts_tab_queue_combo.currentText().strip()
+        specified_max = self.hosts_tab_max_combo.currentText().strip()
+        specified_maxmem = self.hosts_tab_maxmem_combo.currentText().strip()
+        specified_host = self.hosts_tab_host_line.text().strip()
+
+        hosts_tab_specified_host_list = []
+
+        for host in self.host_list:
+            # Filter with specified_status.
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            status = self.bhosts_dic['STATUS'][index]
+
+            if (specified_status != 'ALL') and (specified_status != status):
+                continue
+
+            # Filter with specified_queue.
+            if (specified_queue != 'ALL') and ((host not in self.host_queue_dic) or ((host in self.host_queue_dic) and (specified_queue not in self.host_queue_dic[host]))):
+                continue
+
+            # Filter with specified_max.
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            max = self.bhosts_dic['MAX'][index]
+
+            if not re.match(r'^[0-9]+$', max):
+                max = 0
+
+            if (specified_max != 'ALL') and (specified_max != str(max)):
+                continue
+
+            # Filter with specified_maxmem.
+            index = self.lshosts_dic['HOST_NAME'].index(host)
+            maxmem = self.lshosts_dic['maxmem'][index]
+
+            if re.search(r'M', maxmem):
+                maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
+            elif re.search(r'G', maxmem):
+                maxmem = int(float(re.sub(r'G', '', maxmem)))
+            elif re.search(r'T', maxmem):
+                maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
+            else:
+                maxmem = 0
+
+            specified_maxmem = re.sub(r'G', '', specified_maxmem)
+
+            if (specified_maxmem != 'ALL') and (specified_maxmem != str(maxmem)):
+                continue
+
+            # Filter with specified_host.
+            if specified_host and (not re.search(specified_host, host)):
+                continue
+
+            hosts_tab_specified_host_list.append(host)
+
+        return hosts_tab_specified_host_list
 
     def hosts_tab_check_click(self, item=None):
         """
@@ -1426,13 +1535,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.set_load_tab_host_combo(host_list)
                 self.update_load_tab_load_info()
                 self.main_tab.setCurrentWidget(self.load_tab)
-            elif item.column() == 5:
+            elif item.column() == 4:
                 if int(njobs_num) > 0:
                     self.jobs_tab_user_line.setText('')
                     self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
                     self.set_jobs_tab_queue_combo()
 
-                    host_list = copy.deepcopy(self.hosts_tab_queue_host_list)
+                    host_list = copy.deepcopy(self.host_list)
                     host_list.remove(host)
                     host_list.insert(0, host)
                     host_list.insert(1, 'ALL')
@@ -1442,6 +1551,24 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
                     self.main_tab.setCurrentWidget(self.jobs_tab)
+
+    def set_hosts_tab_status_combo(self):
+        """
+        Set (initialize) self.hosts_tab_status_combo.
+        """
+        self.hosts_tab_status_combo.clear()
+
+        status_list = ['ALL', ]
+
+        for host in self.host_list:
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            status = self.bhosts_dic['STATUS'][index]
+
+            if status not in status_list:
+                status_list.append(status)
+
+        for status in status_list:
+            self.hosts_tab_status_combo.addItem(status)
 
     def set_hosts_tab_queue_combo(self):
         """
@@ -1454,6 +1581,68 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         for queue in queue_list:
             self.hosts_tab_queue_combo.addItem(queue)
+
+    def set_hosts_tab_max_combo(self):
+        """
+        Set (initialize) self.hosts_tab_max_combo.
+        """
+        self.hosts_tab_max_combo.clear()
+
+        max_list = []
+
+        for host in self.host_list:
+            index = self.bhosts_dic['HOST_NAME'].index(host)
+            max = self.bhosts_dic['MAX'][index]
+
+            if not re.match(r'^[0-9]+$', max):
+                max = 0
+
+            if int(max) not in max_list:
+                max_list.append(int(max))
+
+        max_list.sort()
+        max_list.insert(0, 'ALL')
+
+        for max in max_list:
+            self.hosts_tab_max_combo.addItem(str(max))
+
+    def set_hosts_tab_maxmem_combo(self):
+        """
+        Set (initialize) self.hosts_tab_maxmem_combo.
+        """
+        self.hosts_tab_maxmem_combo.clear()
+
+        maxmem_list = []
+
+        for host in self.host_list:
+            index = self.lshosts_dic['HOST_NAME'].index(host)
+            maxmem = self.lshosts_dic['maxmem'][index]
+
+            # Switch maxmem unit to "G".
+            if re.search(r'M', maxmem):
+                maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
+            elif re.search(r'G', maxmem):
+                maxmem = int(float(re.sub(r'G', '', maxmem)))
+            elif re.search(r'T', maxmem):
+                maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
+            else:
+                maxmem = 0
+
+            if maxmem not in maxmem_list:
+                maxmem_list.append(maxmem)
+
+        maxmem_list.sort()
+
+        for (i, maxmem) in enumerate(maxmem_list):
+            if maxmem == '0':
+                maxmem_list[i] = '-'
+            else:
+                maxmem_list[i] = str(maxmem) + 'G'
+
+        maxmem_list.insert(0, 'ALL')
+
+        for maxmem in maxmem_list:
+            self.hosts_tab_maxmem_combo.addItem(maxmem)
 # For hosts TAB (end) #
 
 # For queues TAB (start) #
@@ -1527,12 +1716,12 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if i < len(queue_list)-1:
                 index = self.queues_dic['QUEUE_NAME'].index(queue)
 
-            # For "QUEUE" item.
+            # Fill "QUEUE" item.
             j = 0
             item = QTableWidgetItem(queue)
             self.queues_tab_table.setItem(i, j, item)
 
-            # For "PEND" item.
+            # Fill "PEND" item.
             j = j+1
 
             if i == len(queue_list)-1:
@@ -1549,7 +1738,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             self.queues_tab_table.setItem(i, j, item)
 
-            # For "RUN" item.
+            # Fill "RUN" item.
             j = j+1
 
             if i == len(queue_list)-1:
@@ -1784,15 +1973,19 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_load_tab_frame0(self):
         # self.load_tab_frame0
+        # "Host" item.
         load_tab_host_label = QLabel('Host', self.load_tab_frame0)
         load_tab_host_label.setStyleSheet("font-weight: bold;")
         load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
         self.set_load_tab_host_combo()
 
+        # "Begin_Date" item.
         load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
         load_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         load_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.load_tab_begin_date_edit = QDateEdit(self.load_tab_frame0)
         self.load_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.load_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
@@ -1800,9 +1993,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_begin_date_edit.setCalendarPopup(True)
         self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
 
+        # "End_Date" item.
         load_tab_end_date_label = QLabel('End_Date', self.load_tab_frame0)
         load_tab_end_date_label.setStyleSheet("font-weight: bold;")
         load_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.load_tab_end_date_edit = QDateEdit(self.load_tab_frame0)
         self.load_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.load_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
@@ -1810,6 +2005,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_end_date_edit.setCalendarPopup(True)
         self.load_tab_end_date_edit.setDate(QDate.currentDate())
 
+        # "Check" button.
         load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
         load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
@@ -2044,32 +2240,41 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_utilization_tab_frame0(self):
         # self.utilization_tab_frame0
+        # "Queue" item.
         utilization_tab_queue_label = QLabel('Queue', self.utilization_tab_frame0)
         utilization_tab_queue_label.setStyleSheet("font-weight: bold;")
         utilization_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_queue_combo()
         self.utilization_tab_queue_combo.currentTextChanged.connect(self.update_utilization_tab_host_combo)
 
+        # "Host" item.
         utilization_tab_host_label = QLabel('Host', self.utilization_tab_frame0)
         utilization_tab_host_label.setStyleSheet("font-weight: bold;")
         utilization_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_host_combo()
 
+        # "Resource" item.
         utilization_tab_resource_label = QLabel('Resource', self.utilization_tab_frame0)
         utilization_tab_resource_label.setStyleSheet("font-weight: bold;")
         utilization_tab_resource_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.utilization_tab_resource_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_resource_combo()
 
+        # "Check" button.
         utilization_tab_check_button = QPushButton('Check', self.utilization_tab_frame0)
         utilization_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         utilization_tab_check_button.clicked.connect(self.update_utilization_tab_frame1)
 
+        # "Begin_Date" item.
         utilization_tab_begin_date_label = QLabel('Begin_Date', self.utilization_tab_frame0)
         utilization_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         utilization_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.utilization_tab_begin_date_edit = QDateEdit(self.utilization_tab_frame0)
         self.utilization_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.utilization_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
@@ -2077,9 +2282,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.utilization_tab_begin_date_edit.setCalendarPopup(True)
         self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
+        # "End_Date" item.
         utilization_tab_end_date_label = QLabel('End_Date', self.utilization_tab_frame0)
         utilization_tab_end_date_label.setStyleSheet("font-weight: bold;")
         utilization_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
         self.utilization_tab_end_date_edit = QDateEdit(self.utilization_tab_frame0)
         self.utilization_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.utilization_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
@@ -2352,7 +2559,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def gen_license_tab_frame0(self):
         # self.license_tab_frame0
-        # Show
+        # "Show" item.
         license_tab_show_label = QLabel('Show', self.license_tab_frame0)
         license_tab_show_label.setStyleSheet("font-weight: bold;")
         license_tab_show_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2361,7 +2568,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.set_license_tab_show_combo()
         self.license_tab_show_combo.activated.connect(self.filter_license_feature)
 
-        # License Server
+        # "Server" item.
         license_tab_server_label = QLabel('Server', self.license_tab_frame0)
         license_tab_server_label.setStyleSheet("font-weight: bold;")
         license_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2370,7 +2577,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.set_license_tab_server_combo()
         self.license_tab_server_combo.activated.connect(self.update_license_tab_vendor_combo)
 
-        # Vendor Daemon
+        # "Vendor" item.
         license_tab_vendor_label = QLabel('Vendor', self.license_tab_frame0)
         license_tab_vendor_label.setStyleSheet("font-weight: bold;")
         license_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2379,7 +2586,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.set_license_tab_vendor_combo()
         self.license_tab_vendor_combo.activated.connect(self.check_license_tab_vendor_combo)
 
-        # License Feature
+        # "Feature" item.
         license_tab_feature_label = QLabel('Feature', self.license_tab_frame0)
         license_tab_feature_label.setStyleSheet("font-weight: bold;")
         license_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2387,7 +2594,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.license_tab_feature_line = QLineEdit()
         self.license_tab_feature_line.returnPressed.connect(self.filter_license_feature)
 
-        # License User
+        # "User" item.
         license_tab_user_label = QLabel('User', self.license_tab_frame0)
         license_tab_user_label.setStyleSheet("font-weight: bold;")
         license_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2395,7 +2602,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.license_tab_user_line = QLineEdit()
         self.license_tab_user_line.returnPressed.connect(self.filter_license_feature)
 
-        # Filter Button
+        # "Filter" button.
         license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
         license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         license_tab_filter_button.clicked.connect(self.filter_license_feature)
@@ -2518,18 +2725,18 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 for feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].keys():
                     row += 1
 
-                    # For "Server"
+                    # Fill "Server" item.
                     self.license_tab_feature_table.setItem(row, 0, QTableWidgetItem(license_server))
 
-                    # For "Vendor"
+                    # Fill "Vendor" item.
                     self.license_tab_feature_table.setItem(row, 1, QTableWidgetItem(vendor_daemon))
 
-                    # For "Feature"
+                    # Fill "Feature" item.
                     item = QTableWidgetItem(feature)
                     item.setForeground(QBrush(Qt.blue))
                     self.license_tab_feature_table.setItem(row, 2, item)
 
-                    # For "Issued"
+                    # Fill "Issued" item.
                     issued = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['issued']
                     item = QTableWidgetItem()
 
@@ -2540,7 +2747,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
                     self.license_tab_feature_table.setItem(row, 3, item)
 
-                    # For "In_Use"
+                    # Fill "In_Use" item.
                     in_use = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, int(in_use))
@@ -2604,20 +2811,20 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     for expires_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
                         row += 1
 
-                        # For "License Server"
+                        # Fill "Server" item.
                         self.license_tab_expires_table.setItem(row, 0, QTableWidgetItem(license_server))
 
-                        # For "Feature"
+                        # Fill "Feature" item.
                         item = QTableWidgetItem(feature)
                         item.setForeground(QBrush(Qt.blue))
                         self.license_tab_expires_table.setItem(row, 1, item)
 
-                        # For "Num"
+                        # Fill "Num" item.
                         item = QTableWidgetItem()
                         item.setData(Qt.DisplayRole, int(expires_dic['license']))
                         self.license_tab_expires_table.setItem(row, 2, item)
 
-                        # For "Expires"
+                        # Fill "Expires" item.
                         expires = expires_dic['expires']
                         item = QTableWidgetItem(expires)
                         expires_mark = common_license.check_expire_date(expires)
