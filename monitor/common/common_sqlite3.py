@@ -286,7 +286,7 @@ def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', wher
             return
 
         try:
-            command = "UPDATE '" + str(table_name) + "' SET " + str(set_condition) + " WHERE " + str(where_condition)
+            command = "UPDATE '" + str(table_name) + "' " + str(set_condition) + " " + str(where_condition)
             curs.execute(command)
             curs.close()
 
@@ -299,7 +299,7 @@ def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', wher
             common.print_error('*Error* (update_sql_table_data) : Failed on updating table "' + str(table_name) + '" on db file "' + str(db_file) + '": ' + str(error))
 
 
-def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
+def gen_sql_table_key_string(key_list, key_type_list=[]):
     """
     Switch the input key_list into the sqlite table key string.
     """
@@ -314,10 +314,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
             key_type = 'TEXT'
 
         if i == 0:
-            if auto_increment:
-                key_string = str(key_string) + "id INTEGER PRIMARY KEY AUTOINCREMENT, '" + str(key) + "' " + str(key_type) + ","
-            else:
-                key_string = str(key_string) + "'" + str(key) + "' " + str(key_type) + " PRIMARY KEY,"
+            key_string = str(key_string) + "'" + str(key) + "' " + str(key_type) + ","
         elif i == len(key_list)-1:
             key_string = str(key_string) + " '" + str(key) + "' " + str(key_type) + ");"
         else:
@@ -326,7 +323,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
     return key_string
 
 
-def gen_sql_table_value_string(value_list, auto_increment=False):
+def gen_sql_table_value_string(value_list, autoincrement=False):
     """
     Switch the input value_list into the sqlite table value string.
     """
@@ -339,13 +336,19 @@ def gen_sql_table_value_string(value_list, auto_increment=False):
             value = str(value).replace("'", "''")
 
         if i == 0:
-            if auto_increment:
-                value_string = str(value_string) + "NULL, '" + str(value) + "',"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + 'NULL,'
             else:
                 value_string = str(value_string) + "'" + str(value) + "',"
         elif i == len(value_list)-1:
-            value_string = str(value_string) + " '" + str(value) + "');"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + ' NULL);'
+            else:
+                value_string = str(value_string) + " '" + str(value) + "');"
         else:
-            value_string = str(value_string) + " '" + str(value) + "',"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + ' NULL,'
+            else:
+                value_string = str(value_string) + " '" + str(value) + "',"
 
     return value_string

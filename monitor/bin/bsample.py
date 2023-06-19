@@ -100,7 +100,7 @@ class Sampling:
         job_range_dic = common.get_job_range_dic(job_list)
 
         key_list = ['sample_second', 'sample_time', 'mem']
-        key_type_list = ['INTEGER', 'TEXT', 'TEXT']
+        key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
 
         for job_range in job_range_dic.keys():
             job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
@@ -158,7 +158,7 @@ class Sampling:
             queue_list.append('ALL')
 
             key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
-            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(queue_list)):
                 queue = queue_list[i]
@@ -167,17 +167,18 @@ class Sampling:
                 print('    Sampling for queue "' + str(queue) + '" ...')
 
                 # Clean up queue database, only keep 10000 items.
-                queue_table_count = common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name)
+                if queue_table_name in queue_table_list:
+                    queue_table_count = common_sqlite3.get_sql_table_count(queue_db_file, queue_db_conn, queue_table_name)
 
-                if queue_table_count != 'N/A':
-                    if int(queue_table_count) > 10000:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(queue_table_count) - 10000
+                    if queue_table_count != 'N/A':
+                        if int(queue_table_count) > 10000:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(queue_table_count) - 10000
 
-                        print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                            print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table if not exitst.
                 if queue_table_name not in queue_table_list:
@@ -211,7 +212,7 @@ class Sampling:
             host_list = bhosts_dic['HOST_NAME']
 
             key_list = ['sample_second', 'sample_time', 'NJOBS', 'RUN', 'SSUSP', 'USUSP']
-            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(host_list)):
                 host = host_list[i]
@@ -220,17 +221,18 @@ class Sampling:
                 print('    Sampling for host "' + str(host) + '" ...')
 
                 # Clean up host database, only keep 10000 items.
-                host_table_count = common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name)
+                if host_table_name in host_table_list:
+                    host_table_count = common_sqlite3.get_sql_table_count(host_db_file, host_db_conn, host_table_name)
 
-                if host_table_count != 'N/A':
-                    if int(host_table_count) > 10000:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(host_table_count) - 10000
+                    if host_table_count != 'N/A':
+                        if int(host_table_count) > 10000:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(host_table_count) - 10000
 
-                        print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                            print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table if not exists.
                 if host_table_name not in host_table_list:
@@ -260,7 +262,7 @@ class Sampling:
             host_list = lsload_dic['HOST_NAME']
 
             key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
-            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(host_list)):
                 host = host_list[i]
@@ -269,17 +271,18 @@ class Sampling:
                 print('    Sampling for host "' + str(host) + '" ...')
 
                 # Clean up load database, only keep 100000 items.
-                load_table_count = common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name)
+                if load_table_name in load_table_list:
+                    load_table_count = common_sqlite3.get_sql_table_count(load_db_file, load_db_conn, load_table_name)
 
-                if load_table_count != 'N/A':
-                    if int(load_table_count) > 100000:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(load_table_count) - 100000
+                    if load_table_count != 'N/A':
+                        if int(load_table_count) > 100000:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(load_table_count) - 100000
 
-                        print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table if not exists.
                 if load_table_name not in load_table_list:
@@ -309,7 +312,7 @@ class Sampling:
             user_list = busers_dic['USER/GROUP']
 
             key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SSUSP', 'USUSP']
-            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(user_list)):
                 user = user_list[i]
@@ -318,17 +321,18 @@ class Sampling:
                 print('    Sampling for user "' + str(user) + '" ...')
 
                 # Clean up user database, only keep 100000 items.
-                user_table_count = common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name)
+                if user_table_name in user_table_list:
+                    user_table_count = common_sqlite3.get_sql_table_count(user_db_file, user_db_conn, user_table_name)
 
-                if user_table_count != 'N/A':
-                    if int(user_table_count) > 100000:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(user_table_count) - 100000
+                    if user_table_count != 'N/A':
+                        if int(user_table_count) > 100000:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(user_table_count) - 100000
 
-                        print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            print('    Deleting database "' + str(user_db_file) + '" table "' + str(user_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(user_db_file, user_db_conn, user_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table if not exists.
                 if user_table_name not in user_table_list:
@@ -360,7 +364,7 @@ class Sampling:
             host_list = lsload_dic['HOST_NAME']
 
             key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
-            key_type_list = ['INTEGER', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(host_list)):
                 host = host_list[i]
@@ -369,17 +373,18 @@ class Sampling:
                 print('    Sampling for host "' + str(host) + '" ...')
 
                 # Clean up utilization database, only keep 100000 items.
-                utilization_table_count = common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name)
+                if utilization_table_name in utilization_table_list:
+                    utilization_table_count = common_sqlite3.get_sql_table_count(utilization_db_file, utilization_db_conn, utilization_table_name)
 
-                if utilization_table_count != 'N/A':
-                    if int(utilization_table_count) > 100000:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(utilization_table_count) - 100000
+                    if utilization_table_count != 'N/A':
+                        if int(utilization_table_count) > 100000:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(utilization_table_count) - 100000
 
-                        print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table if not exists.
                 if utilization_table_name not in utilization_table_list:
@@ -495,7 +500,7 @@ class Sampling:
             utilization_day_dic = self.get_utilization_day_info()
 
             key_list = ['sample_date', 'slot', 'cpu', 'mem']
-            key_type_list = ['TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_type_list = ['TEXT PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT']
 
             for (utilization_day_table_name, utilization_day_table_dic) in utilization_day_dic.items():
                 host = re.sub('utilization_', '', utilization_day_table_name)
@@ -503,17 +508,18 @@ class Sampling:
                 print('    Counting utilization (day average) info for host "' + str(host) + '" ...')
 
                 # Clean up utilization database, only keep 3650 items.
-                utilization_day_table_count = common_sqlite3.get_sql_table_count(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name)
+                if utilization_day_table_name in utilization_day_table_list:
+                    utilization_day_table_count = common_sqlite3.get_sql_table_count(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name)
 
-                if utilization_day_table_count != 'N/A':
-                    if int(utilization_day_table_count) > 3650:
-                        row_id = 'sample_time'
-                        begin_line = 0
-                        end_line = int(utilization_day_table_count) - 3650
+                    if utilization_day_table_count != 'N/A':
+                        if int(utilization_day_table_count) > 3650:
+                            row_id = 'sample_time'
+                            begin_line = 0
+                            end_line = int(utilization_day_table_count) - 3650
 
-                        print('    Deleting database "' + str(utilization_day_db_file) + '" table "' + str(utilization_day_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            print('    Deleting database "' + str(utilization_day_db_file) + '" table "' + str(utilization_day_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
 
-                        common_sqlite3.delete_sql_table_rows(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, row_id, begin_line, end_line)
+                            common_sqlite3.delete_sql_table_rows(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, row_id, begin_line, end_line)
 
                 # Generate sql table.
                 if utilization_day_table_name not in utilization_day_table_list:
@@ -530,8 +536,8 @@ class Sampling:
 
                     if utilization_day_db_data_dic:
                         # Replace sql table value.
-                        set_condition = "slot='" + str(utilization_day_table_dic['slot']) + "', cpu='" + str(utilization_day_table_dic['cpu']) + "', mem='" + str(utilization_day_table_dic['mem']) + "'"
-                        where_condition = "sample_date='" + str(self.sample_date) + "'"
+                        set_condition = "SET slot='" + str(utilization_day_table_dic['slot']) + "', cpu='" + str(utilization_day_table_dic['cpu']) + "', mem='" + str(utilization_day_table_dic['mem']) + "'"
+                        where_condition = "WHERE sample_date='" + str(self.sample_date) + "'"
                         common_sqlite3.update_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, set_condition, where_condition, commit=False)
                     else:
                         # Insert sql table value.
