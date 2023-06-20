@@ -1980,6 +1980,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
         self.set_load_tab_host_combo()
+        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
 
         # "Begin_Date" item.
         load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
@@ -2555,7 +2556,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         if self.specified_feature:
             self.license_tab_feature_line.setText(str(self.specified_feature))
             self.license_tab_user_line.setText(str(self.specified_user))
-            self.filter_license_feature()
+            self.update_license_info()
 
     def gen_license_tab_frame0(self):
         # self.license_tab_frame0
@@ -2566,7 +2567,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         self.license_tab_show_combo = QComboBox(self.license_tab_frame0)
         self.set_license_tab_show_combo()
-        self.license_tab_show_combo.activated.connect(self.filter_license_feature)
+        self.license_tab_show_combo.activated.connect(self.update_license_info)
 
         # "Server" item.
         license_tab_server_label = QLabel('Server', self.license_tab_frame0)
@@ -2592,7 +2593,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_feature_line = QLineEdit()
-        self.license_tab_feature_line.returnPressed.connect(self.filter_license_feature)
+        self.license_tab_feature_line.returnPressed.connect(self.update_license_info)
 
         # "User" item.
         license_tab_user_label = QLabel('User', self.license_tab_frame0)
@@ -2600,12 +2601,12 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.license_tab_user_line = QLineEdit()
-        self.license_tab_user_line.returnPressed.connect(self.filter_license_feature)
+        self.license_tab_user_line.returnPressed.connect(self.update_license_info)
 
         # "Filter" button.
-        license_tab_filter_button = QPushButton('Filter', self.license_tab_frame0)
-        license_tab_filter_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
-        license_tab_filter_button.clicked.connect(self.filter_license_feature)
+        license_tab_check_button = QPushButton('Check', self.license_tab_frame0)
+        license_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
+        license_tab_check_button.clicked.connect(self.update_license_info)
 
         # self.license_tab_frame0 - Grid
         license_tab_frame0_grid = QGridLayout()
@@ -2620,7 +2621,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         license_tab_frame0_grid.addWidget(self.license_tab_feature_line, 0, 7)
         license_tab_frame0_grid.addWidget(license_tab_user_label, 0, 8)
         license_tab_frame0_grid.addWidget(self.license_tab_user_line, 0, 9)
-        license_tab_frame0_grid.addWidget(license_tab_filter_button, 0, 10)
+        license_tab_frame0_grid.addWidget(license_tab_check_button, 0, 10)
 
         license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
@@ -2669,13 +2670,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
     def update_license_tab_vendor_combo(self):
         self.set_license_tab_vendor_combo()
-        self.filter_license_feature()
+        self.update_license_info()
 
     def check_license_tab_vendor_combo(self):
         if self.license_tab_vendor_combo.count() > 2:
-            self.filter_license_feature()
+            self.update_license_info()
 
-    def filter_license_feature(self):
+    def update_license_info(self):
         # Get license information.
         self.get_license_dic()
 
