@@ -992,7 +992,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             # Fill "Started" item.
             j = j+1
-            start_time = self.switch_start_time(job_dic[job]['started_time'])
+            start_time = self.switch_job_start_time(job_dic[job]['started_time'])
             item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
@@ -1038,7 +1038,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
 
-    def switch_start_time(self, start_time):
+    def switch_job_start_time(self, start_time):
         new_start_time = start_time
 
         if start_time and (start_time != 'N/A'):

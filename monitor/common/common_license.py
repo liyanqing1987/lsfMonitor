@@ -486,31 +486,35 @@ class FilterLicenseDic():
         return filtered_license_dic
 
 
-def switch_start_time(start_time):
+def switch_start_time(start_time, compare_second='', format=''):
     """
-    Switch start_time format from "%Y %a %m/%d %H:%M" to "%Y-%m-%d %H:%M".
+    Switch start_time format from "%a %m/%d %H:%M" to specified format (or start_second by default).
     """
     new_start_time = start_time
 
     if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
-        # Switch start_time to start_seconds.
+        # Switch start_time to start_second.
         current_year = datetime.date.today().year
         start_time_with_year = str(current_year) + ' ' + str(start_time)
 
         try:
-            start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
+            start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
         except Exception:
             print('*Error*: variable "start_time_with_year", value is "' + str(start_time_with_year) + '", not follow the time format "%Y %a %m/%d %H:%M".')
 
-        current_seconds = time.time()
+        if not compare_second:
+            compare_second = time.time()
 
-        if int(start_seconds) > int(current_seconds):
+        if int(start_second) > int(compare_second):
             current_year = int(datetime.date.today().year) - 1
             start_time_with_year = str(current_year) + ' ' + str(start_time)
-            start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
+            start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
 
-        # Switch start_seconds to expected time format.
-        new_start_time = time.strftime('%Y-%m-%d %H:%M', time.localtime(start_seconds))
+        # Switch start_second to expected time format.
+        if format:
+            new_start_time = time.strftime(format, time.localtime(start_second))
+        else:
+            new_start_time = start_second
 
     return new_start_time
 
