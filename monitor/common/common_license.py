@@ -284,6 +284,9 @@ class FilterLicenseDic():
         pass
 
     def filter_by_server(self, license_dic, server_list):
+        """
+        Filter license_dic with specified license_server(s).
+        """
         new_license_dic = {}
 
         for license_server in license_dic.keys():
@@ -293,6 +296,9 @@ class FilterLicenseDic():
         return new_license_dic
 
     def filter_by_vendor(self, license_dic, vendor_list):
+        """
+        Filter license_dic with specified vendor_daemon(s).
+        """
         new_license_dic = {}
 
         for license_server in license_dic.keys():
@@ -307,6 +313,9 @@ class FilterLicenseDic():
         return new_license_dic
 
     def filter_by_feature(self, license_dic, feature_list):
+        """
+        Filter license_dic with specified feature(s).
+        """
         # Get filtered_feature_list from exact_feature_list/fuzzy_feature_list.
         exact_feature_list = []
         fuzzy_feature_list = []
@@ -353,6 +362,9 @@ class FilterLicenseDic():
         return new_license_dic
 
     def filter_by_feature_usage_attribute(self, license_dic, feature_usage_attribute, feature_usage_attribute_list):
+        """
+        Filter license_dic with specified feature_usage_attribute (user/execute_host/submit_host/version/license_server/start_time/license_num).
+        """
         new_license_dic = {}
 
         for license_server in license_dic.keys():
@@ -378,18 +390,30 @@ class FilterLicenseDic():
         return new_license_dic
 
     def filter_by_submit_host(self, license_dic, submit_host_list):
+        """
+        Filter license_dic with specified submit_host(s).
+        """
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'submit_host', submit_host_list)
         return new_license_dic
 
     def filter_by_execute_host(self, license_dic, execute_host_list):
+        """
+        Filter license_dic with specified execute_host(s).
+        """
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'execute_host', execute_host_list)
         return new_license_dic
 
     def filter_by_user(self, license_dic, user_list):
+        """
+        Filter license_dic with specified user(s).
+        """
         new_license_dic = self.filter_by_feature_usage_attribute(license_dic, 'user', user_list)
         return new_license_dic
 
     def filter_show_mode_feature(self, license_dic, show_mode):
+        """
+        Filter license_dic with show_mode (IN_USE/ALL).
+        """
         new_license_dic = {}
 
         for license_server in license_dic.keys():
@@ -433,6 +457,9 @@ class FilterLicenseDic():
         return new_license_dic
 
     def run(self, license_dic, server_list=[], vendor_list=[], feature_list=[], submit_host_list=[], execute_host_list=[], user_list=[], show_mode='ALL'):
+        """
+        Main function for class FilterLicenseDic.
+        """
         filtered_license_dic = license_dic
 
         if server_list:
