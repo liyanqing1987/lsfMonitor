@@ -103,8 +103,9 @@ class GetLicenseInfo():
                 job_list = []
 
                 for lm_license_file in lm_license_file_list:
-                    lmstat_command = self.get_lmstat_command(specified_server=lm_license_file)
-                    job_list.append(executor.submit(common.run_command, lmstat_command))
+                    if lm_license_file:
+                        lmstat_command = self.get_lmstat_command(specified_server=lm_license_file)
+                        job_list.append(executor.submit(common.run_command, lmstat_command))
 
                 for job in as_completed(job_list):
                     for tuple_line in job.result():
