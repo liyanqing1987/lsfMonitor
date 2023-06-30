@@ -584,7 +584,7 @@ def parse_license_file(license_file):
                         'feature': []}
     server_compile = re.compile(r'^\s*SERVER\s+(\S+)\s+(\S+)\s+(\S+)\s*$')
     vendor_daemon_compile = re.compile(r'^\s*(VENDOR|DAEMON)\s+(\S+)\s*(\S+)?\s*(.+)?$')
-    feature_compile = re.compile(r'^\s*(FEATURE|INCREMENT)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+.*$')
+    feature_compile = re.compile(r'^\s*(FEATURE|PACKAGE|INCREMENT)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+.*$')
 
     with open(license_file,  'r', errors='ignore') as LF:
         for line in LF.readlines():
