@@ -73,6 +73,7 @@ def gen_config_file():
     Generate config file <LSFMONITOR_INSTALL_PATH>/monitor/conf/config.py.
     """
     config_file = str(CWD) + '/monitor/conf/config.py'
+    lmstat_path = str(CWD) + '/monitor/tools/lmstat'
 
     print('')
     print('>>> Generate config file "' + str(config_file) + '".')
@@ -88,10 +89,10 @@ def gen_config_file():
 db_path = "''' + str(db_path) + '''"
 
 # Specify lmstat path, example "/eda/synopsys/scl/2021.03/linux64/bin/lmstat".
-lmstat_path = ""
+lmstat_path = "''' + str(lmstat_path) + '''"
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
-lmstat_bsub_command = ""
+lmstat_bsub_command = "bsub -q normal -Is"
 ''')
 
             os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
