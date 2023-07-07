@@ -667,7 +667,18 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             self.job_tab_rusage_mem_line.setText('')
         else:
             if self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'] != '':
-                rusage_mem_value = round(int(self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'])/1024, 1)
+                rusage_mem_value = self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem']
+                lsf_unit_for_limits = common_lsf.get_lsf_unit_for_limits()
+
+                if lsf_unit_for_limits == 'KB':
+                    rusage_mem_value = round(int(rusage_mem_value)/1024/1024, 1)
+                elif lsf_unit_for_limits == 'MB':
+                    rusage_mem_value = round(int(rusage_mem_value)/1024, 1)
+                elif lsf_unit_for_limits == 'GB':
+                    rusage_mem_value = round(float(rusage_mem_value), 1)
+                elif lsf_unit_for_limits == 'TB':
+                    rusage_mem_value = round(int(rusage_mem_value)*1024, 1)
+
                 self.job_tab_rusage_mem_line.setText(str(rusage_mem_value) + ' G')
                 self.job_tab_rusage_mem_line.setCursorPosition(0)
 
@@ -1021,7 +1032,18 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             if str(job_dic[job]['rusage_mem']) != '':
                 item = QTableWidgetItem()
-                rusage_mem_value = round(int(job_dic[job]['rusage_mem'])/1024, 1)
+                rusage_mem_value = job_dic[job]['rusage_mem']
+                lsf_unit_for_limits = common_lsf.get_lsf_unit_for_limits()
+
+                if lsf_unit_for_limits == 'KB':
+                    rusage_mem_value = round(int(rusage_mem_value)/1024/1024, 1)
+                elif lsf_unit_for_limits == 'MB':
+                    rusage_mem_value = round(int(rusage_mem_value)/1024, 1)
+                elif lsf_unit_for_limits == 'GB':
+                    rusage_mem_value = round(float(rusage_mem_value), 1)
+                elif lsf_unit_for_limits == 'TB':
+                    rusage_mem_value = round(int(rusage_mem_value)*1024, 1)
+
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 

@@ -815,3 +815,23 @@ def get_host_queue_info():
                 host_queue_dic[host] = [queue, ]
 
     return host_queue_dic
+
+
+def get_lsf_unit_for_limits():
+    """
+    Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
+    """
+    lsf_unit_for_limits = 'MB'
+    command = 'badmin showconf mbd all'
+
+    (return_code, stdout, stderr) = common.run_command(command)
+
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
+
+        if re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line):
+            my_match = re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line)
+            lsf_unit_for_limits = my_match.group(1)
+            break
+
+    return lsf_unit_for_limits
