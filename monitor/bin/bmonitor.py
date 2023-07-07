@@ -133,7 +133,9 @@ class MainWindow(QMainWindow):
         self.disable_license = disable_license
 
         # Get LSF queue/host information.
-        print('* Loading LSF information, please wait a moment ...')
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading LSF information, please wait a moment ...')
 
         my_show_message = ShowMessage('Info', 'Loading LSF information, please wait a moment ...')
         my_show_message.start()
@@ -174,7 +176,9 @@ class MainWindow(QMainWindow):
         self.license_dic_second = current_second
 
         # Print loading license message.
-        print('* Loading License information, please wait a moment ...')
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading License information, please wait a moment ...')
 
         my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
         my_show_message.start()
@@ -724,8 +728,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if job_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting job database file "' + str(job_db_file) + '".')
             else:
-                print('Getting history of job memory usage for job "' + str(self.job_tab_current_job) + '".')
-
                 table_name = 'job_' + str(self.job_tab_current_job)
                 data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
 
@@ -933,7 +935,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             command = str(command) + ' -m ' + str(specified_host)
 
         # Run command to get expected jobs information.
-        print('* Loading LSF jobs information, please wait a moment ...')
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading LSF jobs information, please wait a moment ...')
 
         my_show_message = ShowMessage('Info', 'Loading LSF jobs information, please wait a moment ...')
         my_show_message.start()
@@ -1874,8 +1878,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             if queue_db_file_connect_result == 'failed':
                 common.print_warning('*Warning*: Failed on connecting queue database file "' + str(self.queue_db_file) + '".')
             else:
-                print('Getting history of queue PEND/RUN job number for queue "' + str(queue) + '".')
-
                 table_name = 'queue_' + str(queue)
                 data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'PEND', 'RUN'])
 
@@ -2076,7 +2078,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
 
-        print('* Loading ut/mem load information, please wait a moment ...')
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading ut/mem load information, please wait a moment ...')
 
         my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
         my_show_message.start()
@@ -2108,8 +2112,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 common.print_warning('*Warning*: Failed on connecting load database file "' + str(load_db_file) + '".')
             else:
                 if specified_host:
-                    print('Getting history of load information for host "' + str(specified_host) + '".')
-
                     table_name = 'load_' + str(specified_host)
                     begin_date = self.load_tab_begin_date_edit.date().toString(Qt.ISODate)
                     begin_time = str(begin_date) + ' 00:00:00'
@@ -2412,8 +2414,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             else:
                 if selected_host_list:
                     for selected_host in selected_host_list:
-                        print('Getting history of utilization information for host "' + str(selected_host) + '".')
-
                         table_name = 'utilization_' + str(selected_host)
                         key_list = copy.deepcopy(selected_resource_list)
                         key_list.insert(0, 'sample_date')
@@ -2463,7 +2463,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         selected_resource_list = list(selected_resource_dic.values())
 
         if selected_host_list and selected_resource_list:
-            print('* Loading resource utilization information, please wait a moment ...')
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+            print('* [' + str(current_time) + '] Loading resource utilization information, please wait a moment ...')
 
             my_show_message = ShowMessage('Info', 'Loading resource utilization information, please wait a moment ...')
             my_show_message.start()
@@ -2501,8 +2503,13 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         color_list = ['ro-', 'bo-', 'yo-']
 
         for (i, selected_resource) in enumerate(utilization_dic.keys()):
-            sample_date_list = list(utilization_dic[selected_resource].keys())
             utilization_list = list(utilization_dic[selected_resource].values())
+            sample_date_list = []
+
+            for sample_date in utilization_dic[selected_resource].keys():
+                sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d')
+                sample_date_list.append(sample_date)
+
             axes.plot(sample_date_list, utilization_list, color_list[i], label=selected_resource)
 
         axes.legend(loc='upper right')
