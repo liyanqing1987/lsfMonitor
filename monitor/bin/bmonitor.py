@@ -906,11 +906,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_table.setColumnCount(11)
         self.jobs_tab_table.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command'])
 
-        self.jobs_tab_table.setColumnWidth(0, 70)
+        self.jobs_tab_table.setColumnWidth(0, 80)
         self.jobs_tab_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.jobs_tab_table.setColumnWidth(2, 60)
         self.jobs_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.jobs_tab_table.setColumnWidth(4, 105)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.jobs_tab_table.setColumnWidth(5, 150)
         self.jobs_tab_table.setColumnWidth(6, 100)
         self.jobs_tab_table.setColumnWidth(7, 40)

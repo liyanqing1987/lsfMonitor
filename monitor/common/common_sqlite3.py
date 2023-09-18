@@ -109,7 +109,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
 
 def get_sql_table_key_list(db_file, orig_conn, table_name):
     """
-    Get all of the tables from the specified db file.
+    Get key list from the specified table on specified db file.
     """
     key_list = []
 

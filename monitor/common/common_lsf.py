@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import time
+import datetime
 import collections
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
@@ -86,6 +88,48 @@ def get_bhosts_info(command='bhosts -w'):
     """
     bhosts_dic = get_command_dict(command)
     return bhosts_dic
+
+
+def get_bjobs_info(command='bjobs -u all -w'):
+    """
+    Get bjobs info with command 'bjobs'.
+    ====
+    JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
+    101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
+    ====
+    """
+    bjobs_dic = {}
+    key_list = []
+    (return_code, stdout, stderr) = common.run_command(command)
+    i = -1
+
+    for line in str(stdout, 'utf-8').split('\n'):
+        line = line.strip()
+
+        if line:
+            i += 1
+
+            if i == 0:
+                key_list = line.split()
+
+                for key in key_list:
+                    bjobs_dic[key] = []
+            else:
+                if not re.match(r'^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line):
+                    common.print_warning('*Warning*: invalid bjobs information for below line.')
+                    common.print_warning('           ' + str(line) + '\n')
+                else:
+                    my_match = re.match(r'^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line)
+                    bjobs_dic['JOBID'].append(my_match.group(1))
+                    bjobs_dic['USER'].append(my_match.group(2))
+                    bjobs_dic['STAT'].append(my_match.group(3))
+                    bjobs_dic['QUEUE'].append(my_match.group(4))
+                    bjobs_dic['FROM_HOST'].append(my_match.group(5))
+                    bjobs_dic['EXEC_HOST'].append(my_match.group(6))
+                    bjobs_dic['JOB_NAME'].append(my_match.group(7))
+                    bjobs_dic['SUBMIT_TIME'].append(my_match.group(8))
+
+    return bjobs_dic
 
 
 def get_bhosts_load_info(command='bhosts -l'):
@@ -834,3 +878,37 @@ def get_lsf_unit_for_limits():
             break
 
     return lsf_unit_for_limits
+
+
+def switch_submit_time(submit_time, compare_second='', format=''):
+    """
+    Switch submit_time format from "%a %m/%d %H:%M" to specified format (or start_second by default).
+    """
+    new_submit_time = submit_time
+
+    if submit_time and (submit_time != 'N/A') and (submit_time != 'RESERVATION'):
+        # Switch submit_time to start_second.
+        current_year = datetime.date.today().year
+        submit_time_with_year = str(current_year) + ' ' + str(submit_time)
+        submit_time_with_year = re.sub('  ', ' ', submit_time_with_year)
+
+        try:
+            start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
+        except Exception:
+            print('*Error*: variable "submit_time_with_year", value is "' + str(submit_time_with_year) + '", not follow the time format "%Y %b %d %H:%M".')
+
+        if not compare_second:
+            compare_second = time.time()
+
+        if int(start_second) > int(compare_second):
+            current_year = int(datetime.date.today().year) - 1
+            submit_time_with_year = str(current_year) + ' ' + str(submit_time)
+            start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
+
+        # Switch start_second to expected time format.
+        if format:
+            new_submit_time = time.strftime(format, time.localtime(start_second))
+        else:
+            new_submit_time = start_second
+
+    return new_submit_time

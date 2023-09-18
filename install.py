@@ -34,7 +34,7 @@ def gen_shell_tools():
     """
     Generate shell scripts under <LSFMONITOR_INSTALL_PATH>/tools.
     """
-    tool_list = ['monitor/bin/bmonitor', 'monitor/bin/bsample', 'monitor/tools/check_issue_reason', 'monitor/tools/patch', 'monitor/tools/process_tracer', 'monitor/tools/seedb', 'monitor/tools/show_license_feature_usage']
+    tool_list = ['monitor/bin/bmonitor', 'monitor/bin/bsample', 'monitor/tools/akill', 'monitor/tools/check_issue_reason', 'monitor/tools/patch', 'monitor/tools/process_tracer', 'monitor/tools/seedb', 'monitor/tools/show_license_feature_usage']
 
     for tool_name in tool_list:
         tool = str(CWD) + '/' + str(tool_name)
@@ -60,7 +60,7 @@ export LSFMONITOR_INSTALL_PATH=""" + str(CWD) + """
 """ + str(ld_library_path_setting) + """
 
 # Execute """ + str(tool_name) + """.py.
-python3 $LSFMONITOR_INSTALL_PATH/""" + str(tool_name) + '.py $@')
+python3 $LSFMONITOR_INSTALL_PATH/""" + str(tool_name) + '.py "$@"')
 
             os.chmod(tool, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
         except Exception as error:
