@@ -352,7 +352,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.3.2'
+        version = 'V1.3.3'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -2017,7 +2017,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_begin_date_edit = QDateEdit(self.load_tab_frame0)
         self.load_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.load_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.load_tab_begin_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
         self.load_tab_begin_date_edit.setCalendarPopup(True)
         self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
 
@@ -2029,7 +2028,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_end_date_edit = QDateEdit(self.load_tab_frame0)
         self.load_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.load_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.load_tab_end_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
         self.load_tab_end_date_edit.setCalendarPopup(True)
         self.load_tab_end_date_edit.setDate(QDate.currentDate())
 
@@ -2306,7 +2304,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.utilization_tab_begin_date_edit = QDateEdit(self.utilization_tab_frame0)
         self.utilization_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.utilization_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.utilization_tab_begin_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
         self.utilization_tab_begin_date_edit.setCalendarPopup(True)
         self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
@@ -2318,7 +2315,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.utilization_tab_end_date_edit = QDateEdit(self.utilization_tab_frame0)
         self.utilization_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
         self.utilization_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.utilization_tab_end_date_edit.setMaximumDate(QDate.currentDate().addDays(0))
         self.utilization_tab_end_date_edit.setCalendarPopup(True)
         self.utilization_tab_end_date_edit.setDate(QDate.currentDate())
 
