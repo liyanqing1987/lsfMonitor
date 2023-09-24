@@ -352,7 +352,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.3.3'
+        version = 'V1.3.2'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -1282,6 +1282,22 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.hosts_tab_table.setColumnWidth(8, 100)
         self.hosts_tab_table.setColumnWidth(9, 75)
         self.hosts_tab_table.setColumnWidth(10, 75)
+
+        # Get LSF queue/host information.
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+        print('* [' + str(current_time) + '] Loading LSF hosts information, please wait a moment ...')
+
+        my_show_message = ShowMessage('Info', 'Loading LSF hosts information, please wait a moment ...')
+        my_show_message.start()
+
+        self.bhosts_dic = common_lsf.get_bhosts_info()
+        self.host_queue_dic = common_lsf.get_host_queue_info()
+        self.bhosts_load_dic = common_lsf.get_bhosts_load_info()
+        self.lshosts_dic = common_lsf.get_lshosts_info()
+        self.lsload_dic = common_lsf.get_lsload_info()
+
+        my_show_message.terminate()
 
         # Fill self.hosts_tab_table items.
         hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
