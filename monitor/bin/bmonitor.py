@@ -54,7 +54,7 @@ def check_tool():
     tool = common_lsf.get_tool_name()
 
     if tool == '':
-        print('*Error*: Not find any LSF or Openlava environment!')
+        common.print_error('*Error*: Not find any LSF or Openlava environment!')
         sys.exit(1)
 
 
@@ -93,7 +93,7 @@ def read_args():
         job_dic = common_lsf.get_bjobs_info(command)
 
         if not job_dic:
-            args.jobid = None
+            args.jobid = ''
 
     # Set default tab for args.feature.
     if args.feature and (not args.tab):
@@ -137,20 +137,15 @@ class MainWindow(QMainWindow):
         # Get LSF queue/host information.
         current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        print('* [' + str(current_time) + '] Loading LSF information, please wait a moment ...')
+        print('* [' + str(current_time) + '] Loading LSF host/queue information, please wait a moment ...')
 
-        my_show_message = ShowMessage('Info', 'Loading LSF information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading LSF host/queue information, please wait a moment ...')
         my_show_message.start()
 
         self.bhosts_dic = common_lsf.get_bhosts_info()
-        self.host_list = self.bhosts_dic['HOST_NAME']
         self.queues_dic = common_lsf.get_bqueues_info()
-        self.queue_list = self.queues_dic['QUEUE_NAME']
-        self.host_queue_dic = common_lsf.get_host_queue_info()
         self.queue_host_dic = common_lsf.get_queue_host_info()
-        self.bhosts_load_dic = common_lsf.get_bhosts_load_info()
         self.lshosts_dic = common_lsf.get_lshosts_info()
-        self.lsload_dic = common_lsf.get_lsload_info()
 
         my_show_message.terminate()
 
@@ -173,6 +168,7 @@ class MainWindow(QMainWindow):
         current_second = int(time.time())
 
         if current_second - self.license_dic_second <= 300:
+            common.print_warning('*Warning*: will not get license information repeatedly in 300 seconds.')
             return
 
         self.license_dic_second = current_second
@@ -200,7 +196,7 @@ class MainWindow(QMainWindow):
         my_show_message.terminate()
 
         if not self.license_dic:
-            print('*Warning*: Not find any valid license information.')
+            common.print_warning('*Warning*: Not find any valid license information.')
 
     def init_ui(self):
         """
@@ -272,17 +268,6 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu('File')
         file_menu.addAction(exit_action)
 
-        # Setup
-        fresh_action = QAction('Fresh', self)
-        fresh_action.triggered.connect(self.fresh)
-        self.periodic_fresh_timer = QTimer(self)
-        periodic_fresh_action = QAction('Periodic Fresh (5 min)', self, checkable=True)
-        periodic_fresh_action.triggered.connect(self.periodic_fresh)
-
-        setup_menu = menubar.addMenu('Setup')
-        setup_menu.addAction(fresh_action)
-        setup_menu.addAction(periodic_fresh_action)
-
         # Function
         check_pend_reason_action = QAction('Check Pend reason', self)
         check_pend_reason_action.triggered.connect(self.check_pend_reason)
@@ -306,26 +291,6 @@ class MainWindow(QMainWindow):
         help_menu = menubar.addMenu('Help')
         help_menu.addAction(version_action)
         help_menu.addAction(about_action)
-
-    def fresh(self):
-        """
-        Re-build the GUI with latest LSF status.
-        """
-        self.gen_jobs_tab_table()
-        self.gen_hosts_tab_table()
-        self.gen_queues_tab_table()
-        self.gen_license_tab_feature_table(self.license_dic)
-        self.gen_license_tab_expires_table(self.license_dic)
-
-    def periodic_fresh(self, state):
-        """
-        Fresh the GUI every 300 seconds.
-        """
-        if state:
-            self.periodic_fresh_timer.timeout.connect(self.fresh)
-            self.periodic_fresh_timer.start(300000)
-        else:
-            self.periodic_fresh_timer.stop()
 
     def check_pend_reason(self):
         """
@@ -352,7 +317,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.3.2'
+        version = 'V1.3.3'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -583,25 +548,23 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         Get job information with "bjobs -UF <job_id>", save the infomation into dict self.job_tab_current_job_dic.
         Update self.job_tab_frame1 and self.job_tab_frame3.
         """
-        self.job_tab_current_job = self.job_tab_job_line.text().strip()
-
-        print('* Checking job "' + str(self.job_tab_current_job) + '".')
-
-        # Initicalization
+        # Initicalization JOB tab.
         self.update_job_tab_frame1(init=True)
         self.update_job_tab_frame2(init=True)
         self.update_job_tab_frame3(init=True)
 
-        # Job name must be a string of numbers.
-        current_job = self.job_tab_current_job
+        # Get real jobid and check it.
+        self.job_tab_current_job = self.job_tab_job_line.text().strip()
 
-        if re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job):
-            my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
-            current_job = my_match.group(1)
-        else:
+        if not re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job):
             warning_message = '*Warning*: No valid job is specified!'
             self.gui_warning(warning_message)
             return
+
+        my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
+        current_job = my_match.group(1)
+
+        print('* Checking job "' + str(current_job) + '".')
 
         # Get job info
         print('* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
@@ -613,13 +576,15 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         my_show_message.terminate()
 
-        if self.job_tab_current_job_dic:
-            # Update the related frames with the job info.
-            self.update_job_tab_frame1()
-            self.update_job_tab_frame2()
-            self.update_job_tab_frame3()
-        else:
-            print('*Warning*: Not find job information for job "' + str(current_job) + '".')
+        if not self.job_tab_current_job_dic:
+            warning_message = '*Warning*: Not find job information for job "' + str(current_job) + '".'
+            self.gui_warning(warning_message)
+            return
+
+        # Update JOB tab with latest job info.
+        self.update_job_tab_frame1()
+        self.update_job_tab_frame2()
+        self.update_job_tab_frame3()
 
     def update_job_tab_frame1(self, init=False):
         """
@@ -1135,7 +1100,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_queue_combo.clear()
 
         if not queue_list:
-            queue_list = copy.deepcopy(self.queue_list)
+            queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
             queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -1148,7 +1113,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.jobs_tab_started_on_combo.clear()
 
         if not host_list:
-            host_list = copy.deepcopy(self.host_list)
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
             host_list.insert(0, 'ALL')
 
         for host in host_list:
@@ -1515,7 +1480,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         hosts_tab_specified_host_list = []
 
-        for host in self.host_list:
+        for host in self.bhosts_dic['HOST_NAME']:
             # Filter with specified_status.
             index = self.bhosts_dic['HOST_NAME'].index(host)
             status = self.bhosts_dic['STATUS'][index]
@@ -1574,7 +1539,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             njobs_num = self.hosts_tab_table.item(current_row, 5).text().strip()
 
             if item.column() == 0:
-                host_list = copy.deepcopy(self.host_list)
+                host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
                 host_list.remove(host)
                 host_list.insert(0, host)
                 self.set_load_tab_host_combo(host_list)
@@ -1586,7 +1551,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
                     self.set_jobs_tab_queue_combo()
 
-                    host_list = copy.deepcopy(self.host_list)
+                    host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
                     host_list.remove(host)
                     host_list.insert(0, host)
                     host_list.insert(1, 'ALL')
@@ -1605,7 +1570,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         status_list = ['ALL', ]
 
-        for host in self.host_list:
+        for host in self.bhosts_dic['HOST_NAME']:
             index = self.bhosts_dic['HOST_NAME'].index(host)
             status = self.bhosts_dic['STATUS'][index]
 
@@ -1621,7 +1586,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         """
         self.hosts_tab_queue_combo.clear()
 
-        queue_list = copy.deepcopy(self.queue_list)
+        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -1635,7 +1600,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         max_list = []
 
-        for host in self.host_list:
+        for host in self.bhosts_dic['HOST_NAME']:
             index = self.bhosts_dic['HOST_NAME'].index(host)
             max = self.bhosts_dic['MAX'][index]
 
@@ -1659,7 +1624,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         maxmem_list = []
 
-        for host in self.host_list:
+        for host in self.bhosts_dic['HOST_NAME']:
             index = self.lshosts_dic['HOST_NAME'].index(host)
             maxmem = self.lshosts_dic['maxmem'][index]
 
@@ -1741,14 +1706,17 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.queues_tab_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.queues_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
 
+        # Get LSF queue/host information.
+        self.queues_dic = common_lsf.get_bqueues_info()
+
         # Hide the vertical header
         self.queues_tab_table.verticalHeader().setVisible(False)
 
         # Fill self.queues_tab_table items.
         self.queues_tab_table.setRowCount(0)
-        self.queues_tab_table.setRowCount(len(self.queue_list)+1)
+        self.queues_tab_table.setRowCount(len(self.queues_dic['QUEUE_NAME'])+1)
 
-        queue_list = copy.deepcopy(self.queue_list)
+        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
         queue_list.append('ALL')
 
         pend_sum = 0
@@ -1841,7 +1809,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     if queue == 'ALL':
                         self.set_jobs_tab_queue_combo()
                     else:
-                        queue_list = copy.deepcopy(self.queue_list)
+                        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
                         queue_list.remove(queue)
                         queue_list.insert(0, queue)
                         queue_list.insert(1, 'ALL')
@@ -1858,7 +1826,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     if queue == 'ALL':
                         self.set_jobs_tab_queue_combo()
                     else:
-                        queue_list = copy.deepcopy(self.queue_list)
+                        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
                         queue_list.remove(queue)
                         queue_list.insert(0, queue)
                         queue_list.insert(1, 'ALL')
@@ -1867,6 +1835,9 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                     self.set_jobs_tab_started_on_combo()
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
+
+            # Update queue information first.
+            self.gen_queues_tab_table()
 
     def update_queue_tab_frame0(self, queue):
         """
@@ -2102,7 +2073,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.load_tab_host_combo.clear()
 
         if not host_list:
-            host_list = copy.deepcopy(self.host_list)
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
             host_list.insert(0, '')
 
         for host in host_list:
@@ -2113,6 +2084,11 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         Update self.load_tab_frame1 (ut information) and self.load_tab_frame2 (memory information).
         """
         specified_host = self.load_tab_host_combo.currentText().strip()
+
+        if not specified_host:
+            warning_message = '*Warning*: No host is specified.'
+            self.gui_warning(warning_message)
+            return
 
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
@@ -2378,7 +2354,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
         # "ALL" is used to select all queues/hosts.
         if not queue_list:
-            queue_list = copy.deepcopy(self.queue_list)
+            queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
             queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -2391,7 +2367,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.utilization_tab_host_combo.clear()
 
         if not host_list:
-            host_list = copy.deepcopy(self.host_list)
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
 
         for host in host_list:
             self.utilization_tab_host_combo.addCheckBoxItem(host)
@@ -2419,7 +2395,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
 
         if 'ALL' in selected_queue_dic.values():
-            selected_host_list = copy.deepcopy(self.host_list)
+            selected_host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
         else:
             for selected_queue in selected_queue_dic.values():
                 host_list = self.queue_host_dic[selected_queue]
@@ -2496,8 +2472,19 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Update figure.
         selected_host_dic = self.utilization_tab_host_combo.selectedItems()
         selected_host_list = list(selected_host_dic.values())
+
+        if not selected_host_list:
+            warning_message = '*Warning*: No queue/host is specified.'
+            self.gui_warning(warning_message)
+            return
+
         selected_resource_dic = self.utilization_tab_resource_combo.selectedItems()
         selected_resource_list = list(selected_resource_dic.values())
+
+        if not selected_resource_list:
+            warning_message = '*Warning*: No resource is specified.'
+            self.gui_warning(warning_message)
+            return
 
         if selected_host_list and selected_resource_list:
             current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -2724,19 +2711,23 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         # Get license information.
         self.get_license_dic()
 
-        if self.license_dic:
-            selected_license_server = self.license_tab_server_combo.currentText().strip()
-            selected_vendor_daemon = self.license_tab_vendor_combo.currentText().strip()
-            specified_license_feature_list = self.license_tab_feature_line.text().strip().split()
-            specified_license_user_list = self.license_tab_user_line.text().strip().split()
-            show_mode = self.license_tab_show_combo.currentText().strip()
+        if not self.license_dic:
+            warning_message = '*Warning*: Not find any license information.'
+            self.gui_warning(warning_message)
+            return
 
-            filter_license_dic_item = common_license.FilterLicenseDic()
-            filtered_license_dic = filter_license_dic_item.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, user_list=specified_license_user_list, show_mode=show_mode)
+        selected_license_server = self.license_tab_server_combo.currentText().strip()
+        selected_vendor_daemon = self.license_tab_vendor_combo.currentText().strip()
+        specified_license_feature_list = self.license_tab_feature_line.text().strip().split()
+        specified_license_user_list = self.license_tab_user_line.text().strip().split()
+        show_mode = self.license_tab_show_combo.currentText().strip()
 
-            # Update self.license_tab_feature_table and self.license_tab_expires_table.
-            self.gen_license_tab_feature_table(filtered_license_dic)
-            self.gen_license_tab_expires_table(filtered_license_dic)
+        filter_license_dic_item = common_license.FilterLicenseDic()
+        filtered_license_dic = filter_license_dic_item.run(license_dic=self.license_dic, server_list=[selected_license_server, ], vendor_list=[selected_vendor_daemon, ], feature_list=specified_license_feature_list, user_list=specified_license_user_list, show_mode=show_mode)
+
+        # Update self.license_tab_feature_table and self.license_tab_expires_table.
+        self.gen_license_tab_feature_table(filtered_license_dic)
+        self.gen_license_tab_expires_table(filtered_license_dic)
 
     def gen_license_tab_feature_table(self, license_dic):
         self.license_tab_feature_table.setShowGrid(True)
