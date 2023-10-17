@@ -2442,7 +2442,6 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                         else:
                             for (i, sample_date) in enumerate(data_dic['sample_date']):
                                 for selected_resource in selected_resource_list:
-
                                     if i == 0:
                                         utilization_dic.setdefault(selected_resource, {})
 
@@ -2527,12 +2526,28 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         color_list = ['ro-', 'bo-', 'yo-']
 
         for (i, selected_resource) in enumerate(utilization_dic.keys()):
-            utilization_list = list(utilization_dic[selected_resource].values())
             sample_date_list = []
+            utilization_list = []
 
-            for sample_date in utilization_dic[selected_resource].keys():
+            for (sample_date, utilization) in utilization_dic[selected_resource].items():
+                if not sample_date_list:
+                    sample_date_list.append(sample_date)
+                    utilization_list.append(utilization)
+                else:
+                    for j in range(len(sample_date_list)):
+                        if int(sample_date) > int(sample_date_list[j]):
+                            if j == len(sample_date_list)-1:
+                                sample_date_list.append(sample_date)
+                                utilization_list.append(utilization)
+                                break
+                        else:
+                            sample_date_list.insert(j, sample_date)
+                            utilization_list.insert(j, utilization)
+                            break
+
+            for (k, sample_date) in enumerate(sample_date_list):
                 sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d')
-                sample_date_list.append(sample_date)
+                sample_date_list[k] = sample_date
 
             axes.plot(sample_date_list, utilization_list, color_list[i], label=selected_resource)
 
