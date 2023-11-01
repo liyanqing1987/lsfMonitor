@@ -12,7 +12,7 @@ import argparse
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView, QDateEdit
 from PyQt5.QtGui import QBrush, QFont
-from PyQt5.QtCore import Qt, QTimer, QThread, QDate
+from PyQt5.QtCore import Qt, QThread, QDate
 
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
@@ -960,7 +960,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item.setFont(QFont('song', 9, QFont.Bold))
 
             if job_dic[job]['status'] == 'PEND':
-                item.setForeground(QBrush(Qt.red))
+                item.setBackground(QBrush(Qt.red))
 
             self.jobs_tab_table.setItem(i, j, item)
 
@@ -1025,7 +1025,7 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 self.jobs_tab_table.setItem(i, j, item)
 
                 if ((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value)):
-                    item.setForeground(QBrush(Qt.red))
+                    item.setBackground(QBrush(Qt.red))
 
             # Fill "Command" item.
             j = j+1
@@ -1269,13 +1269,20 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         self.hosts_tab_table.setRowCount(0)
         self.hosts_tab_table.setRowCount(len(hosts_tab_specified_host_list))
 
-        for i in range(len(hosts_tab_specified_host_list)):
-            host = hosts_tab_specified_host_list[i]
+        for (i, host) in enumerate(hosts_tab_specified_host_list):
+            fatal_error = False
 
             # Fill "Host" item.
             j = 0
             item = QTableWidgetItem(host)
             item.setFont(QFont('song', 9, QFont.Bold))
+
+            if host == 'lost_and_found':
+                fatal_error = True
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Status" item.
@@ -1285,17 +1292,26 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem(status)
 
             if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
-                item.setForeground(QBrush(Qt.red))
+                fatal_error = True
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Queue" item.
             j = j+1
+            queues = ''
 
             if host in self.host_queue_dic.keys():
                 queues = ' '.join(self.host_queue_dic[host])
-                item = QTableWidgetItem(queues)
-                self.hosts_tab_table.setItem(i, j, item)
+
+            item = QTableWidgetItem(queues)
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
+            self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "MAX" item.
             j = j+1
@@ -1308,6 +1324,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(max))
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Njobs" item.
@@ -1322,6 +1342,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(njobs))
             item.setFont(QFont('song', 9, QFont.Bold))
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Ut" item.
@@ -1342,8 +1366,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(ut))
 
-            if int(ut) > 90:
-                item.setForeground(QBrush(Qt.red))
+            if fatal_error or (int(ut) > 90):
+                item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
@@ -1367,6 +1391,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(maxmem)))
+
+            if fatal_error or (maxmem == 0):
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Mem" item.
@@ -1391,8 +1419,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(mem)))
 
-            if (maxmem and (float(mem)/float(maxmem) < 0.1)):
-                item.setForeground(QBrush(Qt.red))
+            if fatal_error or (maxmem and (float(mem)/float(maxmem) < 0.1)):
+                item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
@@ -1416,6 +1444,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(maxswp)))
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Swp" item.
@@ -1439,6 +1471,10 @@ lsfMonitor is an open source software for LSF information data-collection, data-
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(swp)))
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Tmp" item.
@@ -1463,8 +1499,8 @@ lsfMonitor is an open source software for LSF information data-collection, data-
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(float(tmp)))
 
-            if int(float(tmp)) == 0:
-                item.setForeground(QBrush(Qt.red))
+            if fatal_error or (int(float(tmp)) == 0):
+                item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
@@ -1503,17 +1539,20 @@ lsfMonitor is an open source software for LSF information data-collection, data-
                 continue
 
             # Filter with specified_maxmem.
-            index = self.lshosts_dic['HOST_NAME'].index(host)
-            maxmem = self.lshosts_dic['maxmem'][index]
-
-            if re.search(r'M', maxmem):
-                maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
-            elif re.search(r'G', maxmem):
-                maxmem = int(float(re.sub(r'G', '', maxmem)))
-            elif re.search(r'T', maxmem):
-                maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
-            else:
+            if host not in self.lshosts_dic['HOST_NAME']:
                 maxmem = 0
+            else:
+                index = self.lshosts_dic['HOST_NAME'].index(host)
+                maxmem = self.lshosts_dic['maxmem'][index]
+
+                if re.search(r'M', maxmem):
+                    maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
+                elif re.search(r'G', maxmem):
+                    maxmem = int(float(re.sub(r'G', '', maxmem)))
+                elif re.search(r'T', maxmem):
+                    maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
+                else:
+                    maxmem = 0
 
             specified_maxmem = re.sub(r'G', '', specified_maxmem)
 
@@ -1625,18 +1664,21 @@ lsfMonitor is an open source software for LSF information data-collection, data-
         maxmem_list = []
 
         for host in self.bhosts_dic['HOST_NAME']:
-            index = self.lshosts_dic['HOST_NAME'].index(host)
-            maxmem = self.lshosts_dic['maxmem'][index]
-
-            # Switch maxmem unit to "G".
-            if re.search(r'M', maxmem):
-                maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
-            elif re.search(r'G', maxmem):
-                maxmem = int(float(re.sub(r'G', '', maxmem)))
-            elif re.search(r'T', maxmem):
-                maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
-            else:
+            if host not in self.lshosts_dic['HOST_NAME']:
                 maxmem = 0
+            else:
+                index = self.lshosts_dic['HOST_NAME'].index(host)
+                maxmem = self.lshosts_dic['maxmem'][index]
+
+                # Switch maxmem unit to "G".
+                if re.search(r'M', maxmem):
+                    maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
+                elif re.search(r'G', maxmem):
+                    maxmem = int(float(re.sub(r'G', '', maxmem)))
+                elif re.search(r'T', maxmem):
+                    maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
+                else:
+                    maxmem = 0
 
             if maxmem not in maxmem_list:
                 maxmem_list.append(maxmem)
