@@ -54,18 +54,6 @@ def get_command_dict(command):
     return my_dic
 
 
-def get_bjobs_info(command='bjobs -u all -w'):
-    """
-    Get bjobs info with command 'bjobs'.
-    ====
-    JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
-    101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
-    ====
-    """
-    bjobs_dic = get_command_dict(command)
-    return bjobs_dic
-
-
 def get_bqueues_info(command='bqueues -w'):
     """
     Get bqueues info with command 'bqueues'.
@@ -757,8 +745,14 @@ def get_host_group_members(host_group_name):
         if re.search(r'No such user/host group', line):
             break
         elif re.match(r'^' + str(host_group_name) + ' .*$', line):
-            my_list = line.split()
-            host_list = my_list[1:]
+            line_list = line.split()
+
+            for (i, host) in enumerate(line_list):
+                if i >= 1:
+                    if host == '(':
+                        break
+                    else:
+                        host_list.append(host)
 
     return host_list
 
@@ -780,8 +774,14 @@ def get_user_group_members(user_group_name):
         line = line.strip()
 
         if re.match(r'^' + str(user_group_name) + ' .*$', line):
-            my_list = line.split()
-            user_list = my_list[1:]
+            line_list = line.split()
+
+            for (i, user) in enumerate(line_list):
+                if i >= 1:
+                    if user == '(':
+                        break
+                    else:
+                        user_list.append(user)
 
     return user_list
 
