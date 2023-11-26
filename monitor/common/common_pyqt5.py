@@ -1,5 +1,12 @@
+import re
+import datetime
+
 from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem
 from PyQt5.QtGui import QTextCursor
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
+from matplotlib.dates import num2date
 
 
 def center_window(window):
@@ -108,3 +115,98 @@ class QComboCheckBox(QComboBox):
         """
         super().clear()
         self.checkBoxList = []
+
+
+class FigureCanvasQTAgg(FigureCanvasQTAgg):
+    """
+    Generate a new figure canvas.
+    """
+    def __init__(self):
+        self.figure = Figure()
+        self.axes = None
+        super().__init__(self.figure)
+
+
+class NavigationToolbar2QT(NavigationToolbar2QT):
+    """
+    Enhancement for NavigationToolbar2QT, can get and show label value.
+    """
+    def __init__(self, canvas, parent, coordinates=True, x_is_date=True):
+        super().__init__(canvas, parent, coordinates)
+        self.x_is_date = x_is_date
+
+    @staticmethod
+    def bisection(event_xdata, xdata_list):
+        xdata = None
+        index = None
+        lower = 0
+        upper = len(xdata_list) - 1
+        bisection_index = (upper - lower) // 2
+
+        if event_xdata > xdata_list[upper]:
+            xdata = xdata_list[upper]
+            index = upper
+        elif (event_xdata < xdata_list[lower]) or (len(xdata_list) <= 2):
+            xdata = xdata_list[lower]
+            index = lower
+        elif event_xdata in xdata_list:
+            xdata = event_xdata
+            index = xdata_list.index(event_xdata)
+
+        while xdata is None:
+            if upper - lower == 1:
+                if event_xdata - xdata_list[lower] <= xdata_list[upper] - event_xdata:
+                    xdata = xdata_list[lower]
+                    index = lower
+                else:
+                    xdata = xdata_list[upper]
+                    index = upper
+
+                break
+
+            if event_xdata > xdata_list[bisection_index]:
+                lower = bisection_index
+            elif event_xdata < xdata_list[bisection_index]:
+                upper = bisection_index
+
+            bisection_index = (upper - lower) // 2 + lower
+
+        return (xdata, index)
+
+    def _mouse_event_to_message(self, event):
+        if event.inaxes and event.inaxes.get_navigate():
+            try:
+                if self.x_is_date:
+                    event_xdata = num2date(event.xdata).strftime('%Y,%m,%d,%H,%M,%S')
+                else:
+                    event_xdata = event.xdata
+            except (ValueError, OverflowError):
+                pass
+            else:
+                if self.x_is_date and (len(event_xdata.split(',')) == 6):
+                    (year, month, day, hour, minute, second) = event_xdata.split(',')
+                    event_xdata = datetime.datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
+
+                xdata_list = list(self.canvas.figure.gca().get_lines()[0].get_xdata())
+                (xdata, index) = self.bisection(event_xdata, sorted(xdata_list))
+
+                if xdata is not None:
+                    info_list = []
+
+                    for line in self.canvas.figure.gca().get_lines():
+                        label = line.get_label()
+                        ydata_string = line.get_ydata()
+                        ydata_list = list(ydata_string)
+                        ydata = ydata_list[index]
+
+                        info_list.append('%s=%s' % (label, ydata))
+
+                    info_string = '  '.join(info_list)
+
+                    if self.x_is_date:
+                        xdata_string = xdata.strftime('%Y-%m-%d %H:%M:%S')
+                        xdata_string = re.sub(r' 00:00:00', '', xdata_string)
+                        info_string = '[%s]\n%s' % (xdata_string, info_string)
+
+                    return info_string
+        return ''

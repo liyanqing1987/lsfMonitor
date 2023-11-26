@@ -153,12 +153,14 @@ class Sampling:
 
         if result == 'passed':
             queue_table_list = common_sqlite3.get_sql_table_list(queue_db_file, queue_db_conn)
+            bhosts_dic = common_lsf.get_bhosts_info()
+            queue_host_dic = common_lsf.get_queue_host_info()
             bqueues_dic = common_lsf.get_bqueues_info()
             queue_list = bqueues_dic['QUEUE_NAME']
             queue_list.append('ALL')
 
-            key_list = ['sample_second', 'sample_time', 'NJOBS', 'PEND', 'RUN', 'SUSP']
-            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+            key_list = ['sample_second', 'sample_time', 'TOTAL', 'NJOBS', 'PEND', 'RUN', 'SUSP']
+            key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
             for i in range(len(queue_list)):
                 queue = queue_list[i]
@@ -186,10 +188,23 @@ class Sampling:
                     common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, key_string, commit=False)
 
                 # Insert sql table value.
+                total_slots = 0
+
                 if queue == 'ALL':
-                    value_list = [self.sample_second, self.sample_time, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
+                    for max in bhosts_dic['MAX']:
+                        if re.match(r'^\d+$', max):
+                            total_slots += int(max)
+
+                    value_list = [self.sample_second, self.sample_time, total_slots, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
                 else:
-                    value_list = [self.sample_second, self.sample_time, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
+                    for queue_host in queue_host_dic[queue]:
+                        host_index = bhosts_dic['HOST_NAME'].index(queue_host)
+                        host_max = bhosts_dic['MAX'][host_index]
+
+                        if re.match(r'^\d+$', host_max):
+                            total_slots += int(host_max)
+
+                    value_list = [self.sample_second, self.sample_time, total_slots, bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
 
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, value_string, commit=False)
@@ -397,6 +412,15 @@ class Sampling:
                 for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
                     if (host_name == host) and re.match(r'^\d+$', bhosts_dic['NJOBS'][j]) and re.match(r'^\d+$', bhosts_dic['MAX'][j]) and (int(bhosts_dic['MAX'][j]) != 0):
                         slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
+
+                        if int(slot_utilization) > 100:
+                            common.print_warning('    *Warning*: for host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".')
+
+                            if bhosts_dic['STATUS'][j] == 'unavail':
+                                slot_utilization = 0.0
+                            else:
+                                slot_utilization = 100.0
+
                         break
 
                 # Get cpu_utilization.
@@ -412,25 +436,30 @@ class Sampling:
                     if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
                         # Get maxmem with MB.
                         maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
-                        maxmem = maxmem_match.group(1)
+                        maxmem = float(maxmem_match.group(1))
                         maxmem_unit = maxmem_match.group(3)
 
                         if maxmem_unit == 'G':
-                            maxmem = float(maxmem)*1024
+                            maxmem = maxmem*1024
                         elif maxmem_unit == 'T':
-                            maxmem = float(maxmem)*1024*1024
+                            maxmem = maxmem*1024*1024
 
                         # Get mem with MB.
                         mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
-                        mem = mem_match.group(1)
+                        mem = float(mem_match.group(1))
                         mem_unit = mem_match.group(3)
 
                         if mem_unit == 'G':
-                            mem = float(mem)*1024
+                            mem = mem*1024
                         elif mem_unit == 'T':
-                            mem = float(mem)*1024*1024
+                            mem = mem*1024*1024
 
                         mem_utilization = round((maxmem-mem)*100/maxmem, 1)
+
+                        if int(mem_utilization) > 100:
+                            common.print_warning('    *Warning*: for host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".')
+                            mem_utilization = 100.0
+
                         break
 
                 # Insert sql table value.
@@ -481,6 +510,18 @@ class Sampling:
                     slot_avg_utilization = round(slot_utilization_sum/len(utilization_db_data_dic['slot']), 1)
                     cpu_avg_utilization = round(cpu_utilization_sum/len(utilization_db_data_dic['slot']), 1)
                     mem_avg_utilization = round(mem_utilization_sum/len(utilization_db_data_dic['slot']), 1)
+
+                    if int(slot_avg_utilization) > 100:
+                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".')
+                        slot_avg_utilization = 100.0
+
+                    if int(cpu_avg_utilization) > 100:
+                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".')
+                        cpu_avg_utilization = 100.0
+
+                    if int(mem_avg_utilization) > 100:
+                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".')
+                        mem_avg_utilization = 100.0
 
                     utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}
 

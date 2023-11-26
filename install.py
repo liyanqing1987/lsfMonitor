@@ -92,7 +92,7 @@ db_path = "''' + str(db_path) + '''"
 lmstat_path = "''' + str(lmstat_path) + '''"
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
-lmstat_bsub_command = "bsub -q normal -Is"
+lmstat_bsub_command = ""
 ''')
 
             os.chmod(config_file, stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
