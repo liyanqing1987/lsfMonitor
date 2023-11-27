@@ -833,7 +833,7 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.jobs_tab_status_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
-        self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
+        self.set_jobs_tab_status_combo()
 
         # "Queue" item.
         jobs_tab_queue_label = QLabel('Queue', self.jobs_tab_frame0)
@@ -848,8 +848,8 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_started_on_label.setStyleSheet("font-weight: bold;")
         jobs_tab_started_on_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.jobs_tab_started_on_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
-        self.set_jobs_tab_started_on_combo()
+        self.jobs_tab_host_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
+        self.set_jobs_tab_host_combo()
 
         # "User" item.
         jobs_tab_user_label = QLabel('User', self.jobs_tab_frame0)
@@ -872,7 +872,7 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_frame0_grid.addWidget(jobs_tab_queue_label, 0, 2)
         jobs_tab_frame0_grid.addWidget(self.jobs_tab_queue_combo, 0, 3)
         jobs_tab_frame0_grid.addWidget(jobs_tab_started_on_label, 0, 4)
-        jobs_tab_frame0_grid.addWidget(self.jobs_tab_started_on_combo, 0, 5)
+        jobs_tab_frame0_grid.addWidget(self.jobs_tab_host_combo, 0, 5)
         jobs_tab_frame0_grid.addWidget(jobs_tab_user_label, 0, 6)
         jobs_tab_frame0_grid.addWidget(self.jobs_tab_user_line, 0, 7)
         jobs_tab_frame0_grid.addWidget(jobs_tab_check_button, 0, 8)
@@ -935,7 +935,7 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -a'
 
         # Get specified host related jobs.
-        specified_host_list = self.jobs_tab_started_on_combo.currentText().strip().split()
+        specified_host_list = self.jobs_tab_host_combo.currentText().strip().split()
 
         if (len(specified_host_list) == 1) and (specified_host_list[0] != 'ALL'):
             command = str(command) + ' -m ' + str(specified_host_list[0])
@@ -1000,7 +1000,7 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
 
-            if job_dic[job]['status'] == 'PEND':
+            if (job_dic[job]['status'] == 'PEND') or (job_dic[job]['status'] == 'EXIT'):
                 item.setBackground(QBrush(Qt.red))
 
             self.jobs_tab_table.setItem(i, j, item)
@@ -1125,11 +1125,14 @@ Please contact with liyanqing1987@163.com with any question."""
                     self.my_check_issue_reason = CheckIssueReason(job=job, issue='FAIL')
                     self.my_check_issue_reason.start()
 
-    def set_jobs_tab_status_combo(self, status_list):
+    def set_jobs_tab_status_combo(self, status_list=[]):
         """
         Set (initialize) self.jobs_tab_status_combo.
         """
         self.jobs_tab_status_combo.clear()
+
+        if not status_list:
+            status_list = ['RUN', 'PEND', 'DONE', 'EXIT', 'ALL']
 
         for status in status_list:
             self.jobs_tab_status_combo.addCheckBoxItem(status)
@@ -1160,23 +1163,23 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
                 break
 
-    def set_jobs_tab_started_on_combo(self, host_list=[]):
+    def set_jobs_tab_host_combo(self, host_list=[]):
         """
-        Set (initialize) self.jobs_tab_started_on_combo.
+        Set (initialize) self.jobs_tab_host_combo.
         """
-        self.jobs_tab_started_on_combo.clear()
+        self.jobs_tab_host_combo.clear()
 
         if not host_list:
             host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
             host_list.insert(0, 'ALL')
 
         for host in host_list:
-            self.jobs_tab_started_on_combo.addCheckBoxItem(host)
+            self.jobs_tab_host_combo.addCheckBoxItem(host)
 
         # Set "ALL" as checked status.
-        for (i, qBox) in enumerate(self.jobs_tab_started_on_combo.checkBoxList):
+        for (i, qBox) in enumerate(self.jobs_tab_host_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
-                self.jobs_tab_started_on_combo.checkBoxList[i].setChecked(True)
+                self.jobs_tab_host_combo.checkBoxList[i].setChecked(True)
                 break
 # For jobs TAB (end) #
 
@@ -1674,19 +1677,18 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.main_tab.setCurrentWidget(self.load_tab)
             elif item.column() == 4:
                 if int(njobs_num) > 0:
-                    self.jobs_tab_user_line.setText('')
-                    self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
+                    self.set_jobs_tab_status_combo()
                     self.set_jobs_tab_queue_combo()
+                    self.set_jobs_tab_host_combo()
 
-                    host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-                    host_list.remove(host)
-                    host_list.insert(0, host)
-                    host_list.insert(1, 'ALL')
-                    self.set_jobs_tab_started_on_combo(host_list)
+                    for (i, qBox) in enumerate(self.jobs_tab_host_combo.checkBoxList):
+                        if qBox.text() == host:
+                            self.jobs_tab_host_combo.checkBoxList[i].setChecked(True)
+                        else:
+                            self.jobs_tab_host_combo.checkBoxList[i].setChecked(False)
 
+                    self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
-                    self.main_tab.setCurrentWidget(self.jobs_tab)
-
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
     def set_hosts_tab_status_combo(self):
@@ -2024,38 +2026,39 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.update_queues_tab_frame2(queue)
             elif item.column() == 2:
                 if (pend_num != '') and (int(pend_num) > 0):
+                    self.set_jobs_tab_status_combo()
+
+                    for (i, qBox) in enumerate(self.jobs_tab_status_combo.checkBoxList):
+                        if qBox.text() == 'PEND':
+                            self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
+                        else:
+                            self.jobs_tab_status_combo.checkBoxList[i].setChecked(False)
+
+                    self.set_jobs_tab_queue_combo()
+
+                    for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
+                        if qBox.text() == queue:
+                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
+                        else:
+                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(False)
+
+                    self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
-                    self.set_jobs_tab_status_combo(['PEND', 'RUN', 'DONE', 'EXIT', 'ALL'])
-
-                    if queue == 'ALL':
-                        self.set_jobs_tab_queue_combo()
-                    else:
-                        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
-                        queue_list.sort()
-                        queue_list.remove(queue)
-                        queue_list.insert(0, queue)
-                        queue_list.insert(1, 'ALL')
-                        self.set_jobs_tab_queue_combo(queue_list)
-
-                    self.set_jobs_tab_started_on_combo()
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
             elif item.column() == 3:
                 if (run_num != '') and (int(run_num) > 0):
+                    self.set_jobs_tab_status_combo()
+                    self.set_jobs_tab_queue_combo()
+
+                    for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
+                        if qBox.text() == queue:
+                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
+                        else:
+                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(False)
+
+                    self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
-                    self.set_jobs_tab_status_combo(['RUN', 'PEND', 'DONE', 'EXIT', 'ALL'])
-
-                    if queue == 'ALL':
-                        self.set_jobs_tab_queue_combo()
-                    else:
-                        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
-                        queue_list.sort()
-                        queue_list.remove(queue)
-                        queue_list.insert(0, queue)
-                        queue_list.insert(1, 'ALL')
-                        self.set_jobs_tab_queue_combo(queue_list)
-
-                    self.set_jobs_tab_started_on_combo()
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
@@ -3056,6 +3059,7 @@ Please contact with liyanqing1987@163.com with any question."""
             axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=1, markersize=2)
 
             if self.enable_utilization_detail:
+                time.sleep(0.1)
                 my_show_message.terminate()
 
         axes.legend(loc='upper right')
