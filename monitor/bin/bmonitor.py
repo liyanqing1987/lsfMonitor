@@ -2768,7 +2768,9 @@ Please contact with liyanqing1987@163.com with any question."""
         for queue in queue_utilization_dic.keys():
             for resource in self.utilization_tab_resource_list:
                 utilization_list = queue_utilization_dic[queue][resource]
-                queue_utilization_dic[queue][resource] = round((sum(utilization_list)/len(utilization_list)), 1)
+
+                if utilization_list:
+                    queue_utilization_dic[queue][resource] = round((sum(utilization_list)/len(utilization_list)), 1)
 
         my_show_message.terminate()
 
