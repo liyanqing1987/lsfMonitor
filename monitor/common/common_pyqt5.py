@@ -143,33 +143,34 @@ class NavigationToolbar2QT(NavigationToolbar2QT):
         upper = len(xdata_list) - 1
         bisection_index = (upper - lower) // 2
 
-        if event_xdata > xdata_list[upper]:
-            xdata = xdata_list[upper]
-            index = upper
-        elif (event_xdata < xdata_list[lower]) or (len(xdata_list) <= 2):
-            xdata = xdata_list[lower]
-            index = lower
-        elif event_xdata in xdata_list:
-            xdata = event_xdata
-            index = xdata_list.index(event_xdata)
+        if xdata_list:
+            if event_xdata > xdata_list[upper]:
+                xdata = xdata_list[upper]
+                index = upper
+            elif (event_xdata < xdata_list[lower]) or (len(xdata_list) <= 2):
+                xdata = xdata_list[lower]
+                index = lower
+            elif event_xdata in xdata_list:
+                xdata = event_xdata
+                index = xdata_list.index(event_xdata)
 
-        while xdata is None:
-            if upper - lower == 1:
-                if event_xdata - xdata_list[lower] <= xdata_list[upper] - event_xdata:
-                    xdata = xdata_list[lower]
-                    index = lower
-                else:
-                    xdata = xdata_list[upper]
-                    index = upper
+            while xdata is None:
+                if upper - lower == 1:
+                    if event_xdata - xdata_list[lower] <= xdata_list[upper] - event_xdata:
+                        xdata = xdata_list[lower]
+                        index = lower
+                    else:
+                        xdata = xdata_list[upper]
+                        index = upper
 
-                break
+                    break
 
-            if event_xdata > xdata_list[bisection_index]:
-                lower = bisection_index
-            elif event_xdata < xdata_list[bisection_index]:
-                upper = bisection_index
+                if event_xdata > xdata_list[bisection_index]:
+                    lower = bisection_index
+                elif event_xdata < xdata_list[bisection_index]:
+                    upper = bisection_index
 
-            bisection_index = (upper - lower) // 2 + lower
+                bisection_index = (upper - lower) // 2 + lower
 
         return (xdata, index)
 
