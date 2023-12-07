@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
 
         self.lsf_unit_for_limits = common_lsf.get_lsf_unit_for_limits()
 
-        # Enable detail information on QUEUE/UTILIZATION table.
+        # Enable detail information on QUEUE/UTILIZATION tab.
         self.enable_queue_detail = False
         self.enable_utilization_detail = False
 
@@ -138,6 +138,7 @@ class MainWindow(QMainWindow):
         self.queue_host_dic = common_lsf.get_queue_host_info()
         self.lshosts_dic = common_lsf.get_lshosts_info()
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         # Get license information.
@@ -180,10 +181,8 @@ class MainWindow(QMainWindow):
                 my_get_license_info = common_license.GetLicenseInfo(bsub_command=config.lmstat_bsub_command)
 
             self.license_dic = my_get_license_info.get_license_info()
-        else:
-            time.sleep(0.01)
 
-        # Print loading license informaiton message with GUI. (END)
+        time.sleep(0.01)
         my_show_message.terminate()
 
         if not self.license_dic:
@@ -230,6 +229,8 @@ class MainWindow(QMainWindow):
         # Show main window
         self.setWindowTitle('lsfMonitor')
         self.resize(1200, 610)
+        self.setWindowTitle('lsfMonitor')
+        self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)
 
     def switch_tab(self, specified_tab):
@@ -253,11 +254,41 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
 
         # File
+        export_jobs_table_action = QAction('Export jobs table', self)
+        export_jobs_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_jobs_table_action.triggered.connect(self.export_jobs_table)
+
+        export_hosts_table_action = QAction('Export hosts table', self)
+        export_hosts_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_hosts_table_action.triggered.connect(self.export_hosts_table)
+
+        export_queues_table_action = QAction('Export queues table', self)
+        export_queues_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_queues_table_action.triggered.connect(self.export_queues_table)
+
+        export_utilization_table_action = QAction('Export utilization table', self)
+        export_utilization_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_utilization_table_action.triggered.connect(self.export_utilization_table)
+
+        export_license_feature_table_action = QAction('Export license feature table', self)
+        export_license_feature_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_license_feature_table_action.triggered.connect(self.export_license_feature_table)
+
+        export_license_expires_table_action = QAction('Export license expires table', self)
+        export_license_expires_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_license_expires_table_action.triggered.connect(self.export_license_expires_table)
+
         exit_action = QAction('Exit', self)
         exit_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/exit.png'))
         exit_action.triggered.connect(qApp.quit)
 
         file_menu = menubar.addMenu('File')
+        file_menu.addAction(export_jobs_table_action)
+        file_menu.addAction(export_hosts_table_action)
+        file_menu.addAction(export_queues_table_action)
+        file_menu.addAction(export_utilization_table_action)
+        file_menu.addAction(export_license_feature_table_action)
+        file_menu.addAction(export_license_expires_table_action)
         file_menu.addAction(exit_action)
 
         # Setup
@@ -347,7 +378,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.4'
+        version = 'V1.4.1'
         QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
 
     def show_about(self):
@@ -602,6 +633,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         if not self.job_tab_current_job_dic:
@@ -787,7 +819,8 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.set_title('memory usage for job "' + str(self.job_tab_current_job) + '"')
         axes.set_xlabel('Runtime (Minutes)')
         axes.set_ylabel('Memory Usage (G)')
-        axes.plot(runtime_list, mem_list, 'go-', label='MEM', linewidth=1, markersize=2)
+        axes.plot(runtime_list, mem_list, 'go-', label='MEM', linewidth=0.1, markersize=0.1)
+        axes.fill_between(runtime_list, mem_list, color='green', alpha=0.5)
         axes.legend(loc='upper right')
         axes.grid()
         self.job_tab_mem_canvas.draw()
@@ -895,7 +928,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_table.setSortingEnabled(True)
         self.jobs_tab_table.setColumnCount(0)
         self.jobs_tab_table.setColumnCount(11)
-        self.jobs_tab_table.setHorizontalHeaderLabels(['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command'])
+        self.jobs_tab_table_title_list = ['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command']
+        self.jobs_tab_table.setHorizontalHeaderLabels(self.jobs_tab_table_title_list)
 
         self.jobs_tab_table.setColumnWidth(0, 80)
         self.jobs_tab_table.setColumnWidth(1, 120)
@@ -950,6 +984,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         job_dic = common_lsf.get_bjobs_uf_info(command)
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         # Filter job_dic.
@@ -1293,7 +1328,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_table.setSortingEnabled(True)
         self.hosts_tab_table.setColumnCount(0)
         self.hosts_tab_table.setColumnCount(11)
-        self.hosts_tab_table.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'Mem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)'])
+        self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'Mem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
+        self.hosts_tab_table.setHorizontalHeaderLabels(self.hosts_tab_table_title_list)
 
         self.hosts_tab_table.setColumnWidth(0, 150)
         self.hosts_tab_table.setColumnWidth(1, 90)
@@ -1321,6 +1357,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.lshosts_dic = common_lsf.get_lshosts_info()
         self.lsload_dic = common_lsf.get_lsload_info()
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         # Fill self.hosts_tab_table items.
@@ -1863,7 +1900,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_table.setShowGrid(True)
         self.queues_tab_table.setColumnCount(0)
         self.queues_tab_table.setColumnCount(4)
-        self.queues_tab_table.setHorizontalHeaderLabels(['QUEUE', 'SLOTS', 'PEND', 'RUN'])
+        self.queues_tab_table_title_list = ['QUEUE', 'SLOTS', 'PEND', 'RUN']
+        self.queues_tab_table.setHorizontalHeaderLabels(self.queues_tab_table_title_list)
 
         self.queues_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.queues_tab_table.setColumnWidth(1, 60)
@@ -2188,9 +2226,9 @@ Please contact with liyanqing1987@163.com with any question."""
             axes.set_xlabel('Sample Date')
 
         axes.set_ylabel('Num')
-        axes.plot(date_list, total_list, 'bo-', label='SLOTS', linewidth=1, markersize=2)
-        axes.plot(date_list, run_list, 'go-', label='RUN', linewidth=1, markersize=2)
-        axes.plot(date_list, pend_list, 'ro-', label='PEND', linewidth=1, markersize=2)
+        axes.plot(date_list, total_list, 'bo-', label='SLOTS', linewidth=1, markersize=1)
+        axes.plot(date_list, run_list, 'go-', label='RUN', linewidth=1, markersize=1)
+        axes.plot(date_list, pend_list, 'ro-', label='PEND', linewidth=1, markersize=1)
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
@@ -2349,6 +2387,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         if sample_time_list:
@@ -2441,7 +2480,8 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.set_title('ut curve for host "' + str(specified_host) + '"')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Cpu Utilization (%)')
-        axes.plot(sample_time_list, ut_list, 'ro-', label='CPU', linewidth=1, markersize=2)
+        axes.plot(sample_time_list, ut_list, 'ro-', label='CPU', linewidth=0.1, markersize=0.1)
+        axes.fill_between(sample_time_list, ut_list, color='red', alpha=0.5)
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
@@ -2467,7 +2507,8 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.set_title('available mem curve for host "' + str(specified_host) + '"')
         axes.set_xlabel('Sample Time')
         axes.set_ylabel('Available Mem (G)')
-        axes.plot(sample_time_list, mem_list, 'go-', label='MEM', linewidth=1, markersize=2)
+        axes.plot(sample_time_list, mem_list, 'go-', label='MEM', linewidth=0.1, markersize=0.1)
+        axes.fill_between(sample_time_list, mem_list, color='green', alpha=0.5)
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
@@ -2573,7 +2614,7 @@ Please contact with liyanqing1987@163.com with any question."""
         # Export button.
         utilization_tab_export_button = QPushButton('Export', self.utilization_tab_frame0)
         utilization_tab_export_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
-        utilization_tab_export_button.clicked.connect(self.export_utilization_info)
+        utilization_tab_export_button.clicked.connect(self.export_utilization_table)
 
         # self.utilization_tab_frame0 - Grid
         utilization_tab_frame0_grid = QGridLayout()
@@ -2772,6 +2813,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 if utilization_list:
                     queue_utilization_dic[queue][resource] = round((sum(utilization_list)/len(utilization_list)), 1)
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         return queue_utilization_dic
@@ -2855,6 +2897,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 utilization_list = list(utilization_dic[selected_resource][sample_date].values())
                 utilization_dic[selected_resource][sample_date] = round((sum(utilization_list)/len(utilization_list)), 1)
 
+        time.sleep(0.01)
         my_show_message.terminate()
 
         return utilization_dic
@@ -2863,14 +2906,13 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Generte self.utilization_tab_table.
         """
-        self.utilization_tab_table_title_list = ['Queue', 'slot (%)', 'cpu (%)', 'mem (%)']
-
         self.utilization_tab_table.setShowGrid(True)
         self.utilization_tab_table.setSortingEnabled(True)
         self.utilization_tab_table.setColumnCount(0)
         self.utilization_tab_table.setColumnCount(4)
         self.utilization_tab_table.setRowCount(0)
         self.utilization_tab_table.setRowCount(len(queue_utilization_dic))
+        self.utilization_tab_table_title_list = ['Queue', 'slot (%)', 'cpu (%)', 'mem (%)']
         self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
         self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.utilization_tab_table.setColumnWidth(1, 70)
@@ -2893,32 +2935,6 @@ Please contact with liyanqing1987@163.com with any question."""
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, queue_utilization_dic[queue][resource])
                     self.utilization_tab_table.setItem(row, i+1, item)
-
-    def export_utilization_info(self):
-        """
-        Export self.utilization_tab_table into an Excel.
-        """
-        (utilization_info_file, file_type) = QFileDialog.getSaveFileName(self, 'Export utilization info', './lsf_queue_utilization.xlsx', 'Excel (*.xlsx)')
-
-        if utilization_info_file:
-            # Get self.utilization_tab_label content.
-            utilization_tab_table_list = []
-            utilization_tab_table_list.append(self.utilization_tab_table_title_list)
-
-            for row in range(self.utilization_tab_table.rowCount()):
-                row_list = []
-
-                for column in range(self.utilization_tab_table.columnCount()):
-                    row_list.append(self.utilization_tab_table.item(row, column).text())
-
-                utilization_tab_table_list.append(row_list)
-
-            # Write excel
-            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-            print('* [' + str(current_time) + '] Writing utilization info file "' + str(utilization_info_file) + '" ...')
-
-            common.write_excel(excel_file=utilization_info_file, contents_list=utilization_tab_table_list, specified_sheet_name='utilization_info')
 
     def gen_utilization_tab_frame1(self):
         """
@@ -3058,10 +3074,10 @@ Please contact with liyanqing1987@163.com with any question."""
             elif selected_resource == 'mem':
                 color = 'go-'
 
-            axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=1, markersize=2)
+            axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=1, markersize=1)
 
             if self.enable_utilization_detail:
-                time.sleep(0.1)
+                time.sleep(0.01)
                 my_show_message.terminate()
 
         axes.legend(loc='upper right')
@@ -3285,7 +3301,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.license_tab_feature_table.setSortingEnabled(True)
         self.license_tab_feature_table.setColumnCount(0)
         self.license_tab_feature_table.setColumnCount(5)
-        self.license_tab_feature_table.setHorizontalHeaderLabels(['Server', 'Vendor', 'Feature', 'Issued', 'In_Use'])
+        self.license_tab_feature_table_title_list = ['Server', 'Vendor', 'Feature', 'Issued', 'In_Use']
+        self.license_tab_feature_table.setHorizontalHeaderLabels(self.license_tab_feature_table_title_list)
 
         self.license_tab_feature_table.setColumnWidth(0, 160)
         self.license_tab_feature_table.setColumnWidth(1, 80)
@@ -3371,7 +3388,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.license_tab_expires_table.setSortingEnabled(True)
         self.license_tab_expires_table.setColumnCount(0)
         self.license_tab_expires_table.setColumnCount(4)
-        self.license_tab_expires_table.setHorizontalHeaderLabels(['License Server', 'Feature', 'Num', 'Expires'])
+        self.license_tab_expires_table_title_list = ['License Server', 'Feature', 'Num', 'Expires']
+        self.license_tab_expires_table.setHorizontalHeaderLabels(self.license_tab_expires_table_title_list)
 
         self.license_tab_expires_table.setColumnWidth(0, 160)
         self.license_tab_expires_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -3424,6 +3442,58 @@ Please contact with liyanqing1987@163.com with any question."""
                             item.setForeground(QBrush(Qt.red))
                         self.license_tab_expires_table.setItem(row, 3, item)
 # For license TAB (end) #
+
+# Export table (start) #
+    def export_jobs_table(self):
+        self.export_table('jobs', self.jobs_tab_table, self.jobs_tab_table_title_list)
+
+    def export_hosts_table(self):
+        self.export_table('hosts', self.hosts_tab_table, self.hosts_tab_table_title_list)
+
+    def export_queues_table(self):
+        self.export_table('queues', self.queues_tab_table, self.queues_tab_table_title_list)
+
+    def export_utilization_table(self):
+        self.export_table('utilization', self.utilization_tab_table, self.utilization_tab_table_title_list)
+
+    def export_license_feature_table(self):
+        self.export_table('license_feature', self.license_tab_feature_table, self.license_tab_feature_table_title_list)
+
+    def export_license_expires_table(self):
+        self.export_table('license_expires', self.license_tab_expires_table, self.license_tab_expires_table_title_list)
+
+    def export_table(self, table_type, table_item, title_list):
+        """
+        Export specified table info into an Excel.
+        """
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        current_time_string = re.sub('-', '', current_time)
+        current_time_string = re.sub(':', '', current_time_string)
+        current_time_string = re.sub(' ', '_', current_time_string)
+        default_output_file = './lsfMonitor_' + str(table_type) + '_' + str(current_time_string) + '.xlsx'
+        (output_file, output_file_type) = QFileDialog.getSaveFileName(self, 'Export ' + str(table_type) + ' table', default_output_file, 'Excel (*.xlsx)')
+
+        if output_file:
+            # Get table content.
+            table_info_list = []
+            table_info_list.append(title_list)
+
+            for row in range(table_item.rowCount()):
+                row_list = []
+
+                for column in range(table_item.columnCount()):
+                    if table_item.item(row, column):
+                        row_list.append(table_item.item(row, column).text())
+                    else:
+                        row_list.append('')
+
+                table_info_list.append(row_list)
+
+            # Write excel
+            print('* [' + str(current_time) + '] Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...')
+
+            common.write_excel(excel_file=output_file, contents_list=table_info_list, specified_sheet_name=table_type)
+# Export table (end) #
 
     def close_event(self, QCloseEvent):
         """

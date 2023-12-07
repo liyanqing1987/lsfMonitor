@@ -79,7 +79,10 @@ def write_excel(excel_file, contents_list, specified_sheet_name='default'):
             column_width = len(str(content_string)) * 256
 
             if column_width > worksheet.col(column).width:
-                worksheet.col(column).width = column_width
+                if column_width > 65536:
+                    column_width = 65536
+                else:
+                    worksheet.col(column).width = column_width
 
     # save excel
     workbook.save(excel_file)
