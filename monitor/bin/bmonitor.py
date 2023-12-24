@@ -2222,13 +2222,20 @@ Please contact with liyanqing1987@163.com with any question."""
 
         if self.enable_queue_detail:
             axes.set_xlabel('Sample Time')
+            expected_linewidth = 0.1
+            expected_markersize = 0.1
         else:
             axes.set_xlabel('Sample Date')
+            expected_linewidth = 1
+            expected_markersize = 1
 
         axes.set_ylabel('Num')
-        axes.plot(date_list, total_list, 'bo-', label='SLOTS', linewidth=1, markersize=1)
-        axes.plot(date_list, run_list, 'go-', label='RUN', linewidth=1, markersize=1)
-        axes.plot(date_list, pend_list, 'ro-', label='PEND', linewidth=1, markersize=1)
+        axes.plot(date_list, total_list, 'bo-', label='SLOTS', linewidth=expected_linewidth, markersize=expected_markersize)
+        axes.fill_between(date_list, total_list, color='lightblue', alpha=0.3)
+        axes.plot(date_list, run_list, 'go-', label='RUN', linewidth=expected_linewidth, markersize=expected_markersize)
+        axes.fill_between(date_list, run_list, color='green', alpha=0.3)
+        axes.plot(date_list, pend_list, 'ro-', label='PEND', linewidth=expected_linewidth, markersize=expected_markersize)
+        axes.fill_between(date_list, pend_list, color='red', alpha=0.5)
         axes.legend(loc='upper right')
         axes.tick_params(axis='x', rotation=15)
         axes.grid()
@@ -3013,7 +3020,12 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.set_ylabel('Utilization (%)')
 
         # axes.plot (sample_date_list / utilization_list)
-        for (i, selected_resource) in enumerate(utilization_dic.keys()):
+        selected_resource_list = ['slot', 'mem', 'cpu']
+
+        for selected_resource in selected_resource_list:
+            if selected_resource not in utilization_dic:
+                continue
+
             if self.enable_utilization_detail:
                 current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -3062,19 +3074,30 @@ Please contact with liyanqing1987@163.com with any question."""
             for (k, sample_date) in enumerate(sample_date_list):
                 if self.enable_utilization_detail:
                     sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d_%H%M%S')
+                    expected_linewidth = 0.1
+                    expected_markersize = 0.1
                 else:
                     sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d')
+                    expected_linewidth = 1
+                    expected_markersize = 1
 
                 sample_date_list[k] = sample_date
 
             if selected_resource == 'slot':
                 color = 'bo-'
+                fill_color = 'lightblue'
+                fill_alpha = 0.3
             elif selected_resource == 'cpu':
                 color = 'ro-'
+                fill_color = 'red'
+                fill_alpha = 0.5
             elif selected_resource == 'mem':
                 color = 'go-'
+                fill_color = 'green'
+                fill_alpha = 0.3
 
-            axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=1, markersize=1)
+            axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=expected_linewidth, markersize=expected_markersize)
+            axes.fill_between(sample_date_list, utilization_list, color=fill_color, alpha=fill_alpha)
 
             if self.enable_utilization_detail:
                 time.sleep(0.01)
