@@ -50,7 +50,7 @@ def check_tool():
     tool = common_lsf.get_tool_name()
 
     if tool == '':
-        common.print_error('*Error*: Not find any LSF or Openlava environment!')
+        common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
         sys.exit(1)
 
 
@@ -103,7 +103,7 @@ def read_args():
     if not args.tab:
         args.tab = 'JOBS'
 
-    return (args.jobid, args.user, args.feature, args.tab, args.disable_license)
+    return args.jobid, args.user, args.feature, args.tab, args.disable_license
 
 
 class MainWindow(QMainWindow):
@@ -125,21 +125,23 @@ class MainWindow(QMainWindow):
         self.enable_queue_detail = False
         self.enable_utilization_detail = False
 
-        # Get LSF queue/host information.
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        # Init LSF information related variables.
+        self.bhosts_dic = {}
+        self.lsload_dic = {}
+        self.queues_dic = {}
+        self.lshosts_dic = {}
+        self.queue_host_dic = {}
+        self.host_queue_dic = {}
+        self.bhosts_load_dic = {}
 
-        print('* [' + str(current_time) + '] Loading LSF host/queue information, please wait a moment ...')
-
-        my_show_message = ShowMessage('Info', 'Loading LSF host/queue information, please wait a moment ...')
-        my_show_message.start()
-
-        self.bhosts_dic = common_lsf.get_bhosts_info()
-        self.queues_dic = common_lsf.get_bqueues_info()
-        self.queue_host_dic = common_lsf.get_queue_host_info()
-        self.lshosts_dic = common_lsf.get_lshosts_info()
-
-        time.sleep(0.01)
-        my_show_message.terminate()
+        # Set self.lsf_info_dic for how to get LSF information.
+        self.lsf_info_dic = {'bhosts': {'exec_cmd': 'self.bhosts_dic = common_lsf.get_bhosts_info()', 'update_second': 0},
+                             'lsload': {'exec_cmd': 'self.lsload_dic = common_lsf.get_lsload_info()', 'update_second': 0},
+                             'queues': {'exec_cmd': 'self.queues_dic = common_lsf.get_bqueues_info()', 'update_second': 0},
+                             'lshosts': {'exec_cmd': 'self.lshosts_dic = common_lsf.get_lshosts_info()', 'update_second': 0},
+                             'queue_host': {'exec_cmd': 'self.queue_host_dic = common_lsf.get_queue_host_info()', 'update_second': 0},
+                             'host_queue': {'exec_cmd': 'self.host_queue_dic = common_lsf.get_host_queue_info()', 'update_second': 0},
+                             'bhosts_load': {'exec_cmd': 'self.bhosts_load_dic = common_lsf.get_bhosts_load_info()', 'update_second': 0}}
 
         # Get license information.
         self.license_dic = {}
@@ -152,6 +154,25 @@ class MainWindow(QMainWindow):
         # Switch tab.
         self.switch_tab(specified_tab)
 
+    def fresh_lsf_info(self, lsf_info):
+        """
+        Get LSF information with functions on common_lsf.
+        If the information is updated in 30 seconds, will not update it again.
+        """
+        if lsf_info in self.lsf_info_dic:
+            current_second = int(time.time())
+
+            if current_second - self.lsf_info_dic[lsf_info]['update_second'] > 30:
+                common.bprint('Loading LSF ' + str(lsf_info) + ' information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information, please wait a moment ...')
+                my_show_message.start()
+
+                exec(self.lsf_info_dic[lsf_info]['exec_cmd'])
+                self.lsf_info_dic[lsf_info]['update_second'] = current_second
+
+                time.sleep(0.01)
+                my_show_message.terminate()
+
     def get_license_dic(self):
         if self.disable_license:
             return
@@ -160,15 +181,13 @@ class MainWindow(QMainWindow):
         current_second = int(time.time())
 
         if current_second - self.license_dic_second <= 300:
-            common.print_warning('*Warning*: will not get license information repeatedly in 300 seconds.')
+            common.bprint('Will not get license information repeatedly in 300 seconds.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             return
 
         self.license_dic_second = current_second
 
         # Print loading license message.
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading License information, please wait a moment ...')
+        common.bprint('Loading License information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
         my_show_message.start()
@@ -186,7 +205,7 @@ class MainWindow(QMainWindow):
         my_show_message.terminate()
 
         if not self.license_dic:
-            common.print_warning('*Warning*: Not find any valid license information.')
+            common.bprint('Not find any valid license information.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
 
     def init_ui(self):
         """
@@ -399,7 +418,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Show the specified warning message on both of command line and GUI window.
         """
-        common.print_warning(warning_message)
+        common.bprint(warning_message, date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         QMessageBox.warning(self, 'lsfMonitor Warning', warning_message)
 # Common sub-functions (end) #
 
@@ -623,10 +642,10 @@ Please contact with liyanqing1987@163.com with any question."""
         my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
         current_job = my_match.group(1)
 
-        print('* Checking job "' + str(current_job) + '".')
+        common.bprint('Checking job "' + str(current_job) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
         # Get job info
-        print('* Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
+        common.bprint('Getting LSF job information for "' + str(current_job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
         my_show_message.start()
@@ -761,18 +780,18 @@ Please contact with liyanqing1987@163.com with any question."""
         job_db_file = str(config.db_path) + '/monitor/job/' + str(job_range) + '.db'
 
         if not os.path.exists(job_db_file):
-            common.print_warning('*Warning*: Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".')
+            common.bprint('Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (job_db_file_connect_result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file)
 
             if job_db_file_connect_result == 'failed':
-                common.print_warning('*Warning*: Failed on connecting job database file "' + str(job_db_file) + '".')
+                common.bprint('Failed on connecting job database file "' + str(job_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 table_name = 'job_' + str(self.job_tab_current_job)
                 data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
 
                 if not data_dic:
-                    common.print_warning('*Warning*: job memory usage information is empty for "' + str(self.job_tab_current_job) + '".')
+                    common.bprint('Job memory usage information is empty for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 else:
                     sample_time_list = data_dic['sample_time']
                     mem_list = data_dic['mem']
@@ -793,7 +812,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                 job_db_conn.close()
 
-        return (runtime_list, real_mem_list)
+        return runtime_list, real_mem_list
 
     def update_job_tab_frame3(self, init=False):
         """
@@ -975,9 +994,7 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -m ' + str(specified_host_list[0])
 
         # Run command to get expected jobs information.
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading LSF jobs information, please wait a moment ...')
+        common.bprint('Loading LSF jobs information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading LSF jobs information, please wait a moment ...')
         my_show_message.start()
@@ -1148,15 +1165,15 @@ Please contact with liyanqing1987@163.com with any question."""
                 job_status = self.jobs_tab_table.item(current_row, 2).text().strip()
 
                 if job_status == 'PEND':
-                    print('* Getting job pend reason for "' + str(job) + '", please wait a moment ...')
+                    common.bprint('Getting job pend reason for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
                     self.my_check_issue_reason = CheckIssueReason(job=job, issue='PEND')
                     self.my_check_issue_reason.start()
                 elif job_status == 'RUN':
-                    print('* Getting job process information for "' + str(job) + '", please wait a moment ...')
+                    common.bprint('Getting job process information for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
                     self.my_check_issue_reason = CheckIssueReason(job=job, issue='SLOW')
                     self.my_check_issue_reason.start()
                 elif (job_status == 'DONE') or (job_status == 'EXIT'):
-                    print('* Getting job fail reason for "' + str(job) + '", please wait a moment ...')
+                    common.bprint('Getting job fail reason for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
                     self.my_check_issue_reason = CheckIssueReason(job=job, issue='FAIL')
                     self.my_check_issue_reason.start()
 
@@ -1183,6 +1200,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.jobs_tab_queue_combo.
         """
         self.jobs_tab_queue_combo.clear()
+        self.fresh_lsf_info('queues')
 
         if not queue_list:
             queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
@@ -1205,6 +1223,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_host_combo.clear()
 
         if not host_list:
+            self.fresh_lsf_info('bhosts')
             host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
             host_list.insert(0, 'ALL')
 
@@ -1343,27 +1362,17 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_table.setColumnWidth(9, 75)
         self.hosts_tab_table.setColumnWidth(10, 75)
 
-        # Get LSF queue/host information.
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading LSF hosts information, please wait a moment ...')
-
-        my_show_message = ShowMessage('Info', 'Loading LSF hosts information, please wait a moment ...')
-        my_show_message.start()
-
-        self.bhosts_dic = common_lsf.get_bhosts_info()
-        self.host_queue_dic = common_lsf.get_host_queue_info()
-        self.bhosts_load_dic = common_lsf.get_bhosts_load_info()
-        self.lshosts_dic = common_lsf.get_lshosts_info()
-        self.lsload_dic = common_lsf.get_lsload_info()
-
-        time.sleep(0.01)
-        my_show_message.terminate()
-
         # Fill self.hosts_tab_table items.
         hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
         self.hosts_tab_table.setRowCount(0)
         self.hosts_tab_table.setRowCount(len(hosts_tab_specified_host_list))
+
+        # Fresh LSF bhosts/lsload/lshosts/host_queue/bhosts_load information.
+        self.fresh_lsf_info('bhosts')
+        self.fresh_lsf_info('lsload')
+        self.fresh_lsf_info('lshosts')
+        self.fresh_lsf_info('host_queue')
+        self.fresh_lsf_info('bhosts_load')
 
         for (i, host) in enumerate(hosts_tab_specified_host_list):
             fatal_error = False
@@ -1415,7 +1424,7 @@ Please contact with liyanqing1987@163.com with any question."""
             max = self.bhosts_dic['MAX'][index]
 
             if not re.match(r'^[0-9]+$', max):
-                common.print_warning('*Warning*: host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 max = 0
 
             item = QTableWidgetItem()
@@ -1432,7 +1441,7 @@ Please contact with liyanqing1987@163.com with any question."""
             njobs = self.bhosts_dic['NJOBS'][index]
 
             if not re.match(r'^[0-9]+$', njobs):
-                common.print_warning('*Warning*: host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 njobs = 0
 
             item = QTableWidgetItem()
@@ -1456,7 +1465,7 @@ Please contact with liyanqing1987@163.com with any question."""
             ut = re.sub(r'%', '', ut)
 
             if not re.match(r'^[0-9]+$', ut):
-                common.print_warning('*Warning*: host(' + str(host) + ') ut info "' + str(ut) + '": invalid value, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') ut info "' + str(ut) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 ut = 0
 
             item = QTableWidgetItem()
@@ -1482,7 +1491,7 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', maxmem):
                 maxmem = float(re.sub(r'T', '', maxmem))*1024
             else:
-                common.print_warning('*Warning*: host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 maxmem = 0
 
             item = QTableWidgetItem()
@@ -1509,7 +1518,7 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', mem):
                 mem = float(re.sub(r'T', '', mem))*1024
             else:
-                common.print_warning('*Warning*: host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 mem = 0
 
             item = QTableWidgetItem()
@@ -1535,7 +1544,7 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', maxswp):
                 maxswp = float(re.sub(r'T', '', maxswp))*1024
             else:
-                common.print_warning('*Warning*: host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 maxswp = 0
 
             item = QTableWidgetItem()
@@ -1562,7 +1571,7 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', swp):
                 swp = float(re.sub(r'T', '', swp))*1024
             else:
-                common.print_warning('*Warning*: host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 swp = 0
 
             item = QTableWidgetItem()
@@ -1589,7 +1598,7 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', tmp):
                 tmp = float(re.sub(r'T', '', tmp))*1024
             else:
-                common.print_warning('*Warning*: host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".')
+                common.bprint('Host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 tmp = 0
 
             item = QTableWidgetItem()
@@ -1609,8 +1618,12 @@ Please contact with liyanqing1987@163.com with any question."""
         specified_max_list = self.hosts_tab_max_combo.currentText().strip().split()
         specified_maxmem_list = self.hosts_tab_maxmem_combo.currentText().strip().split()
         specified_host = self.hosts_tab_host_line.text().strip()
-
         hosts_tab_specified_host_list = []
+
+        # Fresh LSF bhosts/lshosts/host_queue information.
+        self.fresh_lsf_info('bhosts')
+        self.fresh_lsf_info('lshosts')
+        self.fresh_lsf_info('host_queue')
 
         for host in self.bhosts_dic['HOST_NAME']:
             # Filter with specified_status_list.
@@ -1706,6 +1719,7 @@ Please contact with liyanqing1987@163.com with any question."""
             njobs_num = self.hosts_tab_table.item(current_row, 5).text().strip()
 
             if item.column() == 0:
+                self.fresh_lsf_info('bhosts')
                 host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
                 host_list.remove(host)
                 host_list.insert(0, host)
@@ -1733,6 +1747,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.hosts_tab_status_combo.
         """
         self.hosts_tab_status_combo.clear()
+        self.fresh_lsf_info('bhosts')
 
         status_list = ['ALL', ]
 
@@ -1757,6 +1772,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.hosts_tab_queue_combo.
         """
         self.hosts_tab_queue_combo.clear()
+        self.fresh_lsf_info('queues')
 
         queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
         queue_list.sort()
@@ -1776,6 +1792,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.hosts_tab_max_combo.
         """
         self.hosts_tab_max_combo.clear()
+        self.fresh_lsf_info('bhosts')
 
         max_list = []
 
@@ -1806,6 +1823,8 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.hosts_tab_maxmem_combo.
         """
         self.hosts_tab_maxmem_combo.clear()
+        self.fresh_lsf_info('bhosts')
+        self.fresh_lsf_info('lshosts')
 
         maxmem_list = []
 
@@ -1908,8 +1927,10 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_table.setColumnWidth(2, 60)
         self.queues_tab_table.setColumnWidth(3, 60)
 
-        # Get LSF queue/host information.
-        self.queues_dic = common_lsf.get_bqueues_info()
+        # Fresh LSF bhosts/queues/queue_host information.
+        self.fresh_lsf_info('bhosts')
+        self.fresh_lsf_info('queues')
+        self.fresh_lsf_info('queue_host')
 
         # Hide the vertical header
         self.queues_tab_table.verticalHeader().setVisible(False)
@@ -2058,7 +2079,7 @@ Please contact with liyanqing1987@163.com with any question."""
             run_num = self.queues_tab_table.item(current_row, 2).text().strip()
 
             if item.column() == 0:
-                print('* Checking queue "' + str(queue) + '".')
+                common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
                 self.update_queues_tab_frame1(queue)
                 self.update_queues_tab_frame2(queue)
@@ -2152,12 +2173,12 @@ Please contact with liyanqing1987@163.com with any question."""
         queue_db_file = str(config.db_path) + '/monitor/queue.db'
 
         if not os.path.exists(queue_db_file):
-            common.print_warning('*Warning*: queue pend/run job number information is missing for "' + str(queue) + '".')
+            common.bprint('Queue pend/run job number information is missing for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (queue_db_file_connect_result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file)
 
             if queue_db_file_connect_result == 'failed':
-                common.print_warning('*Warning*: Failed on connecting queue database file "' + str(self.queue_db_file) + '".')
+                common.bprint('Failed on connecting queue database file "' + str(self.queue_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 table_name = 'queue_' + str(queue)
                 begin_date = self.queues_tab_begin_date_edit.date().toString(Qt.ISODate)
@@ -2171,7 +2192,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'TOTAL', 'PEND', 'RUN'], select_condition)
 
                 if not data_dic:
-                    common.print_warning('*Warning*: queue pend/run job number information is empty for "' + str(queue) + '".')
+                    common.bprint('Queue pend/run job number information is empty for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 else:
                     if self.enable_queue_detail:
                         date_list = data_dic['sample_time']
@@ -2210,7 +2231,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                     queue_db_conn.close()
 
-        return (date_list, total_list, pend_list, run_list)
+        return date_list, total_list, pend_list, run_list
 
     def draw_queues_tab_num_curve(self, fig, queue, date_list, total_list, pend_list, run_list):
         """
@@ -2365,6 +2386,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.load_tab_host_combo.clear()
 
         if not host_list:
+            self.fresh_lsf_info('bhosts')
             host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
             host_list.insert(0, '')
 
@@ -2385,9 +2407,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
 
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading ut/mem load information, please wait a moment ...')
+        common.bprint('Loading ut/mem load information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
         my_show_message.start()
@@ -2412,12 +2432,12 @@ Please contact with liyanqing1987@163.com with any question."""
         load_db_file = str(config.db_path) + '/monitor/load.db'
 
         if not os.path.exists(load_db_file):
-            common.print_warning('*Warning*: load database "' + str(load_db_file) + '" is missing.')
+            common.bprint('Load database "' + str(load_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (load_db_file_connect_result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file)
 
             if load_db_file_connect_result == 'failed':
-                common.print_warning('*Warning*: Failed on connecting load database file "' + str(load_db_file) + '".')
+                common.bprint('Failed on connecting load database file "' + str(load_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 if specified_host:
                     table_name = 'load_' + str(specified_host)
@@ -2431,7 +2451,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
 
                     if not data_dic:
-                        common.print_warning('*Warning*: load information is empty for "' + str(specified_host) + '".')
+                        common.bprint('Load information is empty for "' + str(specified_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                     else:
                         for (i, sample_time) in enumerate(data_dic['sample_time']):
                             # For sample_time
@@ -2465,7 +2485,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                     load_db_conn.close()
 
-        return (sample_time_list, ut_list, mem_list)
+        return sample_time_list, ut_list, mem_list
 
     def update_load_tab_frame1(self, specified_host, sample_time_list, ut_list):
         """
@@ -2655,6 +2675,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.utilization_tab_queue_combo.
         """
         self.utilization_tab_queue_combo.clear()
+        self.fresh_lsf_info('queues')
 
         queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
         queue_list.sort()
@@ -2676,6 +2697,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_host_combo.clear()
 
         if not host_list:
+            self.fresh_lsf_info('bhosts')
             host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
 
         for host in host_list:
@@ -2705,8 +2727,11 @@ Please contact with liyanqing1987@163.com with any question."""
         selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
 
         if 'ALL' in selected_queue_dic.values():
+            self.fresh_lsf_info('bhosts')
             selected_host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
         else:
+            self.fresh_lsf_info('queue_host')
+
             for selected_queue in selected_queue_dic.values():
                 host_list = self.queue_host_dic[selected_queue]
 
@@ -2735,9 +2760,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified queues.
         """
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading queue utilization info, please wait a moment ...')
+        common.bprint('Loading queue utilization info, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading queue utilization info, please wait a moment ...')
         my_show_message.start()
@@ -2746,13 +2769,14 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_db_file = str(config.db_path) + '/monitor/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
-            common.print_warning('*Warning*: utilization database "' + str(utilization_db_file) + '" is missing.')
+            common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
 
             if utilization_db_file_connect_result == 'failed':
-                common.print_warning('*Warning*: Failed on connecting utilization database file "' + str(utilization_db_file) + '".')
+                common.bprint('Failed on connecting utilization database file "' + str(utilization_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
+                self.fresh_lsf_info('bhosts')
                 host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
 
                 if host_list:
@@ -2791,6 +2815,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Organize utilization info, get average utlization for every queue.
         queue_utilization_dic = {}
+        self.fresh_lsf_info('queues')
         queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
         queue_list.sort()
         queue_list.append('ALL')
@@ -2803,6 +2828,8 @@ Please contact with liyanqing1987@163.com with any question."""
                 queue_utilization_dic[queue].setdefault(resource, [])
 
         # Fill queue_utilization_dic detailed data.
+        self.fresh_lsf_info('host_queue')
+
         for host_name in utilization_dic.keys():
             if host_name in self.host_queue_dic:
                 for resource in self.utilization_tab_resource_list:
@@ -2829,9 +2856,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified host.
         """
-        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-        print('* [' + str(current_time) + '] Loading resource utilization information, please wait a moment ...')
+        common.bprint('Loading resource utilization information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading resource utilization information, please wait a moment ...')
         my_show_message.start()
@@ -2844,12 +2869,12 @@ Please contact with liyanqing1987@163.com with any question."""
             utilization_db_file = str(config.db_path) + '/monitor/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
-            common.print_warning('*Warning*: utilization database "' + str(utilization_db_file) + '" is missing.')
+            common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
 
             if utilization_db_file_connect_result == 'failed':
-                common.print_warning('*Warning*: Failed on connecting utilization database file "' + str(utilization_db_file) + '".')
+                common.bprint('Failed on connecting utilization database file "' + str(utilization_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 if selected_host_list:
                     for selected_host in selected_host_list:
@@ -2876,7 +2901,7 @@ Please contact with liyanqing1987@163.com with any question."""
                         data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
 
                         if not data_dic:
-                            common.print_warning('*Warning*: utilization information is empty for "' + str(selected_host) + '".')
+                            common.bprint('Utilization information is empty for "' + str(selected_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                         else:
                             if self.enable_utilization_detail:
                                 key = 'sample_time'
@@ -3027,9 +3052,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if self.enable_utilization_detail:
-                current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-                print('* [' + str(current_time) + '] Drawing ' + str(selected_resource) + ' curve, please wait a moment ...')
+                common.bprint('Drawing ' + str(selected_resource) + ' curve, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
                 my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve, please wait a moment ...')
                 my_show_message.start()
@@ -3401,7 +3424,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     vendor_daemon = self.license_tab_feature_table.item(current_row, 1).text().strip()
                     license_feature = self.license_tab_feature_table.item(current_row, 2).text().strip()
 
-                    print('* Getting license feature "' + str(license_feature) + '" usage on license server ' + str(license_server) + ' ...')
+                    common.bprint('Getting license feature "' + str(license_feature) + '" usage on license server ' + str(license_server) + ' ...', date_format='%Y-%m-%d %H:%M:%S')
 
                     self.my_show_license_feature_usage = ShowLicenseFeatureUsage(server=license_server, vendor=vendor_daemon, feature=license_feature)
                     self.my_show_license_feature_usage.start()
@@ -3513,7 +3536,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 table_info_list.append(row_list)
 
             # Write excel
-            print('* [' + str(current_time) + '] Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...')
+            common.bprint('Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
 
             common.write_excel(excel_file=output_file, contents_list=table_info_list, specified_sheet_name=table_type)
 # Export table (end) #
@@ -3522,7 +3545,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         When window close, post-process.
         """
-        print('Bye')
+        common.bprint('Bye', date_format='%Y-%m-%d %H:%M:%S')
 
 
 class CheckIssueReason(QThread):
