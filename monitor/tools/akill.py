@@ -49,7 +49,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return (args.jobid, args.job_name, args.command, args.submit_time, args.execute_host, args.queue, args.user)
+    return args.jobid, args.job_name, args.command, args.submit_time, args.execute_host, args.queue, args.user
 
 
 class AutoKill():
@@ -67,7 +67,7 @@ class AutoKill():
         Get jobid list based on start_jobid ~ end_jobid.
         """
         if start_jobid >= end_jobid:
-            print('*Error*: start jobid "' + str(start_jobid) + '" must be smaller than end jobid "' + str(end_jobid) + '".')
+            common.bprint('Start jobid "' + str(start_jobid) + '" must be smaller than end jobid "' + str(end_jobid) + '".', level='Error')
             sys.exit(1)
         else:
             jobid_list = []
@@ -96,7 +96,7 @@ class AutoKill():
                 jobid_range_list = self.parse_jobid_range(start_jobid, end_jobid)
                 self.jobid_list.extend(jobid_range_list)
             else:
-                print('*Error*: "' + str(jobid) + '": Invalid jobid format.')
+                common.bprint('"' + str(jobid) + '": Invalid jobid format.', level='Error')
                 sys.exit(1)
 
     def run_command(self, command):

@@ -53,10 +53,10 @@ def read_args():
     args = parser.parse_args()
 
     if (not args.job) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization):
-        common.print_error('*Error*: at least one argument of "job/queue/host/load/user/utilization" must be selected.')
+        common.bprint('At least one argument of "job/queue/host/load/user/utilization" must be selected.', level='Error')
         sys.exit(1)
 
-    return (args.job, args.queue, args.host, args.load, args.user, args.utilization)
+    return args.job, args.queue, args.host, args.load, args.user, args.utilization
 
 
 class Sampling:
@@ -85,8 +85,8 @@ class Sampling:
             try:
                 os.makedirs(job_db_path)
             except Exception as error:
-                common.print_error('*Error*: Failed on creating sqlite job db directory "' + str(job_db_path) + '".')
-                common.print_error('         ' + str(error))
+                common.bprint('Failed on creating sqlite job db directory "' + str(job_db_path) + '".', level='Error')
+                common.bprint(error, color='red', display_method=1, indent=9)
                 sys.exit(1)
 
     def sample_job_info(self):
@@ -123,7 +123,7 @@ class Sampling:
                                 last_sample_second = int(data_dic['sample_second'][-1])
 
                                 if self.sample_second - last_sample_second > 3600:
-                                    common.print_warning('    *Warning*: table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.')
+                                    common.bprint('Table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.', level='Warning', indent=4)
                                     common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
                                     job_table_list.remove(job_table_name)
 
@@ -414,7 +414,7 @@ class Sampling:
                         slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
 
                         if int(slot_utilization) > 100:
-                            common.print_warning('    *Warning*: for host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".')
+                            common.bprint('For host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".', level='Warning', indent=4)
 
                             if bhosts_dic['STATUS'][j] == 'unavail':
                                 slot_utilization = 0.0
@@ -457,7 +457,7 @@ class Sampling:
                         mem_utilization = round((maxmem-mem)*100/maxmem, 1)
 
                         if int(mem_utilization) > 100:
-                            common.print_warning('    *Warning*: for host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".')
+                            common.bprint('For host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".', level='Warning', indent=4)
                             mem_utilization = 100.0
 
                         break
@@ -512,15 +512,15 @@ class Sampling:
                     mem_avg_utilization = round(mem_utilization_sum/len(utilization_db_data_dic['slot']), 1)
 
                     if int(slot_avg_utilization) > 100:
-                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".')
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".', level='Warning', indent=4)
                         slot_avg_utilization = 100.0
 
                     if int(cpu_avg_utilization) > 100:
-                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".')
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".', level='Warning', indent=4)
                         cpu_avg_utilization = 100.0
 
                     if int(mem_avg_utilization) > 100:
-                        common.print_warning('    *Warning*: for db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".')
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".', level='Warning', indent=4)
                         mem_avg_utilization = 100.0
 
                     utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}

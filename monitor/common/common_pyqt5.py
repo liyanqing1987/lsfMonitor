@@ -172,7 +172,7 @@ class NavigationToolbar2QT(NavigationToolbar2QT):
 
                 bisection_index = (upper - lower) // 2 + lower
 
-        return (xdata, index)
+        return xdata, index
 
     def _mouse_event_to_message(self, event):
         if event.inaxes and event.inaxes.get_navigate():

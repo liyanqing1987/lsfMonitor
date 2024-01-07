@@ -38,8 +38,8 @@ def get_command_dict(command):
                 command_info = line.split()
 
                 if len(command_info) < len(key_list):
-                    common.print_warning('*Warning* (get_command_dict) : For command "' + str(command) + '", below info line is incomplate/unexpected.')
-                    common.print_warning('           ' + str(line))
+                    common.bprint('For command "' + str(command) + '", below info line is incomplate/unexpected.', level='Warning')
+                    common.bprint(line, color='yellow', display_method=1, indent=11)
 
                 for j in range(len(key_list)):
                     key = key_list[j]
@@ -104,8 +104,8 @@ def get_bjobs_info(command='bjobs -u all -w'):
                     bjobs_dic[key] = []
             else:
                 if not re.match(r'^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line):
-                    common.print_warning('*Warning*: invalid bjobs information for below line.')
-                    common.print_warning('           ' + str(line) + '\n')
+                    common.bprint('Invalid bjobs information for below line.', level='Warning')
+                    common.bprint(line, color='yellow', display_method=1, indent=11)
                 else:
                     my_match = re.match(r'^\s*(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line)
                     bjobs_dic['JOBID'].append(my_match.group(1))
@@ -231,7 +231,7 @@ def get_tool_name():
         elif re.search(r'Open_lava', line) or re.search(r'openlava', line):
             return 'openlava'
 
-    print('*Warning*: Not sure current cluster is LSF or Openlava.')
+    common.bprint('Not sure current cluster is LSF or Openlava.', level='Warning')
     return ''
 
 
@@ -811,7 +811,7 @@ def get_queue_host_info():
             hosts_string = my_match.group(1)
 
             if hosts_string == 'all':
-                common.print_warning('*Warning* (get_queue_host_info) : queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.')
+                common.bprint('Queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.', level='Warning')
                 queue_host_dic[queue] = get_host_list()
             else:
                 queue_host_dic.setdefault(queue, [])
@@ -895,7 +895,7 @@ def switch_submit_time(submit_time, compare_second='', format=''):
         try:
             start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
         except Exception:
-            print('*Error*: variable "submit_time_with_year", value is "' + str(submit_time_with_year) + '", not follow the time format "%Y %b %d %H:%M".')
+            common.bprint('Variable "submit_time_with_year", value is "' + str(submit_time_with_year) + '", not follow the time format "%Y %b %d %H:%M".', level='Error')
 
         if not compare_second:
             compare_second = time.time()

@@ -510,7 +510,7 @@ def switch_start_time(start_time, compare_second='', format=''):
         try:
             start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
         except Exception:
-            common.print_error('*Error*: variable "start_time_with_year", value is "' + str(start_time_with_year) + '", not follow the time format "%Y %a %m/%d %H:%M".')
+            common.bprint('Value of variable "start_time_with_year" is "' + str(start_time_with_year) + '", not follow the time format "%Y %a %m/%d %H:%M".', level='Error')
 
         if not compare_second:
             compare_second = time.time()

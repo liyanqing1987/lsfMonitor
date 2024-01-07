@@ -46,7 +46,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return (args.server, args.vendor, args.feature)
+    return args.server, args.vendor, args.feature
 
 
 class ShowLicenseFreatureUsage(QMainWindow):
