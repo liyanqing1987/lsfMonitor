@@ -31,6 +31,7 @@ if os.path.exists(local_config):
     import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
+VERSION = 'V1.4.1 (2023.12.29)'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -246,9 +247,8 @@ class MainWindow(QMainWindow):
         self.gen_license_tab()
 
         # Show main window
-        self.setWindowTitle('lsfMonitor')
         self.resize(1200, 610)
-        self.setWindowTitle('lsfMonitor')
+        self.setWindowTitle('lsfMonitor ' + str(VERSION))
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)
 
@@ -397,8 +397,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        version = 'V1.4.1'
-        QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(version) + '        ')
+        QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(VERSION) + '        ')
 
     def show_about(self):
         """
@@ -929,7 +928,6 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_frame0_grid.addWidget(self.jobs_tab_user_line, 0, 7)
         jobs_tab_frame0_grid.addWidget(jobs_tab_check_button, 0, 8)
 
-        jobs_tab_frame0_grid.setColumnStretch(0, 1)
         jobs_tab_frame0_grid.setColumnStretch(1, 1)
         jobs_tab_frame0_grid.setColumnStretch(2, 1)
         jobs_tab_frame0_grid.setColumnStretch(3, 1)
@@ -1327,7 +1325,6 @@ Please contact with liyanqing1987@163.com with any question."""
         hosts_tab_frame0_grid.addWidget(self.hosts_tab_host_line, 0, 9)
         hosts_tab_frame0_grid.addWidget(hosts_tab_check_button, 0, 10)
 
-        hosts_tab_frame0_grid.setColumnStretch(0, 1)
         hosts_tab_frame0_grid.setColumnStretch(1, 1)
         hosts_tab_frame0_grid.setColumnStretch(2, 1)
         hosts_tab_frame0_grid.setColumnStretch(3, 1)
@@ -1958,7 +1955,7 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem(queue)
             self.queues_tab_table.setItem(i, j, item)
 
-            # File "TOTAL" item.
+            # File "SLOTS" item.
             j = j+1
             total = 0
 
@@ -1966,6 +1963,8 @@ Please contact with liyanqing1987@163.com with any question."""
                 for max in self.bhosts_dic['MAX']:
                     if re.match(r'^\d+$', max):
                         total += int(max)
+            elif queue == 'lost_and_found':
+                total = 'N/A'
             else:
                 for queue_host in self.queue_host_dic[queue]:
                     host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
@@ -1976,6 +1975,10 @@ Please contact with liyanqing1987@163.com with any question."""
 
             item = QTableWidgetItem(str(total))
             item.setFont(QFont('song', 9, QFont.Bold))
+
+            if queue == 'lost_and_found':
+                item.setForeground(QBrush(Qt.red))
+
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "PEND" item.
@@ -2039,7 +2042,6 @@ Please contact with liyanqing1987@163.com with any question."""
         queues_tab_frame0_grid.addWidget(queues_tab_end_date_label, 0, 2)
         queues_tab_frame0_grid.addWidget(self.queues_tab_end_date_edit, 0, 3)
 
-        queues_tab_frame0_grid.setColumnStretch(0, 1)
         queues_tab_frame0_grid.setColumnStretch(1, 1)
         queues_tab_frame0_grid.setColumnStretch(2, 1)
         queues_tab_frame0_grid.setColumnStretch(3, 1)
@@ -2075,8 +2077,8 @@ Please contact with liyanqing1987@163.com with any question."""
         if item is not None:
             current_row = self.queues_tab_table.currentRow()
             queue = self.queues_tab_table.item(current_row, 0).text().strip()
-            pend_num = self.queues_tab_table.item(current_row, 1).text().strip()
-            run_num = self.queues_tab_table.item(current_row, 2).text().strip()
+            pend_num = self.queues_tab_table.item(current_row, 2).text().strip()
+            run_num = self.queues_tab_table.item(current_row, 3).text().strip()
 
             if item.column() == 0:
                 common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
@@ -2347,7 +2349,6 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_frame0_grid.addWidget(self.load_tab_end_date_edit, 0, 5)
         load_tab_frame0_grid.addWidget(load_tab_check_button, 0, 6)
 
-        load_tab_frame0_grid.setColumnStretch(0, 1)
         load_tab_frame0_grid.setColumnStretch(1, 1)
         load_tab_frame0_grid.setColumnStretch(2, 1)
         load_tab_frame0_grid.setColumnStretch(3, 1)
@@ -2660,7 +2661,6 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 2)
         utilization_tab_frame0_grid.addWidget(utilization_tab_export_button, 1, 6)
 
-        utilization_tab_frame0_grid.setColumnStretch(0, 1)
         utilization_tab_frame0_grid.setColumnStretch(1, 1)
         utilization_tab_frame0_grid.setColumnStretch(2, 1)
         utilization_tab_frame0_grid.setColumnStretch(3, 1)
@@ -3242,7 +3242,6 @@ Please contact with liyanqing1987@163.com with any question."""
         license_tab_frame0_grid.addWidget(self.license_tab_user_line, 0, 9)
         license_tab_frame0_grid.addWidget(license_tab_check_button, 0, 10)
 
-        license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
         license_tab_frame0_grid.setColumnStretch(2, 1)
         license_tab_frame0_grid.setColumnStretch(3, 1)
@@ -3541,7 +3540,7 @@ Please contact with liyanqing1987@163.com with any question."""
             common.write_excel(excel_file=output_file, contents_list=table_info_list, specified_sheet_name=table_type)
 # Export table (end) #
 
-    def close_event(self, QCloseEvent):
+    def closeEvent(self, QCloseEvent):
         """
         When window close, post-process.
         """
