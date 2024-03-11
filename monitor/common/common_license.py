@@ -54,22 +54,19 @@ class GetLicenseInfo():
                                         'license_files': '',
                                         'license_server_status': 'UNKNOWN',
                                         'license_server_version': '',
-                                        'vendor_daemon': { vendor_daemon: {
-                                                                           'vendor_daemon_status': 'UP',
+                                        'vendor_daemon': { vendor_daemon: {'vendor_daemon_status': 'UP',
                                                                            'vendor_daemon_version': '',
-                                                                           'feature': {feature: {
-                                                                                                 'issued': '0',
+                                                                           'feature': {feature: {'issued': '0',
                                                                                                  'in_use': '0',
                                                                                                  'in_use_info_string': [],
                                                                                                  'in_use_info': [],
                                                                                                 },
                                                                                       },
-                                                                           'expires': {feature: {
-                                                                                                 'version': '',
-                                                                                                 'license': '',
-                                                                                                 'vendor': '',
-                                                                                                 'expires': '',
-                                                                                                },
+                                                                           'expires': {feature: [{'version': '',
+                                                                                                  'license': '',
+                                                                                                  'vendor': '',
+                                                                                                  'expires': '',
+                                                                                                },]
                                                                                       },
                                                                           },
                                                          },
@@ -420,7 +417,8 @@ class FilterLicenseDic():
 
     def filter_show_mode_feature(self, license_dic, show_mode):
         """
-        Filter license_dic with show_mode (IN_USE/NOT_USED/ALL).
+        Filter license_dic with show_mode.
+        show_mode could be "IN_USE/NOT_USED" or "Expired/Nearly_Expired/Unexpired".
         """
         new_license_dic = {}
 

@@ -2,7 +2,8 @@ import re
 import datetime
 
 from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem
-from PyQt5.QtGui import QTextCursor
+from PyQt5.QtGui import QTextCursor, QFont
+from PyQt5.Qt import QFontMetrics
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
@@ -54,15 +55,8 @@ class QComboCheckBox(QComboBox):
         # self.checkBoxList is used to save QCheckBox items.
         self.checkBoxList = []
 
-    def addCheckBoxItem(self, text):
-        """
-        Add QCheckBox format item into QListWidget(QComboCheckBox).
-        """
-        qItem = QListWidgetItem(self.qListWidget)
-        qBox = QCheckBox(text)
-        qBox.stateChanged.connect(self.updateLineEdit)
-        self.checkBoxList.append(qBox)
-        self.qListWidget.setItemWidget(qItem, qBox)
+        # Adjust width for new item.
+        self.dropDownBoxWidthPixel = self.width()
 
     def addCheckBoxItems(self, text_list):
         """
@@ -70,6 +64,47 @@ class QComboCheckBox(QComboBox):
         """
         for text in text_list:
             self.addCheckBoxItem(text)
+
+    def addCheckBoxItem(self, text):
+        """
+        Add QCheckBox format item into QListWidget(QComboCheckBox).
+        """
+        qItem = QListWidgetItem(self.qListWidget)
+        qBox = QCheckBox(text)
+        qBox.stateChanged.connect(self.qBoxStateChanged)
+        self.checkBoxList.append(qBox)
+        self.qListWidget.setItemWidget(qItem, qBox)
+        self.updateDropDownBoxWidth(text, qBox)
+
+    def qBoxStateChanged(self, checkState):
+        """
+        Post process for qBox state change.
+        """
+        itemText = self.sender().text()
+
+        self.updateItemSelectedState(itemText, checkState)
+        self.updateLineEdit()
+
+    def updateItemSelectedState(self, itemText, checkState):
+        """
+        If "ALL" is selected, unselect other items.
+        If other item is selected, unselect "ALL" item.
+        """
+        if checkState != 0:
+            selectedItemDic = self.selectedItems()
+            selectedItemList = list(selectedItemDic.values())
+
+            if itemText == 'ALL':
+                if len(selectedItemList) > 1:
+                    for (i, qBox) in enumerate(self.checkBoxList):
+                        if (qBox.text() in selectedItemList) and (qBox.text() != 'ALL'):
+                            self.checkBoxList[i].setChecked(False)
+            else:
+                if 'ALL' in selectedItemList:
+                    for (i, qBox) in enumerate(self.checkBoxList):
+                        if qBox.text() == 'ALL':
+                            self.checkBoxList[i].setChecked(False)
+                            break
 
     def updateLineEdit(self):
         """
@@ -80,6 +115,18 @@ class QComboCheckBox(QComboBox):
         self.qLineEdit.clear()
         self.qLineEdit.setText(selectedItemString)
         self.qLineEdit.setReadOnly(True)
+
+    def updateDropDownBoxWidth(self, text, qBox):
+        """
+        Update self.dropDownBoxWidthPixel.
+        """
+        fm = QFontMetrics(QFont())
+        textPixel = fm.width(text)
+        indicatorPixel = qBox.iconSize().width() * 1.4
+
+        if textPixel > self.dropDownBoxWidthPixel:
+            self.dropDownBoxWidthPixel = textPixel
+            self.view().setMinimumWidth(self.dropDownBoxWidthPixel + indicatorPixel)
 
     def selectedItems(self):
         """
