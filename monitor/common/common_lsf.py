@@ -216,33 +216,49 @@ def get_busers_info(command='busers all'):
     return busers_dic
 
 
-def get_tool_name():
+def get_lsid_info():
     """
-    Make sure it is lsf or openlava.
+    Get information of "tool/tool_version/cluster/master" from command "lsid".
     """
-    command = 'lsid'
-    (return_code, stdout, stderr) = common.run_command(command)
+    tool = ''
+    tool_version = ''
+    cluster = ''
+    master = ''
+    (return_code, stdout, stderr) = common.run_command('lsid')
 
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
-        if re.search(r'LSF', line):
-            return 'lsf'
-        elif re.search(r'Open_lava', line) or re.search(r'openlava', line):
-            return 'openlava'
+        if re.match(r'^\s*My\s+cluster\s+name\s+is\s+(\S+)\s*$', line):
+            my_match = re.match(r'^\s*My\s+cluster\s+name\s+is\s+(\S+)\s*$', line)
+            cluster = my_match.group(1)
+        elif re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line):
+            my_match = re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line)
+            master = my_match.group(1)
+        elif re.search(r'LSF', line):
+            tool = 'LSF'
 
-    common.bprint('Not sure current cluster is LSF or Openlava.', level='Warning')
-    return ''
+            if re.match(r'^.*\s+([\d\.]+),.*$', line):
+                my_match = re.match(r'^.*\s+([\d\.]+),.*$', line)
+                tool_version = my_match.group(1)
+        elif re.search(r'Open_lava', line) or re.search(r'openlava', line):
+            tool = 'openlava'
+
+            if re.match(r'^.*\s+([\d\.]+),.*$', line):
+                my_match = re.match(r'^.*\s+([\d\.]+),.*$', line)
+                tool_version = my_match.group(1)
+
+    return tool, tool_version, cluster, master
 
 
 def get_bjobs_uf_info(command='bjobs -u all -UF'):
     """
     Get job information with "bjobs -UF".
     """
-    tool = get_tool_name()
+    (tool, tool_version, cluster, master) = get_lsid_info()
     my_dic = {}
 
-    if tool == 'lsf':
+    if tool == 'LSF':
         my_dic = get_lsf_bjobs_uf_info(command)
     elif tool == 'openlava':
         my_dic = get_openlava_bjobs_uf_info(command)

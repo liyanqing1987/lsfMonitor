@@ -31,7 +31,7 @@ if os.path.exists(local_config):
     import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.4.1 (2023.12.29)'
+VERSION = 'V1.4.2 (2024.03.15)'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -42,17 +42,6 @@ if 'XDG_RUNTIME_DIR' not in os.environ:
         os.makedirs(os.environ['XDG_RUNTIME_DIR'])
 
     os.chmod(os.environ['XDG_RUNTIME_DIR'], stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
-
-
-def check_tool():
-    """
-    Make sure LSF or Openlava environment exists.
-    """
-    tool = common_lsf.get_tool_name()
-
-    if tool == '':
-        common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
-        sys.exit(1)
 
 
 def read_args():
@@ -114,6 +103,15 @@ class MainWindow(QMainWindow):
     def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license):
         super().__init__()
 
+        # Check cluster info.
+        cluster = self.check_cluster_info()
+
+        # Set db_path.
+        self.db_path = str(config.db_path) + '/monitor'
+
+        if cluster and os.path.exists(str(config.db_path) + '/' + str(cluster)):
+            self.db_path = str(config.db_path) + '/' + str(cluster)
+
         # Init variables.
         self.specified_job = specified_job
         self.specified_user = specified_user
@@ -154,6 +152,23 @@ class MainWindow(QMainWindow):
 
         # Switch tab.
         self.switch_tab(specified_tab)
+
+    def check_cluster_info(self):
+        """
+        Make sure LSF or Openlava environment exists.
+        """
+        (tool, tool_version, cluster, master) = common_lsf.get_lsid_info()
+
+        if tool == '':
+            common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
+            sys.exit(1)
+
+        common.bprint(str(tool) + ' (' + str(tool_version) + ')', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('My cluster name is "' + str(cluster) + '"', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('My master name is "' + str(master) + '"', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
+
+        return cluster
 
     def fresh_lsf_info(self, lsf_info):
         """
@@ -776,7 +791,7 @@ Please contact with liyanqing1987@163.com with any question."""
         job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_list = list(job_range_dic.keys())
         job_range = job_range_list[0]
-        job_db_file = str(config.db_path) + '/monitor/job/' + str(job_range) + '.db'
+        job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
 
         if not os.path.exists(job_db_file):
             common.bprint('Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2172,7 +2187,7 @@ Please contact with liyanqing1987@163.com with any question."""
         total_list = []
         pend_list = []
         run_list = []
-        queue_db_file = str(config.db_path) + '/monitor/queue.db'
+        queue_db_file = str(self.db_path) + '/queue.db'
 
         if not os.path.exists(queue_db_file):
             common.bprint('Queue pend/run job number information is missing for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2430,7 +2445,7 @@ Please contact with liyanqing1987@163.com with any question."""
         ut_list = []
         mem_list = []
 
-        load_db_file = str(config.db_path) + '/monitor/load.db'
+        load_db_file = str(self.db_path) + '/load.db'
 
         if not os.path.exists(load_db_file):
             common.bprint('Load database "' + str(load_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2766,7 +2781,7 @@ Please contact with liyanqing1987@163.com with any question."""
         my_show_message.start()
 
         utilization_dic = {}
-        utilization_db_file = str(config.db_path) + '/monitor/utilization_day.db'
+        utilization_db_file = str(self.db_path) + '/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
             common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2864,9 +2879,9 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_dic = {}
 
         if self.enable_utilization_detail:
-            utilization_db_file = str(config.db_path) + '/monitor/utilization.db'
+            utilization_db_file = str(self.db_path) + '/utilization.db'
         else:
-            utilization_db_file = str(config.db_path) + '/monitor/utilization_day.db'
+            utilization_db_file = str(self.db_path) + '/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
             common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -3611,7 +3626,6 @@ class ShowMessage(QThread):
 # Main Function #
 #################
 def main():
-    check_tool()
     (specified_job, specified_user, specified_feature, specified_tab, disable_license) = read_args()
     app = QApplication(sys.argv)
     mw = MainWindow(specified_job, specified_user, specified_feature, specified_tab, disable_license)

@@ -14,7 +14,7 @@ def check_python_version():
     print('>>> Check python version.')
 
     current_python = sys.version_info[:2]
-    required_python = (3, 5)
+    required_python = (3, 8)
 
     if current_python < required_python:
         sys.stderr.write("""
@@ -28,6 +28,7 @@ but you're trying to install it on Python {}.{}.
     else:
         print('    Required python version : ' + str(required_python))
         print('    Current  python version : ' + str(current_python))
+        print('')
 
 
 def gen_shell_tools():
@@ -43,7 +44,6 @@ def gen_shell_tools():
         if 'LD_LIBRARY_PATH' in os.environ:
             ld_library_path_setting = str(ld_library_path_setting) + str(os.environ['LD_LIBRARY_PATH'])
 
-        print('')
         print('>>> Generate script "' + str(tool) + '".')
 
         try:

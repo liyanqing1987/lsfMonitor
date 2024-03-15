@@ -1,4 +1,4 @@
-# lsfMonitor V1.4.1
+# lsfMonitor V1.4.2
 
 ## Update history
 ***
@@ -23,6 +23,7 @@
 | V1.4.1  | (2023.12) | Add logo.                                                              |
 |         |           | Support exporting all tables into Excel.                               |
 |         |           | Optimize on curve displaying.                                          |
+| V1.4.2  | (2024.03) | Support multi LSF/openlava clusters on db_path.                        |
 
 
 ## Introduction

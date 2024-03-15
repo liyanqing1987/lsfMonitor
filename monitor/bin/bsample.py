@@ -72,6 +72,9 @@ class Sampling:
         self.user_sampling = user_sampling
         self.utilization_sampling = utilization_sampling
 
+        # Check cluster info.
+        cluster = self.check_cluster_info()
+
         # Get sample time.
         self.sample_second = int(time.time())
         self.sample_date = datetime.datetime.today().strftime('%Y%m%d')
@@ -79,6 +82,10 @@ class Sampling:
 
         # Create db path.
         self.db_path = str(config.db_path) + '/monitor'
+
+        if cluster:
+            self.db_path = str(config.db_path) + '/' + str(cluster)
+
         job_db_path = str(self.db_path) + '/job'
 
         if not os.path.exists(job_db_path):
@@ -88,6 +95,18 @@ class Sampling:
                 common.bprint('Failed on creating sqlite job db directory "' + str(job_db_path) + '".', level='Error')
                 common.bprint(error, color='red', display_method=1, indent=9)
                 sys.exit(1)
+
+    def check_cluster_info(self):
+        """
+        Make sure LSF or Openlava environment exists.
+        """
+        (tool, tool_version, cluster, master) = common_lsf.get_lsid_info()
+
+        if tool == '':
+            common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
+            sys.exit(1)
+
+        return cluster
 
     def sample_job_info(self):
         """
