@@ -263,15 +263,18 @@ class MainWindow(QMainWindow):
                 if job_dic[job]['exit_code'] in self.exit_code_dic:
                     self.info_text.append('Exit Reason: ' + str(self.exit_code_dic[job_dic[job]['exit_code']]))
 
-                self.info_text.append('')
+            self.info_text.append('')
 
-                if int(job_dic[job]['exit_code']) <= 127:
-                    self.info_text.append('* Exit code <= 127, the fail reason should be from LSF job command, please check by yourself.')
-                else:
-                    self.info_text.append('* Exit code > 127, the fail reason should be from system or LSF, please contact LSF administrator for further check.')
+            if job_dic[job]['exit_code'] and (int(job_dic[job]['exit_code']) <= 127):
+                self.info_text.append('* Exit code <= 127, LSF job command run fail, please check command log.')
+            elif job_dic[job]['exit_code'] and (int(job_dic[job]['exit_code']) > 127):
+                self.info_text.append('* Exit code > 127, possible fail for system or LSF reason.')
 
             if job_dic[job]['term_owner']:
-                self.info_text.append('* Find message "' + str(job_dic[job]['term_owner']) + '", please contact LSF administrator for further check.')
+                self.info_text.append('* Find message "' + str(job_dic[job]['term_owner']) + '".')
+
+            if job_dic[job]['lsf_signal']:
+                self.info_text.append('* Find message "Exited by LSF signal ' + str(job_dic[job]['lsf_signal']) + '".')
         else:
             self.info_text.append('<font color="#FF0000">*Error*: Job is not finished!</font>')
 
