@@ -31,7 +31,7 @@ if os.path.exists(local_config):
     import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.4.2 (2024.03.15)'
+VERSION = 'V1.4.2 (2024.04.02)'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         self.gen_license_tab()
 
         # Show main window
-        self.resize(1200, 610)
+        common_pyqt5.auto_resize(self, 1200, 610)
         self.setWindowTitle('lsfMonitor ' + str(VERSION))
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)

@@ -1,5 +1,7 @@
 import re
+import math
 import datetime
+import screeninfo
 
 from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem
 from PyQt5.QtGui import QTextCursor, QFont
@@ -18,6 +20,33 @@ def center_window(window):
     cp = QDesktopWidget().availableGeometry().center()
     qr.moveCenter(cp)
     window.move(qr.topLeft())
+
+
+def auto_resize(window, width=0, height=0):
+    """
+    Scaling down the window size if screen resolution is smaller than window resolution.
+    input:  Window: Original window; Width: window width; Height: window height
+    output: Window: Scaled window
+    """
+    # Get default width/height setting.
+    monitor = screeninfo.get_monitors()[0]
+
+    if not width:
+        width = monitor.width
+
+    if not height:
+        height = monitor.height
+
+    # If the screen size is too small, automatically obtain the appropriate length and width value.
+    if (monitor.width < width) or (monitor.height < height):
+        width_rate = math.floor((monitor.width / width) * 100)
+        height_rate = math.floor((monitor.height / height) * 100)
+        min_rate = min(width_rate, height_rate)
+        width = int((width * min_rate) / 100)
+        height = int((height * min_rate) / 100)
+
+    # Resize with auto width/height value.
+    window.resize(width, height)
 
 
 def text_edit_visible_position(text_edit_item, position='End'):

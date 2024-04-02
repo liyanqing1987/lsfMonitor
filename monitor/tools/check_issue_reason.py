@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
 
         # Show main window
         self.setWindowTitle('Check Issue Reason')
-        self.resize(600, 300)
+        common_pyqt5.auto_resize(self, 600, 300)
         common_pyqt5.center_window(self)
 
     def process_args(self):
