@@ -31,8 +31,8 @@ if os.path.exists(local_config):
     import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.4.2'
-VERSION_DATA = '2024.04.23'
+VERSION = 'V1.5'
+VERSION_DATE = '2024.06.14'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -414,7 +414,7 @@ class MainWindow(QMainWindow):
         """
         Show lsfMonitor version information.
         """
-        QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(VERSION) + ' (' + str(VERSION_DATA) + ')')
+        QMessageBox.about(self, 'lsfMonitor', 'Version: ' + str(VERSION) + ' (' + str(VERSION_DATE) + ')')
 
     def show_about(self):
         """
@@ -2130,7 +2130,7 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem(queue)
             self.queues_tab_table.setItem(i, j, item)
 
-            # File "SLOTS" item.
+            # Fill "SLOTS" item.
             j = j+1
             total = 0
 
@@ -2746,8 +2746,8 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_grid.setRowStretch(0, 1)
         utilization_tab_grid.setRowStretch(1, 10)
 
-        utilization_tab_grid.setColumnStretch(0, 7)
-        utilization_tab_grid.setColumnStretch(1, 14)
+        utilization_tab_grid.setColumnStretch(0, 1)
+        utilization_tab_grid.setColumnStretch(1, 2)
 
         self.utilization_tab.setLayout(utilization_tab_grid)
 
@@ -3116,15 +3116,20 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_table.setShowGrid(True)
         self.utilization_tab_table.setSortingEnabled(True)
         self.utilization_tab_table.setColumnCount(0)
-        self.utilization_tab_table.setColumnCount(4)
+        self.utilization_tab_table.setColumnCount(5)
         self.utilization_tab_table.setRowCount(0)
         self.utilization_tab_table.setRowCount(len(queue_utilization_dic))
-        self.utilization_tab_table_title_list = ['Queue', 'slot (%)', 'cpu (%)', 'mem (%)']
+        self.utilization_tab_table_title_list = ['Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
         self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
         self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.utilization_tab_table.setColumnWidth(1, 70)
-        self.utilization_tab_table.setColumnWidth(2, 70)
-        self.utilization_tab_table.setColumnWidth(3, 70)
+        self.utilization_tab_table.setColumnWidth(1, 60)
+        self.utilization_tab_table.setColumnWidth(2, 60)
+        self.utilization_tab_table.setColumnWidth(3, 60)
+        self.utilization_tab_table.setColumnWidth(4, 60)
+
+        # Fresh LSF bhosts/queues/queue_host information.
+        self.fresh_lsf_info('bhosts')
+        self.fresh_lsf_info('queue_host')
 
         # Fill self.utilization_tab_table items.
         if queue_utilization_dic:
@@ -3137,11 +3142,35 @@ Please contact with liyanqing1987@163.com with any question."""
                 item = QTableWidgetItem(queue)
                 self.utilization_tab_table.setItem(row, 0, item)
 
+                # Fill "slots" item.
+                total = 0
+
+                if queue == 'ALL':
+                    for max in self.bhosts_dic['MAX']:
+                        if re.match(r'^\d+$', max):
+                            total += int(max)
+                elif queue == 'lost_and_found':
+                    total = 'N/A'
+                else:
+                    for queue_host in self.queue_host_dic[queue]:
+                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                        host_max = self.bhosts_dic['MAX'][host_index]
+
+                        if re.match(r'^\d+$', host_max):
+                            total += int(host_max)
+
+                item = QTableWidgetItem(str(total))
+
+                if queue == 'lost_and_found':
+                    item.setForeground(QBrush(Qt.red))
+
+                self.utilization_tab_table.setItem(row, 1, item)
+
                 for (i, resource) in enumerate(self.utilization_tab_resource_list):
                     # Fill <resource> item.
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, queue_utilization_dic[queue][resource])
-                    self.utilization_tab_table.setItem(row, i+1, item)
+                    self.utilization_tab_table.setItem(row, i+2, item)
 
     def gen_utilization_tab_frame1(self):
         """
@@ -3706,35 +3735,36 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def export_table(self, table_type, table_item, title_list):
         """
-        Export specified table info into an Excel.
+        Export specified table info into an csv file.
         """
         current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         current_time_string = re.sub('-', '', current_time)
         current_time_string = re.sub(':', '', current_time_string)
         current_time_string = re.sub(' ', '_', current_time_string)
-        default_output_file = './lsfMonitor_' + str(table_type) + '_' + str(current_time_string) + '.xlsx'
-        (output_file, output_file_type) = QFileDialog.getSaveFileName(self, 'Export ' + str(table_type) + ' table', default_output_file, 'Excel (*.xlsx)')
+        default_output_file = './lsfMonitor_' + str(table_type) + '_' + str(current_time_string) + '.csv'
+        (output_file, output_file_type) = QFileDialog.getSaveFileName(self, 'Export ' + str(table_type) + ' table', default_output_file, 'CSV Files (*.csv)')
 
         if output_file:
             # Get table content.
-            table_info_list = []
-            table_info_list.append(title_list)
+            content_dic = {}
+            row_num = table_item.rowCount()
+            column_num = table_item.columnCount()
 
-            for row in range(table_item.rowCount()):
-                row_list = []
+            for column in range(column_num):
+                column_list = []
 
-                for column in range(table_item.columnCount()):
+                for row in range(row_num):
                     if table_item.item(row, column):
-                        row_list.append(table_item.item(row, column).text())
+                        column_list.append(table_item.item(row, column).text())
                     else:
-                        row_list.append('')
+                        column_list.append('')
 
-                table_info_list.append(row_list)
+                content_dic.setdefault(title_list[column], column_list)
 
-            # Write excel
+            # Write csv
             common.bprint('Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
 
-            common.write_excel(excel_file=output_file, contents_list=table_info_list, specified_sheet_name=table_type)
+            common.write_csv(csv_file=output_file, content_dic=content_dic)
 # Export table (end) #
 
     def closeEvent(self, QCloseEvent):
