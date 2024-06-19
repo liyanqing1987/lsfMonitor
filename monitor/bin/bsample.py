@@ -221,6 +221,8 @@ class Sampling:
                             total_slots += int(max)
 
                     value_list = [self.sample_second, self.sample_time, total_slots, sum([int(i) for i in bqueues_dic['NJOBS']]), sum([int(i) for i in bqueues_dic['PEND']]), sum([int(i) for i in bqueues_dic['RUN']]), sum([int(i) for i in bqueues_dic['SUSP']])]
+                elif queue == 'lost_and_found':
+                    value_list = [self.sample_second, self.sample_time, 'N/A', bqueues_dic['NJOBS'][i], bqueues_dic['PEND'][i], bqueues_dic['RUN'][i], bqueues_dic['SUSP'][i]]
                 else:
                     for queue_host in queue_host_dic[queue]:
                         host_index = bhosts_dic['HOST_NAME'].index(queue_host)
