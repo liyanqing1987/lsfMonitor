@@ -32,7 +32,7 @@ if os.path.exists(local_config):
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 VERSION = 'V1.5'
-VERSION_DATE = '2024.06.14'
+VERSION_DATE = '2024.06.25'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:

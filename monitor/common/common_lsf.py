@@ -307,8 +307,7 @@ def get_lsf_bjobs_uf_info(command):
                        'started_on_compile': re.compile(r'(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'lsf_signal_compile': re.compile(r'.*Exited by LSF signal (\S+?)\..*'),
-                       'term_owner_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
+                       'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
                        'mem_compile': re.compile(r'.*MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
                        'swap_compile': re.compile(r'.*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
@@ -357,8 +356,7 @@ def get_lsf_bjobs_uf_info(command):
                 my_dic[job]['started_time'] = ''
                 my_dic[job]['finished_time'] = ''
                 my_dic[job]['exit_code'] = ''
-                my_dic[job]['lsf_signal'] = ''
-                my_dic[job]['term_owner'] = ''
+                my_dic[job]['term_signal'] = ''
                 my_dic[job]['cpu_time'] = ''
                 my_dic[job]['mem'] = ''
                 my_dic[job]['swap'] = ''
@@ -490,13 +488,9 @@ def get_lsf_bjobs_uf_info(command):
                         my_match = job_compile_dic['exit_code_compile'].match(line)
                         my_dic[job]['exit_code'] = my_match.group(1)
 
-                    if job_compile_dic['lsf_signal_compile'].match(line):
-                        my_match = job_compile_dic['lsf_signal_compile'].match(line)
-                        my_dic[job]['lsf_signal'] = my_match.group(1)
-
-                    if job_compile_dic['term_owner_compile'].match(line):
-                        my_match = job_compile_dic['term_owner_compile'].match(line)
-                        my_dic[job]['term_owner'] = my_match.group(1)
+                    if job_compile_dic['term_signal_compile'].match(line):
+                        my_match = job_compile_dic['term_signal_compile'].match(line)
+                        my_dic[job]['term_signal'] = my_match.group(1)
 
                     if job_compile_dic['pids_compile'].findall(line):
                         my_match = job_compile_dic['pids_compile'].findall(line)
@@ -575,8 +569,7 @@ def get_openlava_bjobs_uf_info(command):
                        'started_time_compile': re.compile(r'(.*): (\[\d+\])?\s*[sS]tarted on.*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'lsf_signal_compile': re.compile(r'.*Exited by LSF signal (\S+?)\..*'),
-                       'term_owner_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
+                       'term_signal_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is ([1-9][0-9]*) seconds.*'),
                        'mem_compile': re.compile(r'.*MEM: ([1-9][0-9]*) Mbytes.*'),
                       }
@@ -617,8 +610,7 @@ def get_openlava_bjobs_uf_info(command):
                 my_dic[job]['started_time'] = ''
                 my_dic[job]['finished_time'] = ''
                 my_dic[job]['exit_code'] = ''
-                my_dic[job]['lsf_signal'] = ''
-                my_dic[job]['term_owner'] = ''
+                my_dic[job]['term_signal'] = ''
                 my_dic[job]['cpu_time'] = ''
                 my_dic[job]['mem'] = ''
                 my_dic[job]['swap'] = ''
@@ -705,13 +697,9 @@ def get_openlava_bjobs_uf_info(command):
                     my_match = job_compile_dic['exit_code_compile'].match(line)
                     my_dic[job]['exit_code'] = my_match.group(1)
 
-                if job_compile_dic['lsf_signal_compile'].match(line):
-                    my_match = job_compile_dic['lsf_signal_compile'].match(line)
-                    my_dic[job]['lsf_signal'] = my_match.group(1)
-
-                if job_compile_dic['term_owner_compile'].match(line):
-                    my_match = job_compile_dic['term_owner_compile'].match(line)
-                    my_dic[job]['term_owner'] = my_match.group(1)
+                if job_compile_dic['term_signal_compile'].match(line):
+                    my_match = job_compile_dic['term_signal_compile'].match(line)
+                    my_dic[job]['term_signal'] = my_match.group(1)
 
                 if job_compile_dic['cpu_time_compile'].match(line):
                     my_match = job_compile_dic['cpu_time_compile'].match(line)
