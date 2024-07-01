@@ -42,7 +42,7 @@ if 'XDG_RUNTIME_DIR' not in os.environ:
     if not os.path.exists(os.environ['XDG_RUNTIME_DIR']):
         os.makedirs(os.environ['XDG_RUNTIME_DIR'])
 
-    os.chmod(os.environ['XDG_RUNTIME_DIR'], stat.S_IRWXU+stat.S_IRWXG+stat.S_IRWXO)
+    os.chmod(os.environ['XDG_RUNTIME_DIR'], 0o777)
 
 
 def read_args():

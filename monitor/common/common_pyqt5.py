@@ -229,7 +229,7 @@ class QComboCheckBox(QComboBox):
         """
         fm = QFontMetrics(QFont())
         textPixel = fm.width(text)
-        indicatorPixel = qBox.iconSize().width() * 1.4
+        indicatorPixel = int(qBox.iconSize().width() * 1.4)
 
         if textPixel > self.dropDownBoxWidthPixel:
             self.dropDownBoxWidthPixel = textPixel
