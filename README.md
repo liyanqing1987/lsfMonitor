@@ -1,4 +1,65 @@
-# lsfMonitor V1.5
+**Author:** liyanqing1987@163.com    
+**Version:** V1.5 (2024.06.14)    
+
+## What’s lsfMonitor?
+`lsfMonitor` is an open source software for LSF information data-collection,
+data-analysis and data-display.
+
+## Python dependency
+Need python3.8.8, Anaconda3-2021.05-Linux-x86_64.sh is better.    
+Install python library dependency with command    
+
+    pip install -r requirements.txt
+
+## Install
+Copy install package into install directory.    
+Execute below command under install directory.    
+
+    python3 install.py
+
+## Quick start
+Execute command `bmonitor` to start lsfMonitor.    
+* Below is a demo on how to track job status.    
+
+   ![job trace demo](data/demo/job_trace_demo.gif)
+
+* Below is a demo on how to view server load information.
+
+   ![load demo](data/demo/load_demo.gif)
+
+* Below is a demo on how to search license feature usage information.
+
+   ![license demo](data/demo/license_demo.gif)
+
+## Configuration
+After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
+then update file config.py for your own configuration.
+
+    db_path = ""
+    lmstat_path = ""
+    lmstat_bsub_command = ""
+
+"db_path" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
+you can re-point it into your own path.
+"lmstat_path" is used to specify lmstat path, it is for LICENSE tab.
+"lmstat_bsub_command" is used to specify LSF command for lmstat, for example, "bsub -q
+normal -Is". (It is forbidden to run lmstat on login server.)
+
+## Sample
+Use monitor/bin/bsample sample job/queue/load/utilization data first, then bmonitor
+can show the job/queue/load/utilization info with saved database.
+Below is the suggested crontab setting on sampling data.
+
+    SHELL=/bin/csh
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
+    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
+    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
+    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
+    0 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
+
+
+More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_user_manual.pdf)
+
 
 ## Update history
 ***
@@ -26,52 +87,3 @@
 | V1.4.2  | (2024.03) | Support multi LSF/openlava clusters on db_path.                        |
 | V1.5    | (2024.06) | Add job memory predict/analysis tool memPredict.                       |
 |         |           | Replace export file from excel to csv file.                            |
-
-
-## Introduction
-***
-
-### 0. What is lsfMonitor?
-lsfMonitor is an open source software for LSF information data-collection,
-data-analysis and data-display.
-
-### 1. Python dependency
-Need python3.8.8, Anaconda3-2021.05-Linux-x86_64.sh is better.
-Install python library dependency with command
-
-    pip install -r requirements.txt
-
-### 2. Install
-Copy install package into install directory.
-Execute below command under install directory.
-
-    python3 install.py
-
-### 3. Config
-After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
-then update file config.py for your own configuration.
-
-    db_path = ""
-    lmstat_path = ""
-    lmstat_bsub_command = ""
-
-"db_path" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
-you can re-point it into your own path.
-"lmstat_path" is used to specify lmstat path, it is for LICENSE tab.
-"lmstat_bsub_command" is used to specify LSF command for lmstat, for example, "bsub -q
-normal -Is". (It is forbidden to run lmstat on login server.)
-
-### 4. Sample
-Use monitor/bin/bsample sample job/queue/load/utilization data first, then bmonitor
-can show the job/queue/load/utilization info with saved database.
-Below is the suggested crontab setting on sampling data.
-
-SHELL=/bin/csh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
-*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
-*/5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
-0 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
-
-
-More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_user_manual.pdf)
