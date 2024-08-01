@@ -3,16 +3,16 @@
 import os
 import re
 import sys
-import argparse
-import datetime
+import json
 import time
+import datetime
+import argparse
 from multiprocessing import Process
 
 sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 from common import common_lsf
 from common import common_sqlite3
-from conf import config
 
 # Import local config file if exists.
 local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
@@ -21,6 +21,8 @@ local_config = str(local_config_dir) + '/config.py'
 if os.path.exists(local_config):
     sys.path.append(local_config_dir)
     import config
+else:
+    from conf import config
 
 os.environ["PYTHONUNBUFFERED"] = '1'
 
@@ -34,7 +36,11 @@ def read_args():
     parser.add_argument("-j", "--job",
                         action="store_true",
                         default=False,
-                        help='Sample running job info with command "bjobs -u all -r -UF".')
+                        help='Sample (finished) job info with command "bjobs -u all -d -UF".')
+    parser.add_argument("-m", "--job_mem",
+                        action="store_true",
+                        default=False,
+                        help='Sample (running) job memory usage information with command "bjobs -u all -r -UF".')
     parser.add_argument("-q", "--queue",
                         action="store_true",
                         default=False,
@@ -58,11 +64,11 @@ def read_args():
 
     args = parser.parse_args()
 
-    if (not args.job) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization):
-        common.bprint('At least one argument of "job/queue/host/load/user/utilization" must be selected.', level='Error')
+    if (not args.job) and (not args.job_mem) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization):
+        common.bprint('At least one argument of "job/job_mem/queue/host/load/user/utilization" must be selected.', level='Error')
         sys.exit(1)
 
-    return args.job, args.queue, args.host, args.load, args.user, args.utilization
+    return args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization
 
 
 class Sampling:
@@ -70,37 +76,33 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, job_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling):
+    def __init__(self, job_sampling, job_mem_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling):
         self.job_sampling = job_sampling
+        self.job_mem_sampling = job_mem_sampling
         self.queue_sampling = queue_sampling
         self.host_sampling = host_sampling
         self.load_sampling = load_sampling
         self.user_sampling = user_sampling
         self.utilization_sampling = utilization_sampling
 
-        # Check cluster info.
-        cluster = self.check_cluster_info()
-
         # Get sample time.
         self.sample_second = int(time.time())
         self.sample_date = datetime.datetime.today().strftime('%Y%m%d')
         self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
 
-        # Create db path.
+        # Update self.db_path with cluster information.
         self.db_path = str(config.db_path) + '/monitor'
+        cluster = self.check_cluster_info()
 
         if cluster:
             self.db_path = str(config.db_path) + '/' + str(cluster)
 
-        job_db_path = str(self.db_path) + '/job'
+        # Create db path.
+        self.job_db_path = str(self.db_path) + '/job'
+        self.job_mem_db_path = str(self.db_path) + '/job_mem'
 
-        if not os.path.exists(job_db_path):
-            try:
-                os.makedirs(job_db_path)
-            except Exception as error:
-                common.bprint('Failed on creating sqlite job db directory "' + str(job_db_path) + '".', level='Error')
-                common.bprint(error, color='red', display_method=1, indent=9)
-                sys.exit(1)
+        self.create_dir(self.job_db_path)
+        self.create_dir(self.job_mem_db_path)
 
     def check_cluster_info(self):
         """
@@ -114,11 +116,60 @@ class Sampling:
 
         return cluster
 
+    def create_dir(self, dir_path):
+        """
+        Create dir_path with access permission 777.
+        """
+        if not os.path.exists(dir_path):
+            try:
+                os.makedirs(dir_path)
+                os.chmod(dir_path, 0o777)
+            except Exception as error:
+                common.bprint('Failed on creating directory "' + str(dir_path) + '".', level='Error')
+                common.bprint(error, color='red', display_method=1, indent=9)
+                sys.exit(1)
+
     def sample_job_info(self):
         """
-        Sample job info, especially the memory usage info.
+        Sample (finished) job information.
         """
         print('>>> Sampling job info ...')
+
+        bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
+
+        # Re-organize jobs_dic with finished_date.
+        date_bjobs_dic = {}
+
+        for job in bjobs_dic.keys():
+            print('    Sampling for job "' + str(job) + '" ...')
+
+            finished_date = common_lsf.switch_bjobs_uf_time(bjobs_dic[job]['finished_time'], '%Y%m%d')
+            date_bjobs_dic.setdefault(finished_date, {})
+            date_bjobs_dic[finished_date][job] = bjobs_dic[job]
+
+        # Write json file based on finished_date.
+        for finished_date in date_bjobs_dic.keys():
+            finished_date_bjobs_dic = date_bjobs_dic[finished_date]
+            finished_date_json = str(self.job_db_path) + '/' + str(finished_date)
+
+            if os.path.exists(finished_date_json):
+                with open(finished_date_json, 'r') as FDJ:
+                    old_finished_date_bjobs_dic = json.loads(FDJ.read())
+
+                    for job in old_finished_date_bjobs_dic.keys():
+                        if job not in finished_date_bjobs_dic:
+                            finished_date_bjobs_dic[job] = old_finished_date_bjobs_dic[job]
+
+            with open(finished_date_json, 'w') as FDJ:
+                FDJ.write(str(json.dumps(finished_date_bjobs_dic, ensure_ascii=False)) + '\n')
+
+        print('    Done (' + str(len(bjobs_dic.keys())) + ' jobs).')
+
+    def sample_job_mem_info(self):
+        """
+        Sample (running) job memory usage information.
+        """
+        print('>>> Sampling job mem usage info ...')
 
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -r -UF')
         job_list = list(bjobs_dic.keys())
@@ -128,20 +179,20 @@ class Sampling:
         key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
 
         for job_range in job_range_dic.keys():
-            job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
-            (result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file, mode='write')
+            job_mem_db_file = str(self.job_mem_db_path) + '/' + str(job_range) + '.db'
+            (result, job_mem_db_conn) = common_sqlite3.connect_db_file(job_mem_db_file, mode='write')
 
             if result == 'passed':
-                job_table_list = common_sqlite3.get_sql_table_list(job_db_file, job_db_conn)
+                job_table_list = common_sqlite3.get_sql_table_list(job_mem_db_file, job_mem_db_conn)
 
                 for job in job_range_dic[job_range]:
                     job_table_name = 'job_' + str(job)
 
                     print('    Sampling for job "' + str(job) + '" ...')
 
-                    # If job table (with old data) has been on the job_db_file, drop it.
+                    # If job table (with old data) has been on the job_mem_db_file, drop it.
                     if job_table_name in job_table_list:
-                        data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, job_table_name, ['sample_second'])
+                        data_dic = common_sqlite3.get_sql_table_data(job_mem_db_file, job_mem_db_conn, job_table_name, ['sample_second'])
 
                         if data_dic:
                             if len(data_dic['sample_second']) > 0:
@@ -149,21 +200,21 @@ class Sampling:
 
                                 if self.sample_second - last_sample_second > 3600:
                                     common.bprint('Table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.', level='Warning', indent=4)
-                                    common_sqlite3.drop_sql_table(job_db_file, job_db_conn, job_table_name, commit=False)
+                                    common_sqlite3.drop_sql_table(job_mem_db_file, job_mem_db_conn, job_table_name, commit=False)
                                     job_table_list.remove(job_table_name)
 
                     # Generate sql table if not exitst.
                     if job_table_name not in job_table_list:
                         key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                        common_sqlite3.create_sql_table(job_db_file, job_db_conn, job_table_name, key_string, commit=False)
+                        common_sqlite3.create_sql_table(job_mem_db_file, job_mem_db_conn, job_table_name, key_string, commit=False)
 
                     # Insert sql table value.
                     value_list = [self.sample_second, self.sample_time, bjobs_dic[job]['mem']]
                     value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-                    common_sqlite3.insert_into_sql_table(job_db_file, job_db_conn, job_table_name, value_string, commit=False)
+                    common_sqlite3.insert_into_sql_table(job_mem_db_file, job_mem_db_conn, job_table_name, value_string, commit=False)
 
-                job_db_conn.commit()
-                job_db_conn.close()
+                job_mem_db_conn.commit()
+                job_mem_db_conn.close()
 
         print('    Done (' + str(len(job_list)) + ' jobs).')
 
@@ -621,6 +672,10 @@ class Sampling:
             p = Process(target=self.sample_job_info)
             p.start()
 
+        if self.job_mem_sampling:
+            p = Process(target=self.sample_job_mem_info)
+            p.start()
+
         if self.queue_sampling:
             p = Process(target=self.sample_queue_info)
             p.start()
@@ -648,8 +703,8 @@ class Sampling:
 # Main Function #
 #################
 def main():
-    (job, queue, host, load, user, utilization) = read_args()
-    my_sampling = Sampling(job, queue, host, load, user, utilization)
+    (job, job_mem, queue, host, load, user, utilization) = read_args()
+    my_sampling = Sampling(job, job_mem, queue, host, load, user, utilization)
     my_sampling.sampling()
 
 

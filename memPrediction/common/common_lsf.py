@@ -292,10 +292,12 @@ def get_lsf_bjobs_uf_info(command):
     job_compile_dic = {
                        'job_compile': re.compile(r'.*Job <([0-9]+(\[[0-9]+\])?)>.*'),
                        'job_name_compile': re.compile(r'.*Job Name <([^>]+)>.*'),
+                       'job_description_compile': re.compile(r'.*Job Description <([^>]+)>.*'),
                        'user_compile': re.compile(r'.*User <([^>]+)>.*'),
                        'project_compile': re.compile(r'.*Project <([^>]+)>.*'),
                        'status_compile': re.compile(r'.*Status <([A-Z]+)>*'),
                        'queue_compile': re.compile(r'.*Queue <([^>]+)>.*'),
+                       'interactive_mode_compile': re.compile(r'.*Interactive pseudo-terminal shell mode.*'),
                        'command_compile': re.compile(r'.*Command <(.+?\S)>.*$'),
                        'submitted_from_compile': re.compile(r'.*Submitted from host <([^>]+)>.*'),
                        'submitted_time_compile': re.compile(r'(.*): Submitted from host.*'),
@@ -307,7 +309,7 @@ def get_lsf_bjobs_uf_info(command):
                        'started_on_compile': re.compile(r'(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'term_owner_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
+                       'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
                        'mem_compile': re.compile(r'.*MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
                        'swap_compile': re.compile(r'.*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
@@ -323,6 +325,7 @@ def get_lsf_bjobs_uf_info(command):
     run_limit_mark = False
     pending_mark = False
 
+    lsf_unit_for_limits = get_lsf_unit_for_limits()
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in stdout.decode('utf-8', 'ignore').split('\n'):
@@ -340,9 +343,11 @@ def get_lsf_bjobs_uf_info(command):
                 my_dic[job]['job_info'] = ''
                 my_dic[job]['job_id'] = job
                 my_dic[job]['job_name'] = ''
+                my_dic[job]['job_description'] = ''
                 my_dic[job]['user'] = ''
                 my_dic[job]['project'] = ''
                 my_dic[job]['status'] = ''
+                my_dic[job]['interactive_mode'] = 'False'
                 my_dic[job]['queue'] = ''
                 my_dic[job]['command'] = ''
                 my_dic[job]['submitted_from'] = ''
@@ -356,7 +361,7 @@ def get_lsf_bjobs_uf_info(command):
                 my_dic[job]['started_time'] = ''
                 my_dic[job]['finished_time'] = ''
                 my_dic[job]['exit_code'] = ''
-                my_dic[job]['term_owner'] = ''
+                my_dic[job]['term_signal'] = ''
                 my_dic[job]['cpu_time'] = ''
                 my_dic[job]['mem'] = ''
                 my_dic[job]['swap'] = ''
@@ -392,6 +397,10 @@ def get_lsf_bjobs_uf_info(command):
                         my_match = job_compile_dic['job_name_compile'].match(line)
                         my_dic[job]['job_name'] = my_match.group(1)
 
+                    if job_compile_dic['job_description_compile'].match(line):
+                        my_match = job_compile_dic['job_description_compile'].match(line)
+                        my_dic[job]['job_description'] = my_match.group(1)
+
                     if job_compile_dic['user_compile'].match(line):
                         my_match = job_compile_dic['user_compile'].match(line)
                         my_dic[job]['user'] = my_match.group(1)
@@ -407,6 +416,9 @@ def get_lsf_bjobs_uf_info(command):
                     if job_compile_dic['queue_compile'].match(line):
                         my_match = job_compile_dic['queue_compile'].match(line)
                         my_dic[job]['queue'] = my_match.group(1)
+
+                    if job_compile_dic['interactive_mode_compile'].match(line):
+                        my_dic[job]['interactive_mode'] = 'True'
 
                     if job_compile_dic['command_compile'].match(line):
                         my_match = job_compile_dic['command_compile'].match(line)
@@ -437,6 +449,16 @@ def get_lsf_bjobs_uf_info(command):
                         my_match = job_compile_dic['rusage_mem_compile'].match(line)
                         my_dic[job]['rusage_mem'] = my_match.group(1)
 
+                        # Switch rusage_mem unit into "MB".
+                        if lsf_unit_for_limits == 'KB':
+                            my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])/1024, 1)
+                        elif lsf_unit_for_limits == 'MB':
+                            my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']), 1)
+                        elif lsf_unit_for_limits == 'GB':
+                            my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024, 1)
+                        elif lsf_unit_for_limits == 'TB':
+                            my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024*1024, 1)
+
                     if job_compile_dic['submitted_from_compile'].match(line):
                         my_match = job_compile_dic['submitted_from_compile'].match(line)
                         my_dic[job]['submitted_from'] = my_match.group(1)
@@ -461,24 +483,30 @@ def get_lsf_bjobs_uf_info(command):
                         my_dic[job]['mem'] = my_match.group(1)
                         unit = my_match.group(3)
 
+                        # Switch mem unit into "MB".
                         if unit == 'Kbytes':
-                            my_dic[job]['mem'] = float(my_dic[job]['mem'])/1024
+                            my_dic[job]['mem'] = round(float(my_dic[job]['mem'])/1024, 1)
+                        elif unit == 'Mbytes':
+                            my_dic[job]['mem'] = round(float(my_dic[job]['mem']), 1)
                         elif unit == 'Gbytes':
-                            my_dic[job]['mem'] = float(my_dic[job]['mem'])*1024
+                            my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024, 1)
                         elif unit == 'Tbytes':
-                            my_dic[job]['mem'] = float(my_dic[job]['mem'])*1024*1024
+                            my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024*1024, 1)
 
                     if job_compile_dic['swap_compile'].match(line):
                         my_match = job_compile_dic['swap_compile'].match(line)
                         my_dic[job]['swap'] = my_match.group(1)
                         unit = my_match.group(3)
 
+                        # Switch swap unit into "MB".
                         if unit == 'Kbytes':
-                            my_dic[job]['swap'] = float(my_dic[job]['swap'])/1024
+                            my_dic[job]['swap'] = round(float(my_dic[job]['swap'])/1024, 1)
+                        elif unit == 'Mbytes':
+                            my_dic[job]['swap'] = round(float(my_dic[job]['swap']), 1)
                         elif unit == 'Gbytes':
-                            my_dic[job]['swap'] = float(my_dic[job]['swap'])*1024
+                            my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024, 1)
                         elif unit == 'Tbytes':
-                            my_dic[job]['swap'] = float(my_dic[job]['swap'])*1024*1024
+                            my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024*1024, 1)
 
                     if job_compile_dic['finished_time_compile'].match(line):
                         my_match = job_compile_dic['finished_time_compile'].match(line)
@@ -488,9 +516,9 @@ def get_lsf_bjobs_uf_info(command):
                         my_match = job_compile_dic['exit_code_compile'].match(line)
                         my_dic[job]['exit_code'] = my_match.group(1)
 
-                    if job_compile_dic['term_owner_compile'].match(line):
-                        my_match = job_compile_dic['term_owner_compile'].match(line)
-                        my_dic[job]['term_owner'] = my_match.group(1)
+                    if job_compile_dic['term_signal_compile'].match(line):
+                        my_match = job_compile_dic['term_signal_compile'].match(line)
+                        my_dic[job]['term_signal'] = my_match.group(1)
 
                     if job_compile_dic['pids_compile'].findall(line):
                         my_match = job_compile_dic['pids_compile'].findall(line)
@@ -503,22 +531,28 @@ def get_lsf_bjobs_uf_info(command):
                         my_dic[job]['max_mem'] = my_match.group(1)
                         unit = my_match.group(3)
 
+                        # Switch max_mem unit into "MB".
                         if unit == 'Kbytes':
-                            my_dic[job]['max_mem'] = float(my_dic[job]['max_mem'])/1024
+                            my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])/1024, 1)
+                        elif unit == 'Mbytes':
+                            my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem']), 1)
                         elif unit == 'Gbytes':
-                            my_dic[job]['max_mem'] = float(my_dic[job]['max_mem'])*1024
+                            my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024, 1)
                         elif unit == 'Tbytes':
-                            my_dic[job]['max_mem'] = float(my_dic[job]['max_mem'])*1024*1024
+                            my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024*1024, 1)
 
                         my_dic[job]['avg_mem'] = my_match.group(4)
                         unit = my_match.group(6)
 
+                        # Switch avg_mem unit into "MB".
                         if unit == 'Kbytes':
-                            my_dic[job]['avg_mem'] = float(my_dic[job]['avg_mem'])/1024
+                            my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])/1024, 1)
+                        elif unit == 'Mbytes':
+                            my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem']), 1)
                         elif unit == 'Gbytes':
-                            my_dic[job]['avg_mem'] = float(my_dic[job]['avg_mem'])*1024
+                            my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024, 1)
                         elif unit == 'Tbytes':
-                            my_dic[job]['avg_mem'] = float(my_dic[job]['avg_mem'])*1024*1024
+                            my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024*1024, 1)
 
                         continue
 
@@ -569,7 +603,7 @@ def get_openlava_bjobs_uf_info(command):
                        'started_time_compile': re.compile(r'(.*): (\[\d+\])?\s*[sS]tarted on.*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'term_owner_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
+                       'term_signal_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is ([1-9][0-9]*) seconds.*'),
                        'mem_compile': re.compile(r'.*MEM: ([1-9][0-9]*) Mbytes.*'),
                       }
@@ -610,7 +644,7 @@ def get_openlava_bjobs_uf_info(command):
                 my_dic[job]['started_time'] = ''
                 my_dic[job]['finished_time'] = ''
                 my_dic[job]['exit_code'] = ''
-                my_dic[job]['term_owner'] = ''
+                my_dic[job]['term_signal'] = ''
                 my_dic[job]['cpu_time'] = ''
                 my_dic[job]['mem'] = ''
                 my_dic[job]['swap'] = ''
@@ -697,9 +731,9 @@ def get_openlava_bjobs_uf_info(command):
                     my_match = job_compile_dic['exit_code_compile'].match(line)
                     my_dic[job]['exit_code'] = my_match.group(1)
 
-                if job_compile_dic['term_owner_compile'].match(line):
-                    my_match = job_compile_dic['term_owner_compile'].match(line)
-                    my_dic[job]['term_owner'] = my_match.group(1)
+                if job_compile_dic['term_signal_compile'].match(line):
+                    my_match = job_compile_dic['term_signal_compile'].match(line)
+                    my_dic[job]['term_signal'] = my_match.group(1)
 
                 if job_compile_dic['cpu_time_compile'].match(line):
                     my_match = job_compile_dic['cpu_time_compile'].match(line)
@@ -884,35 +918,27 @@ def get_lsf_unit_for_limits():
     return lsf_unit_for_limits
 
 
-def switch_submit_time(submit_time, compare_second='', format=''):
+def switch_bjobs_uf_time(bjobs_uf_time, format=''):
     """
-    Switch submit_time format from "%a %m/%d %H:%M" to specified format (or start_second by default).
+    Switch bjobs_uf_time from "%Y %b %d %H:%M:%S" into specified format.
     """
-    new_submit_time = submit_time
+    new_bjobs_uf_time = bjobs_uf_time
 
-    if submit_time and (submit_time != 'N/A') and (submit_time != 'RESERVATION'):
-        # Switch submit_time to start_second.
+    if bjobs_uf_time and (bjobs_uf_time != 'N/A'):
+        # Switch bjobs_uf_time to start_seconds.
         current_year = datetime.date.today().year
-        submit_time_with_year = str(current_year) + ' ' + str(submit_time)
-        submit_time_with_year = re.sub('  ', ' ', submit_time_with_year)
+        bjobs_uf_time_list = bjobs_uf_time.split()
 
-        try:
-            start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
-        except Exception:
-            common.bprint('Variable "submit_time_with_year", value is "' + str(submit_time_with_year) + '", not follow the time format "%Y %b %d %H:%M".', level='Error')
+        bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
+        start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
+        current_seconds = time.time()
 
-        if not compare_second:
-            compare_second = time.time()
-
-        if int(start_second) > int(compare_second):
+        if int(start_seconds) > int(current_seconds):
             current_year = int(datetime.date.today().year) - 1
-            submit_time_with_year = str(current_year) + ' ' + str(submit_time)
-            start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
+            bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
+            start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
 
-        # Switch start_second to expected time format.
-        if format:
-            new_submit_time = time.strftime(format, time.localtime(start_second))
-        else:
-            new_submit_time = start_second
+        # Switch start_seconds to expected time format.
+        new_bjobs_uf_time = time.strftime(format, time.localtime(start_seconds))
 
-    return new_submit_time
+    return new_bjobs_uf_time

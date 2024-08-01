@@ -1,6 +1,5 @@
 import os
 import sys
-import stat
 import socket
 
 CWD = os.getcwd()
@@ -155,7 +154,7 @@ ps -elf|grep '""" + str(PYTHON_PATH) + '/gunicorn' + """ -c predict_gconf.py pre
 
 def gen_config_file():
     """
-    Generate config file <MEM_PREDICTION_INSTALL_PATH>/monitor/conf/config.py.
+    Generate config file <MEM_PREDICTION_INSTALL_PATH>/config/config.py.
     """
     config_file = str(CWD) + '/config/config.py'
 
@@ -176,6 +175,9 @@ def gen_config_file():
             with open(config_file, 'w') as CF:
                 CF.write('''# job infomation database save directory, format: csv/sqlite.
 db_path = "''' + str(job_db_path) + '''"
+
+# Specify job database format
+job_format = 'csv'
 
 # job rusage analysis report template
 report_template = "''' + str(report_template) + '''"

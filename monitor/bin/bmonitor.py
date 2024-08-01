@@ -3,9 +3,9 @@
 import os
 import re
 import sys
-import stat
 import copy
 import time
+import json
 import getpass
 import datetime
 import argparse
@@ -20,7 +20,6 @@ from common import common_lsf
 from common import common_license
 from common import common_pyqt5
 from common import common_sqlite3
-from conf import config
 
 # Import local config file if exists.
 local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
@@ -29,10 +28,12 @@ local_config = str(local_config_dir) + '/config.py'
 if os.path.exists(local_config):
     sys.path.append(local_config_dir)
     import config
+else:
+    from conf import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.5'
-VERSION_DATE = '2024.06.25'
+VERSION = 'V1.5.1'
+VERSION_DATE = '2024.08.01'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -76,12 +77,6 @@ def read_args():
         if not args.tab:
             args.tab = 'JOB'
 
-        command = 'bjobs -w ' + str(args.jobid)
-        job_dic = common_lsf.get_bjobs_info(command)
-
-        if not job_dic:
-            args.jobid = ''
-
     # Set default tab for args.feature.
     if args.feature and (not args.tab):
         args.tab = 'LICENSE'
@@ -119,16 +114,15 @@ class MainWindow(QMainWindow):
         self.specified_feature = specified_feature
         self.disable_license = disable_license
 
-        self.lsf_unit_for_limits = common_lsf.get_lsf_unit_for_limits()
-
         # Enable detail information on QUEUE/UTILIZATION tab.
         self.enable_queue_detail = False
         self.enable_utilization_detail = False
 
         # Init LSF information related variables.
         self.bhosts_dic = {}
+        self.busers_dic = {}
         self.lsload_dic = {}
-        self.queues_dic = {}
+        self.bqueues_dic = {}
         self.lshosts_dic = {}
         self.queue_host_dic = {}
         self.host_queue_dic = {}
@@ -137,8 +131,8 @@ class MainWindow(QMainWindow):
         # Set self.lsf_info_dic for how to get LSF information.
         self.lsf_info_dic = {'bhosts': {'exec_cmd': 'self.bhosts_dic = common_lsf.get_bhosts_info()', 'update_second': 0},
                              'lsload': {'exec_cmd': 'self.lsload_dic = common_lsf.get_lsload_info()', 'update_second': 0},
-                             'bqueues': {'exec_cmd': 'self.queues_dic = common_lsf.get_bqueues_info()', 'update_second': 0},
-                             'busers': {'exec_cmd': 'self.users_dic = common_lsf.get_busers_info()', 'update_second': 0},
+                             'bqueues': {'exec_cmd': 'self.bqueues_dic = common_lsf.get_bqueues_info()', 'update_second': 0},
+                             'busers': {'exec_cmd': 'self.busers_dic = common_lsf.get_busers_info()', 'update_second': 0},
                              'lshosts': {'exec_cmd': 'self.lshosts_dic = common_lsf.get_lshosts_info()', 'update_second': 0},
                              'queue_host': {'exec_cmd': 'self.queue_host_dic = common_lsf.get_queue_host_info()', 'update_second': 0},
                              'host_queue': {'exec_cmd': 'self.host_queue_dic = common_lsf.get_host_queue_info()', 'update_second': 0},
@@ -674,6 +668,20 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
 
+        if not self.job_tab_current_job_dic:
+            job_db_path = str(self.db_path) + '/job'
+            finished_date_list = list(os.listdir(job_db_path))
+
+            for finished_date in finished_date_list[::-1]:
+                finished_date_json = str(job_db_path) + '/' + str(finished_date)
+
+                with open(finished_date_json, 'r') as FDJ:
+                    finished_date_dic = json.loads(FDJ.read())
+
+                    if self.job_tab_current_job in finished_date_dic:
+                        self.job_tab_current_job_dic = {self.job_tab_current_job: finished_date_dic[self.job_tab_current_job]}
+                        break
+
         time.sleep(0.01)
         my_show_message.terminate()
 
@@ -803,16 +811,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.job_tab_rusage_mem_line.setText('')
         else:
             if self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'] != '':
-                rusage_mem_value = self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem']
-
-                if self.lsf_unit_for_limits == 'KB':
-                    rusage_mem_value = round(int(rusage_mem_value)/1024/1024, 1)
-                elif self.lsf_unit_for_limits == 'MB':
-                    rusage_mem_value = round(int(rusage_mem_value)/1024, 1)
-                elif self.lsf_unit_for_limits == 'GB':
-                    rusage_mem_value = round(float(rusage_mem_value), 1)
-                elif self.lsf_unit_for_limits == 'TB':
-                    rusage_mem_value = round(int(rusage_mem_value)*1024, 1)
+                rusage_mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'])/1024, 1)
 
                 self.job_tab_rusage_mem_line.setText(str(rusage_mem_value) + ' G')
                 self.job_tab_rusage_mem_line.setCursorPosition(0)
@@ -855,18 +854,18 @@ Please contact with liyanqing1987@163.com with any question."""
         job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_list = list(job_range_dic.keys())
         job_range = job_range_list[0]
-        job_db_file = str(self.db_path) + '/job/' + str(job_range) + '.db'
+        job_mem_db_file = str(self.db_path) + '/job_mem/' + str(job_range) + '.db'
 
-        if not os.path.exists(job_db_file):
+        if not os.path.exists(job_mem_db_file):
             common.bprint('Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
-            (job_db_file_connect_result, job_db_conn) = common_sqlite3.connect_db_file(job_db_file)
+            (job_mem_db_file_connect_result, job_mem_db_conn) = common_sqlite3.connect_db_file(job_mem_db_file)
 
-            if job_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting job database file "' + str(job_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            if job_mem_db_file_connect_result == 'failed':
+                common.bprint('Failed on connecting job database file "' + str(job_mem_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 table_name = 'job_' + str(self.job_tab_current_job)
-                data_dic = common_sqlite3.get_sql_table_data(job_db_file, job_db_conn, table_name, ['sample_time', 'mem'])
+                data_dic = common_sqlite3.get_sql_table_data(job_mem_db_file, job_mem_db_conn, table_name, ['sample_time', 'mem'])
 
                 if not data_dic:
                     common.bprint('Job memory usage information is empty for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -888,7 +887,7 @@ Please contact with liyanqing1987@163.com with any question."""
                         real_mem = round(float(mem)/1024, 1)
                         real_mem_list.append(real_mem)
 
-                job_db_conn.close()
+                job_mem_db_conn.close()
 
         return runtime_list, real_mem_list
 
@@ -992,7 +991,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
         self.fresh_lsf_info('busers')
-        jobs_tab_user_line_completer = common_pyqt5.get_completer(self.users_dic['USER/GROUP'])
+        jobs_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
         self.jobs_tab_user_line.setCompleter(jobs_tab_user_line_completer)
 
         # "Check" button.
@@ -1013,6 +1012,7 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_frame0_grid.addWidget(self.jobs_tab_user_line, 0, 7)
         jobs_tab_frame0_grid.addWidget(jobs_tab_check_button, 0, 8)
 
+        jobs_tab_frame0_grid.setColumnStretch(0, 1)
         jobs_tab_frame0_grid.setColumnStretch(1, 1)
         jobs_tab_frame0_grid.setColumnStretch(2, 1)
         jobs_tab_frame0_grid.setColumnStretch(3, 1)
@@ -1067,6 +1067,12 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -r'
         elif (len(specified_status_list) == 1) and (specified_status_list[0] == 'PEND'):
             command = str(command) + ' -p'
+        elif (len(specified_status_list) == 1) and (specified_status_list[0] == 'DONE'):
+            command = str(command) + ' -d'
+        elif (len(specified_status_list) == 1) and (specified_status_list[0] == 'EXIT'):
+            command = str(command) + ' -d'
+        elif (len(specified_status_list) == 2) and ('DONE' in specified_status_list) and ('EXIT' in specified_status_list):
+            command = str(command) + ' -d'
         else:
             command = str(command) + ' -a'
 
@@ -1154,7 +1160,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Started" item.
             j = j+1
-            start_time = self.switch_job_start_time(job_dic[job]['started_time'])
+            start_time = common_lsf.switch_bjobs_uf_time(job_dic[job]['started_time'], '%Y-%m-%d %H:%M:%S')
             item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
@@ -1179,17 +1185,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             if str(job_dic[job]['rusage_mem']) != '':
                 item = QTableWidgetItem()
-                rusage_mem_value = job_dic[job]['rusage_mem']
-
-                if self.lsf_unit_for_limits == 'KB':
-                    rusage_mem_value = round(int(rusage_mem_value)/1024/1024, 1)
-                elif self.lsf_unit_for_limits == 'MB':
-                    rusage_mem_value = round(int(rusage_mem_value)/1024, 1)
-                elif self.lsf_unit_for_limits == 'GB':
-                    rusage_mem_value = round(float(rusage_mem_value), 1)
-                elif self.lsf_unit_for_limits == 'TB':
-                    rusage_mem_value = round(int(rusage_mem_value)*1024, 1)
-
+                rusage_mem_value = round(float(job_dic[job]['rusage_mem'])/1024, 1)
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 
@@ -1239,31 +1235,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
         if return_code == 0:
             self.gen_jobs_tab_table()
-
-    def switch_job_start_time(self, start_time):
-        """
-        Switch start_time from "%Y %b %d %H:%M:%S" into "%Y-%m-%d %H:%M:%S".
-        """
-        new_start_time = start_time
-
-        if start_time and (start_time != 'N/A'):
-            # Switch start_time to start_seconds.
-            current_year = datetime.date.today().year
-            start_time_list = start_time.split()
-
-            start_time_with_year = str(current_year) + ' ' + str(start_time_list[1]) + ' ' + str(start_time_list[2]) + ' ' + str(start_time_list[3])
-            start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %b %d %H:%M:%S'))
-            current_seconds = time.time()
-
-            if int(start_seconds) > int(current_seconds):
-                current_year = int(datetime.date.today().year) - 1
-                start_time_with_year = str(current_year) + ' ' + str(start_time_list[1]) + ' ' + str(start_time_list[2]) + ' ' + str(start_time_list[3])
-                start_seconds = time.mktime(time.strptime(start_time_with_year, '%Y %b %d %H:%M:%S'))
-
-            # Switch start_seconds to expected time format.
-            new_start_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_seconds))
-
-        return new_start_time
 
     def jobs_tab_check_click(self, item=None):
         """
@@ -1321,7 +1292,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.fresh_lsf_info('bqueues')
 
         if not queue_list:
-            queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
             queue_list.sort()
             queue_list.insert(0, 'ALL')
 
@@ -1450,6 +1421,7 @@ Please contact with liyanqing1987@163.com with any question."""
         hosts_tab_frame0_grid.addWidget(self.hosts_tab_host_line, 0, 9)
         hosts_tab_frame0_grid.addWidget(hosts_tab_check_button, 0, 10)
 
+        hosts_tab_frame0_grid.setColumnStretch(0, 1)
         hosts_tab_frame0_grid.setColumnStretch(1, 1)
         hosts_tab_frame0_grid.setColumnStretch(2, 1)
         hosts_tab_frame0_grid.setColumnStretch(3, 1)
@@ -1613,7 +1585,6 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', maxmem):
                 maxmem = float(re.sub(r'T', '', maxmem))*1024
             else:
-                common.bprint('Host(' + str(host) + ') maxmem info "' + str(maxmem) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 maxmem = 0
 
             item = QTableWidgetItem()
@@ -1640,7 +1611,6 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', mem):
                 mem = float(re.sub(r'T', '', mem))*1024
             else:
-                common.bprint('Host(' + str(host) + ') mem info "' + str(mem) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 mem = 0
 
             item = QTableWidgetItem()
@@ -1666,7 +1636,6 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', maxswp):
                 maxswp = float(re.sub(r'T', '', maxswp))*1024
             else:
-                common.bprint('Host(' + str(host) + ') maxswp info "' + str(maxswp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 maxswp = 0
 
             item = QTableWidgetItem()
@@ -1693,7 +1662,6 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', swp):
                 swp = float(re.sub(r'T', '', swp))*1024
             else:
-                common.bprint('Host(' + str(host) + ') swp info "' + str(swp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 swp = 0
 
             item = QTableWidgetItem()
@@ -1720,7 +1688,6 @@ Please contact with liyanqing1987@163.com with any question."""
             elif re.search(r'T', tmp):
                 tmp = float(re.sub(r'T', '', tmp))*1024
             else:
-                common.bprint('Host(' + str(host) + ') tmp info "' + str(tmp) + '": unrecognized unit, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 tmp = 0
 
             item = QTableWidgetItem()
@@ -1888,7 +1855,7 @@ Please contact with liyanqing1987@163.com with any question."""
         if item is not None:
             current_row = self.hosts_tab_table.currentRow()
             host = self.hosts_tab_table.item(current_row, 0).text().strip()
-            njobs_num = self.hosts_tab_table.item(current_row, 5).text().strip()
+            njobs_num = self.hosts_tab_table.item(current_row, 4).text().strip()
 
             if item.column() == 0:
                 self.fresh_lsf_info('bhosts')
@@ -1946,7 +1913,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
         queue_list.sort()
         queue_list.insert(0, 'ALL')
 
@@ -2109,9 +2076,9 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Fill self.queues_tab_table items.
         self.queues_tab_table.setRowCount(0)
-        self.queues_tab_table.setRowCount(len(self.queues_dic['QUEUE_NAME'])+1)
+        self.queues_tab_table.setRowCount(len(self.bqueues_dic['QUEUE_NAME'])+1)
 
-        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
         queue_list.sort()
         queue_list.append('ALL')
 
@@ -2123,7 +2090,7 @@ Please contact with liyanqing1987@163.com with any question."""
             index = 0
 
             if i < len(queue_list)-1:
-                index = self.queues_dic['QUEUE_NAME'].index(queue)
+                index = self.bqueues_dic['QUEUE_NAME'].index(queue)
 
             # Fill "QUEUE" item.
             j = 0
@@ -2162,7 +2129,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if i == len(queue_list)-1:
                 pend = str(pend_sum)
             else:
-                pend = self.queues_dic['PEND'][index]
+                pend = self.bqueues_dic['PEND'][index]
                 pend_sum += int(pend)
 
             item = QTableWidgetItem(pend)
@@ -2179,7 +2146,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if i == len(queue_list)-1:
                 run = str(run_sum)
             else:
-                run = self.queues_dic['RUN'][index]
+                run = self.bqueues_dic['RUN'][index]
                 run_sum += int(run)
 
             item = QTableWidgetItem(run)
@@ -2217,6 +2184,7 @@ Please contact with liyanqing1987@163.com with any question."""
         queues_tab_frame0_grid.addWidget(queues_tab_end_date_label, 0, 2)
         queues_tab_frame0_grid.addWidget(self.queues_tab_end_date_edit, 0, 3)
 
+        queues_tab_frame0_grid.setColumnStretch(0, 1)
         queues_tab_frame0_grid.setColumnStretch(1, 1)
         queues_tab_frame0_grid.setColumnStretch(2, 1)
         queues_tab_frame0_grid.setColumnStretch(3, 1)
@@ -2524,6 +2492,7 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_frame0_grid.addWidget(self.load_tab_end_date_edit, 0, 5)
         load_tab_frame0_grid.addWidget(load_tab_check_button, 0, 6)
 
+        load_tab_frame0_grid.setColumnStretch(0, 1)
         load_tab_frame0_grid.setColumnStretch(1, 1)
         load_tab_frame0_grid.setColumnStretch(2, 1)
         load_tab_frame0_grid.setColumnStretch(3, 1)
@@ -2836,6 +2805,7 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 2)
         utilization_tab_frame0_grid.addWidget(utilization_tab_export_button, 1, 6)
 
+        utilization_tab_frame0_grid.setColumnStretch(0, 1)
         utilization_tab_frame0_grid.setColumnStretch(1, 1)
         utilization_tab_frame0_grid.setColumnStretch(2, 1)
         utilization_tab_frame0_grid.setColumnStretch(3, 1)
@@ -2852,7 +2822,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
         queue_list.sort()
         queue_list.insert(0, 'ALL')
 
@@ -2991,7 +2961,7 @@ Please contact with liyanqing1987@163.com with any question."""
         # Organize utilization info, get average utlization for every queue.
         queue_utilization_dic = {}
         self.fresh_lsf_info('bqueues')
-        queue_list = copy.deepcopy(self.queues_dic['QUEUE_NAME'])
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
         queue_list.sort()
         queue_list.append('ALL')
 
@@ -3430,7 +3400,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.license_tab_user_line = QLineEdit()
         self.license_tab_user_line.returnPressed.connect(self.update_license_info)
 
-        license_tab_user_line_completer = common_pyqt5.get_completer(self.users_dic['USER/GROUP'])
+        license_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
         self.license_tab_user_line.setCompleter(license_tab_user_line_completer)
 
         # "Filter" button.
@@ -3453,6 +3423,7 @@ Please contact with liyanqing1987@163.com with any question."""
         license_tab_frame0_grid.addWidget(self.license_tab_user_line, 0, 9)
         license_tab_frame0_grid.addWidget(license_tab_check_button, 0, 10)
 
+        license_tab_frame0_grid.setColumnStretch(0, 1)
         license_tab_frame0_grid.setColumnStretch(1, 1)
         license_tab_frame0_grid.setColumnStretch(2, 1)
         license_tab_frame0_grid.setColumnStretch(3, 1)
