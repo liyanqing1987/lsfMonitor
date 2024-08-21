@@ -61,14 +61,18 @@ def read_args():
                         action="store_true",
                         default=False,
                         help='Sample utilization (slot/cpu/mem) info with command "lsload/bhosts/lshosts".')
+    parser.add_argument("-UD", "--utilization_day",
+                        action="store_true",
+                        default=False,
+                        help='Count and save utilization-day info with utilization data.')
 
     args = parser.parse_args()
 
-    if (not args.job) and (not args.job_mem) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization):
-        common.bprint('At least one argument of "job/job_mem/queue/host/load/user/utilization" must be selected.', level='Error')
+    if (not args.job) and (not args.job_mem) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization) and (not args.utilization_day):
+        common.bprint('At least one argument of "job/job_mem/queue/host/load/user/utilization/utilization_day" must be selected.', level='Error')
         sys.exit(1)
 
-    return args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization
+    return args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization, args.utilization_day
 
 
 class Sampling:
@@ -76,7 +80,7 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, job_sampling, job_mem_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling):
+    def __init__(self, job_sampling, job_mem_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_counting):
         self.job_sampling = job_sampling
         self.job_mem_sampling = job_mem_sampling
         self.queue_sampling = queue_sampling
@@ -84,6 +88,7 @@ class Sampling:
         self.load_sampling = load_sampling
         self.user_sampling = user_sampling
         self.utilization_sampling = utilization_sampling
+        self.utilization_day_counting = utilization_day_counting
 
         # Get sample time.
         self.sample_second = int(time.time())
@@ -548,8 +553,6 @@ class Sampling:
         utilization_db_conn.commit()
         utilization_db_conn.close()
 
-        self.count_utilization_day_info()
-
     def get_utilization_day_info(self):
         """
         Get current day slot/cpu/mem utilizaiton info from sqlite3 database.
@@ -696,6 +699,10 @@ class Sampling:
             p = Process(target=self.sample_utilization_info)
             p.start()
 
+        if self.utilization_day_counting:
+            p = Process(target=self.count_utilization_day_info)
+            p.start()
+
         p.join()
 
 
@@ -703,8 +710,8 @@ class Sampling:
 # Main Function #
 #################
 def main():
-    (job, job_mem, queue, host, load, user, utilization) = read_args()
-    my_sampling = Sampling(job, job_mem, queue, host, load, user, utilization)
+    (job, job_mem, queue, host, load, user, utilization, utilization_day) = read_args()
+    my_sampling = Sampling(job, job_mem, queue, host, load, user, utilization, utilization_day)
     my_sampling.sampling()
 
 

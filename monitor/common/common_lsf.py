@@ -235,7 +235,7 @@ def get_lsid_info():
         elif re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line):
             my_match = re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line)
             master = my_match.group(1)
-        elif re.search(r'LSF', line):
+        elif re.search(r'LSF', line) or re.search(r'openlava_bd', line):
             tool = 'LSF'
 
             if re.match(r'^.*\s+([\d\.]+),.*$', line):
@@ -311,7 +311,7 @@ def get_lsf_bjobs_uf_info(command):
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
                        'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
-                       'mem_compile': re.compile(r'.*\.\s+MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
+                       'mem_compile': re.compile(r'.*[\.\;]\s+MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
                        'swap_compile': re.compile(r'.*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
                        'run_limit_compile': re.compile(r'\s*RUNLIMIT\s*'),
                        'pids_compile': re.compile(r'PIDs:\s+(.+?);'),
