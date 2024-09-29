@@ -9,6 +9,7 @@ import json
 import getpass
 import datetime
 import argparse
+import qdarkstyle
 
 from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView, QDateEdit, QFileDialog, QMenu
 from PyQt5.QtGui import QIcon, QBrush, QFont
@@ -32,8 +33,8 @@ else:
     from conf import config
 
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.5.1'
-VERSION_DATE = '2024.08.01'
+VERSION = 'V1.6'
+VERSION_DATE = '2024.09.26'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -63,12 +64,16 @@ def read_args():
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
                         default='',
-                        choices=['JOB', 'JOBS', 'HOSTS', 'QUEUES', 'LOAD', 'UTILIZATION', 'LICENSE'],
+                        choices=['JOB', 'JOBS', 'HOSTS', 'LOAD', 'USERS', 'QUEUES', 'UTILIZATION', 'LICENSE'],
                         help='Specify current tab, default is "JOBS" tab.')
-    parser.add_argument("-dl", "--disable_license",
+    parser.add_argument("--disable_license",
                         action='store_true',
                         default=False,
                         help='Disable license check function.')
+    parser.add_argument("-d", "--dark_mode",
+                        action='store_true',
+                        default=False,
+                        help='Enable dark mode on the main interface.')
 
     args = parser.parse_args()
 
@@ -89,14 +94,14 @@ def read_args():
     if not args.tab:
         args.tab = 'JOBS'
 
-    return args.jobid, args.user, args.feature, args.tab, args.disable_license
+    return args.jobid, args.user, args.feature, args.tab, args.disable_license, args.dark_mode
 
 
 class MainWindow(QMainWindow):
     """
     Main window of lsfMonitor.
     """
-    def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license):
+    def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license, dark_mode):
         super().__init__()
 
         # Check cluster info.
@@ -113,6 +118,7 @@ class MainWindow(QMainWindow):
         self.specified_user = specified_user
         self.specified_feature = specified_feature
         self.disable_license = disable_license
+        self.dark_mode = dark_mode
 
         # Enable detail information on QUEUE/UTILIZATION tab.
         self.enable_queue_detail = False
@@ -137,6 +143,14 @@ class MainWindow(QMainWindow):
                              'queue_host': {'exec_cmd': 'self.queue_host_dic = common_lsf.get_queue_host_info()', 'update_second': 0},
                              'host_queue': {'exec_cmd': 'self.host_queue_dic = common_lsf.get_host_queue_info()', 'update_second': 0},
                              'bhosts_load': {'exec_cmd': 'self.bhosts_load_dic = common_lsf.get_bhosts_load_info()', 'update_second': 0}}
+
+        # Just update specified_job info if specified_job argument is specified.
+        if self.specified_job:
+            self.disable_license = True
+            current_second = int(time.time())
+
+            for item in self.lsf_info_dic.keys():
+                self.lsf_info_dic[item]['update_second'] = current_second
 
         # Get license information.
         self.license_dic = {}
@@ -234,8 +248,9 @@ class MainWindow(QMainWindow):
         self.job_tab = QWidget()
         self.jobs_tab = QWidget()
         self.hosts_tab = QWidget()
-        self.queues_tab = QWidget()
         self.load_tab = QWidget()
+        self.users_tab = QWidget()
+        self.queues_tab = QWidget()
         self.utilization_tab = QWidget()
         self.license_tab = QWidget()
 
@@ -243,25 +258,32 @@ class MainWindow(QMainWindow):
         self.main_tab.addTab(self.job_tab, 'JOB')
         self.main_tab.addTab(self.jobs_tab, 'JOBS')
         self.main_tab.addTab(self.hosts_tab, 'HOSTS')
-        self.main_tab.addTab(self.queues_tab, 'QUEUES')
         self.main_tab.addTab(self.load_tab, 'LOAD')
+        self.main_tab.addTab(self.users_tab, 'USERS')
+        self.main_tab.addTab(self.queues_tab, 'QUEUES')
         self.main_tab.addTab(self.utilization_tab, 'UTILIZATION')
         self.main_tab.addTab(self.license_tab, 'LICENSE')
 
         # Generate the sub-tabs
         self.gen_job_tab()
-        self.gen_jobs_tab()
-        self.gen_hosts_tab()
-        self.gen_queues_tab()
-        self.gen_load_tab()
-        self.gen_utilization_tab()
-        self.gen_license_tab()
+
+        if not self.specified_job:
+            self.gen_jobs_tab()
+            self.gen_hosts_tab()
+            self.gen_load_tab()
+            self.gen_users_tab()
+            self.gen_queues_tab()
+            self.gen_utilization_tab()
+            self.gen_license_tab()
 
         # Show main window
         common_pyqt5.auto_resize(self, 1200, 610)
         self.setWindowTitle('lsfMonitor ' + str(VERSION))
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)
+
+        if self.dark_mode:
+            self.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
     def switch_tab(self, specified_tab):
         """
@@ -270,8 +292,9 @@ class MainWindow(QMainWindow):
         tab_dic = {'JOB': self.job_tab,
                    'JOBS': self.jobs_tab,
                    'HOSTS': self.hosts_tab,
-                   'QUEUES': self.queues_tab,
                    'LOAD': self.load_tab,
+                   'USERS': self.users_tab,
+                   'QUEUES': self.queues_tab,
                    'UTILIZATION': self.utilization_tab,
                    'LICENSE': self.license_tab}
 
@@ -291,6 +314,10 @@ class MainWindow(QMainWindow):
         export_hosts_table_action = QAction('Export hosts table', self)
         export_hosts_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
         export_hosts_table_action.triggered.connect(self.export_hosts_table)
+
+        export_users_table_action = QAction('Export users table', self)
+        export_users_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
+        export_users_table_action.triggered.connect(self.export_users_table)
 
         export_queues_table_action = QAction('Export queues table', self)
         export_queues_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
@@ -315,6 +342,7 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu('File')
         file_menu.addAction(export_jobs_table_action)
         file_menu.addAction(export_hosts_table_action)
+        file_menu.addAction(export_users_table_action)
         file_menu.addAction(export_queues_table_action)
         file_menu.addAction(export_utilization_table_action)
         file_menu.addAction(export_license_feature_table_action)
@@ -631,6 +659,10 @@ Please contact with liyanqing1987@163.com with any question."""
         self.job_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.job_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.job_tab_mem_canvas, self, x_is_date=False)
 
+        if self.dark_mode:
+            fig = self.job_tab_mem_canvas.figure
+            fig.set_facecolor('#19232d')
+
         # self.job_tab_frame3 - Grid
         job_tab_frame3_grid = QGridLayout()
         job_tab_frame3_grid.addWidget(self.job_tab_mem_toolbar, 0, 0)
@@ -912,9 +944,22 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         fig.subplots_adjust(bottom=0.2)
         axes = fig.add_subplot(111)
-        axes.set_title('memory usage for job "' + str(self.job_tab_current_job) + '"')
-        axes.set_xlabel('Runtime (Minutes)')
-        axes.set_ylabel('Memory Usage (G)')
+
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+            axes.set_title('memory usage for job "' + str(self.job_tab_current_job) + '"', color='white')
+            axes.set_xlabel('Runtime (Minutes)', color='white')
+            axes.set_ylabel('Memory Usage (G)', color='white')
+        else:
+            axes.set_title('memory usage for job "' + str(self.job_tab_current_job) + '"')
+            axes.set_xlabel('Runtime (Minutes)')
+            axes.set_ylabel('Memory Usage (G)')
+
         axes.plot(runtime_list, mem_list, 'go-', label='MEM', linewidth=0.1, markersize=0.1)
         axes.fill_between(runtime_list, mem_list, color='green', alpha=0.5)
         axes.legend(loc='upper right')
@@ -1191,15 +1236,21 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Mem" item.
             j = j+1
+            mem_value = ''
 
-            if str(job_dic[job]['mem']) != '':
-                item = QTableWidgetItem()
-                mem_value = round(float(job_dic[job]['mem'])/1024, 1)
-                item.setData(Qt.DisplayRole, mem_value)
-                self.jobs_tab_table.setItem(i, j, item)
+            if (job_dic[job]['status'] == 'DONE') or (job_dic[job]['status'] == 'EXIT'):
+                if str(job_dic[job]['max_mem']) != '':
+                    mem_value = round(float(job_dic[job]['max_mem'])/1024, 1)
+            else:
+                if str(job_dic[job]['mem']) != '':
+                    mem_value = round(float(job_dic[job]['mem'])/1024, 1)
 
-                if ((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value)):
-                    item.setBackground(QBrush(Qt.red))
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, mem_value)
+            self.jobs_tab_table.setItem(i, j, item)
+
+            if mem_value and (((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value))):
+                item.setBackground(QBrush(Qt.red))
 
             # Fill "Command" item.
             j = j+1
@@ -1278,7 +1329,7 @@ Please contact with liyanqing1987@163.com with any question."""
         for status in status_list:
             self.jobs_tab_status_combo.addCheckBoxItem(status)
 
-        # Set "ALL" as checked status.
+        # Set "RUN" as checked status.
         for (i, qBox) in enumerate(self.jobs_tab_status_combo.checkBoxList):
             if (qBox.text() == 'RUN') and (qBox.isChecked() is False):
                 self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
@@ -2005,8 +2056,670 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 self.hosts_tab_maxmem_combo.checkBoxList[i].setChecked(True)
                 break
-
 # For hosts TAB (end) #
+
+# For load TAB (start) #
+    def gen_load_tab(self):
+        """
+        Generate the load tab on lsfMonitor GUI, show host load (ut/mem) information.
+        """
+        # self.load_tab
+        self.load_tab_frame0 = QFrame(self.load_tab)
+        self.load_tab_frame1 = QFrame(self.load_tab)
+        self.load_tab_frame2 = QFrame(self.load_tab)
+
+        self.load_tab_frame0.setFrameShadow(QFrame.Raised)
+        self.load_tab_frame0.setFrameShape(QFrame.Box)
+        self.load_tab_frame1.setFrameShadow(QFrame.Raised)
+        self.load_tab_frame1.setFrameShape(QFrame.Box)
+        self.load_tab_frame2.setFrameShadow(QFrame.Raised)
+        self.load_tab_frame2.setFrameShape(QFrame.Box)
+
+        # self.load_tab - Grid
+        load_tab_grid = QGridLayout()
+
+        load_tab_grid.addWidget(self.load_tab_frame0, 0, 0)
+        load_tab_grid.addWidget(self.load_tab_frame1, 1, 0)
+        load_tab_grid.addWidget(self.load_tab_frame2, 2, 0)
+
+        load_tab_grid.setRowStretch(0, 1)
+        load_tab_grid.setRowStretch(1, 10)
+        load_tab_grid.setRowStretch(2, 10)
+
+        self.load_tab.setLayout(load_tab_grid)
+
+        # Generate sub-frame
+        self.gen_load_tab_frame0()
+        self.gen_load_tab_frame1()
+        self.gen_load_tab_frame2()
+
+    def gen_load_tab_frame0(self):
+        # self.load_tab_frame0
+        # "Host" item.
+        load_tab_host_label = QLabel('Host', self.load_tab_frame0)
+        load_tab_host_label.setStyleSheet("font-weight: bold;")
+        load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
+        self.set_load_tab_host_combo()
+        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
+
+        # "Begin_Date" item.
+        load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
+        load_tab_begin_date_label.setStyleSheet("font-weight: bold;")
+        load_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.load_tab_begin_date_edit = QDateEdit(self.load_tab_frame0)
+        self.load_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.load_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.load_tab_begin_date_edit.setCalendarPopup(True)
+        self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
+
+        # "End_Date" item.
+        load_tab_end_date_label = QLabel('End_Date', self.load_tab_frame0)
+        load_tab_end_date_label.setStyleSheet("font-weight: bold;")
+        load_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.load_tab_end_date_edit = QDateEdit(self.load_tab_frame0)
+        self.load_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.load_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.load_tab_end_date_edit.setCalendarPopup(True)
+        self.load_tab_end_date_edit.setDate(QDate.currentDate())
+
+        # "Check" button.
+        load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
+        load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
+        load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
+
+        # self.load_tab_frame0 - Grid
+        load_tab_frame0_grid = QGridLayout()
+
+        load_tab_frame0_grid.addWidget(load_tab_host_label, 0, 0)
+        load_tab_frame0_grid.addWidget(self.load_tab_host_combo, 0, 1)
+        load_tab_frame0_grid.addWidget(load_tab_begin_date_label, 0, 2)
+        load_tab_frame0_grid.addWidget(self.load_tab_begin_date_edit, 0, 3)
+        load_tab_frame0_grid.addWidget(load_tab_end_date_label, 0, 4)
+        load_tab_frame0_grid.addWidget(self.load_tab_end_date_edit, 0, 5)
+        load_tab_frame0_grid.addWidget(load_tab_check_button, 0, 6)
+
+        load_tab_frame0_grid.setColumnStretch(0, 1)
+        load_tab_frame0_grid.setColumnStretch(1, 1)
+        load_tab_frame0_grid.setColumnStretch(2, 1)
+        load_tab_frame0_grid.setColumnStretch(3, 1)
+        load_tab_frame0_grid.setColumnStretch(4, 1)
+        load_tab_frame0_grid.setColumnStretch(5, 1)
+        load_tab_frame0_grid.setColumnStretch(6, 1)
+
+        self.load_tab_frame0.setLayout(load_tab_frame0_grid)
+
+    def gen_load_tab_frame1(self):
+        # self.load_tab_frame1
+        self.load_tab_ut_canvas = common_pyqt5.FigureCanvasQTAgg()
+        self.host_tab_ut_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_ut_canvas, self)
+
+        if self.dark_mode:
+            fig = self.load_tab_ut_canvas.figure
+            fig.set_facecolor('#19232d')
+
+        # self.load_tab_frame1 - Grid
+        load_tab_frame1_grid = QGridLayout()
+        load_tab_frame1_grid.addWidget(self.host_tab_ut_toolbar, 0, 0)
+        load_tab_frame1_grid.addWidget(self.load_tab_ut_canvas, 1, 0)
+        self.load_tab_frame1.setLayout(load_tab_frame1_grid)
+
+    def gen_load_tab_frame2(self):
+        # self.load_tab_frame2
+        self.load_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
+        self.host_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_mem_canvas, self)
+
+        if self.dark_mode:
+            fig = self.load_tab_mem_canvas.figure
+            fig.set_facecolor('#19232d')
+
+        # self.load_tab_frame2 - Grid
+        load_tab_frame2_grid = QGridLayout()
+        load_tab_frame2_grid.addWidget(self.host_tab_mem_toolbar, 0, 0)
+        load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
+        self.load_tab_frame2.setLayout(load_tab_frame2_grid)
+
+    def set_load_tab_host_combo(self, host_list=[]):
+        """
+        Set (initialize) self.load_tab_host_combo.
+        """
+        self.load_tab_host_combo.clear()
+
+        if not host_list:
+            self.fresh_lsf_info('bhosts')
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+            host_list.insert(0, '')
+
+        for host in host_list:
+            self.load_tab_host_combo.addItem(host)
+
+    def update_load_tab_load_info(self):
+        """
+        Update self.load_tab_frame1 (ut information) and self.load_tab_frame2 (memory information).
+        """
+        specified_host = self.load_tab_host_combo.currentText().strip()
+
+        if not specified_host:
+            warning_message = '*Warning*: No host is specified.'
+            self.gui_warning(warning_message)
+            return
+
+        self.update_load_tab_frame1(specified_host, [], [])
+        self.update_load_tab_frame2(specified_host, [], [])
+
+        common.bprint('Loading ut/mem load information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+
+        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
+        my_show_message.start()
+
+        (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
+
+        time.sleep(0.01)
+        my_show_message.terminate()
+
+        if sample_time_list:
+            self.update_load_tab_frame1(specified_host, sample_time_list, ut_list)
+            self.update_load_tab_frame2(specified_host, sample_time_list, mem_list)
+
+    def get_load_info(self, specified_host):
+        """
+        Get sample_time/ut/mem list for specified host.
+        """
+        sample_time_list = []
+        ut_list = []
+        mem_list = []
+
+        load_db_file = str(self.db_path) + '/load.db'
+
+        if not os.path.exists(load_db_file):
+            common.bprint('Load database "' + str(load_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+        else:
+            (load_db_file_connect_result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file)
+
+            if load_db_file_connect_result == 'failed':
+                common.bprint('Failed on connecting load database file "' + str(load_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            else:
+                if specified_host:
+                    table_name = 'load_' + str(specified_host)
+                    begin_date = self.load_tab_begin_date_edit.date().toString(Qt.ISODate)
+                    begin_time = str(begin_date) + ' 00:00:00'
+                    begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
+                    end_date = self.load_tab_end_date_edit.date().toString(Qt.ISODate)
+                    end_time = str(end_date) + ' 23:59:59'
+                    end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
+                    select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+                    data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
+
+                    if not data_dic:
+                        common.bprint('Load information is empty for "' + str(specified_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                    else:
+                        for (i, sample_time) in enumerate(data_dic['sample_time']):
+                            # For sample_time
+                            sample_time = datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S')
+                            sample_time_list.append(sample_time)
+
+                            # For ut
+                            ut = data_dic['ut'][i]
+
+                            if ut:
+                                ut = int(re.sub(r'%', '', ut))
+                            else:
+                                ut = 0
+
+                            ut_list.append(ut)
+
+                            # For mem
+                            mem = data_dic['mem'][i]
+
+                            if mem:
+                                if re.match(r'.*M', mem):
+                                    mem = round(float(re.sub(r'M', '', mem))/1024, 1)
+                                elif re.match(r'.*G', mem):
+                                    mem = round(float(re.sub(r'G', '', mem)), 1)
+                                elif re.match(r'.*T', mem):
+                                    mem = round(float(re.sub(r'T', '', mem))*1024, 1)
+                            else:
+                                mem = 0
+
+                            mem_list.append(mem)
+
+                    load_db_conn.close()
+
+        return sample_time_list, ut_list, mem_list
+
+    def update_load_tab_frame1(self, specified_host, sample_time_list, ut_list):
+        """
+        Draw Ut curve for specified host on self.load_tab_frame1.
+        """
+        fig = self.load_tab_ut_canvas.figure
+        fig.clear()
+        self.load_tab_ut_canvas.draw()
+
+        if sample_time_list and ut_list:
+            self.draw_load_tab_ut_curve(fig, specified_host, sample_time_list, ut_list)
+
+    def draw_load_tab_ut_curve(self, fig, specified_host, sample_time_list, ut_list):
+        """
+        Draw ut curve for specified host.
+        """
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+            axes.set_title('ut curve for host "' + str(specified_host) + '"', color='white')
+            axes.set_xlabel('Sample Time', color='white')
+            axes.set_ylabel('Cpu Utilization (%)', color='white')
+        else:
+            axes.set_title('ut curve for host "' + str(specified_host) + '"')
+            axes.set_xlabel('Sample Time')
+            axes.set_ylabel('Cpu Utilization (%)')
+
+        axes.plot(sample_time_list, ut_list, 'ro-', label='CPU', linewidth=0.1, markersize=0.1)
+        axes.fill_between(sample_time_list, ut_list, color='red', alpha=0.5)
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.load_tab_ut_canvas.draw()
+
+    def update_load_tab_frame2(self, specified_host, sample_time_list, mem_list):
+        """
+        Draw mem curve for specified host on self.load_tab_frame2.
+        """
+        fig = self.load_tab_mem_canvas.figure
+        fig.clear()
+        self.load_tab_mem_canvas.draw()
+
+        if sample_time_list and mem_list:
+            self.draw_load_tab_mem_curve(fig, specified_host, sample_time_list, mem_list)
+
+    def draw_load_tab_mem_curve(self, fig, specified_host, sample_time_list, mem_list):
+        """
+        Draw mem curve for specified host.
+        """
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+            axes.set_title('available mem curve for host "' + str(specified_host) + '"', color='white')
+            axes.set_xlabel('Sample Time', color='white')
+            axes.set_ylabel('Available Mem (G)', color='white')
+        else:
+            axes.set_title('available mem curve for host "' + str(specified_host) + '"')
+            axes.set_xlabel('Sample Time')
+            axes.set_ylabel('Available Mem (G)')
+
+        axes.plot(sample_time_list, mem_list, 'go-', label='MEM', linewidth=0.1, markersize=0.1)
+        axes.fill_between(sample_time_list, mem_list, color='green', alpha=0.5)
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.load_tab_mem_canvas.draw()
+# For load TAB (end) #
+
+# For users TAB (start) #
+    def gen_users_tab(self):
+        """
+        Generate the users tab on lsfMonitor GUI, show users informations.
+        """
+        # self.users_tab_table
+        self.users_tab_frame0 = QFrame(self.users_tab)
+        self.users_tab_frame0.setFrameShadow(QFrame.Raised)
+        self.users_tab_frame0.setFrameShape(QFrame.Box)
+
+        self.users_tab_table = QTableWidget(self.users_tab)
+
+        # self.users_tab_table - Grid
+        users_tab_grid = QGridLayout()
+
+        users_tab_grid.addWidget(self.users_tab_frame0, 0, 0)
+        users_tab_grid.addWidget(self.users_tab_table, 1, 0)
+
+        users_tab_grid.setRowStretch(0, 1)
+        users_tab_grid.setRowStretch(1, 20)
+
+        self.users_tab.setLayout(users_tab_grid)
+
+        # Generate sub-fram
+        self.gen_users_tab_frame0()
+        self.gen_users_tab_table()
+
+    def gen_users_tab_frame0(self):
+        # self.users_tab_frame0
+        # "Status" item.
+        users_tab_status_label = QLabel('Status', self.users_tab_frame0)
+        users_tab_status_label.setStyleSheet("font-weight: bold;")
+        users_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_status_combo = common_pyqt5.QComboCheckBox(self.users_tab_frame0)
+        self.set_users_tab_status_combo()
+
+        # "Queue" item.
+        users_tab_queue_label = QLabel('Queue', self.users_tab_frame0)
+        users_tab_queue_label.setStyleSheet("font-weight: bold;")
+        users_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_queue_line = QLineEdit()
+        self.users_tab_queue_line.returnPressed.connect(self.gen_users_tab_table)
+        users_tab_queue_line_completer = common_pyqt5.get_completer(self.bqueues_dic['QUEUE_NAME'])
+        self.users_tab_queue_line.setCompleter(users_tab_queue_line_completer)
+
+        # "Project" item.
+        users_tab_project_label = QLabel('Project', self.users_tab_frame0)
+        users_tab_project_label.setStyleSheet("font-weight: bold;")
+        users_tab_project_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_project_line = QLineEdit()
+        self.users_tab_project_line.returnPressed.connect(self.gen_users_tab_table)
+
+        # "User" item.
+        users_tab_user_label = QLabel('User', self.users_tab_frame0)
+        users_tab_user_label.setStyleSheet("font-weight: bold;")
+        users_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_user_line = QLineEdit()
+        self.users_tab_user_line.returnPressed.connect(self.gen_users_tab_table)
+        users_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+        self.users_tab_user_line.setCompleter(users_tab_user_line_completer)
+
+        # "Begin_Date" item.
+        users_tab_begin_date_label = QLabel('Begin_Date', self.users_tab_frame0)
+        users_tab_begin_date_label.setStyleSheet("font-weight: bold;")
+        users_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_begin_date_edit = QDateEdit(self.users_tab_frame0)
+        self.users_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.users_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.users_tab_begin_date_edit.setCalendarPopup(True)
+        self.users_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-1))
+
+        # "End_Date" item.
+        users_tab_end_date_label = QLabel('End_Date', self.users_tab_frame0)
+        users_tab_end_date_label.setStyleSheet("font-weight: bold;")
+        users_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.users_tab_end_date_edit = QDateEdit(self.users_tab_frame0)
+        self.users_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
+        self.users_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
+        self.users_tab_end_date_edit.setCalendarPopup(True)
+        self.users_tab_end_date_edit.setDate(QDate.currentDate())
+
+        # "Check" button.
+        users_tab_check_button = QPushButton('Check', self.users_tab_frame0)
+        users_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
+        users_tab_check_button.clicked.connect(self.gen_users_tab_table)
+
+        # empty item.
+        users_tab_empty_label = QLabel('', self.users_tab_frame0)
+
+        # self.users_tab_frame0 - Grid
+        users_tab_frame0_grid = QGridLayout()
+
+        users_tab_frame0_grid.addWidget(users_tab_status_label, 0, 0)
+        users_tab_frame0_grid.addWidget(self.users_tab_status_combo, 0, 1)
+        users_tab_frame0_grid.addWidget(users_tab_queue_label, 0, 2)
+        users_tab_frame0_grid.addWidget(self.users_tab_queue_line, 0, 3)
+        users_tab_frame0_grid.addWidget(users_tab_project_label, 0, 4)
+        users_tab_frame0_grid.addWidget(self.users_tab_project_line, 0, 5)
+        users_tab_frame0_grid.addWidget(users_tab_user_label, 0, 6)
+        users_tab_frame0_grid.addWidget(self.users_tab_user_line, 0, 7)
+        users_tab_frame0_grid.addWidget(users_tab_check_button, 0, 8)
+        users_tab_frame0_grid.addWidget(users_tab_begin_date_label, 1, 0)
+        users_tab_frame0_grid.addWidget(self.users_tab_begin_date_edit, 1, 1)
+        users_tab_frame0_grid.addWidget(users_tab_end_date_label, 1, 2)
+        users_tab_frame0_grid.addWidget(self.users_tab_end_date_edit, 1, 3)
+        users_tab_frame0_grid.addWidget(users_tab_empty_label, 1, 4, 1, 5)
+
+        users_tab_frame0_grid.setColumnStretch(0, 1)
+        users_tab_frame0_grid.setColumnStretch(1, 1)
+        users_tab_frame0_grid.setColumnStretch(2, 1)
+        users_tab_frame0_grid.setColumnStretch(3, 1)
+        users_tab_frame0_grid.setColumnStretch(4, 1)
+        users_tab_frame0_grid.setColumnStretch(5, 1)
+        users_tab_frame0_grid.setColumnStretch(6, 1)
+
+        self.users_tab_frame0.setLayout(users_tab_frame0_grid)
+
+    def set_users_tab_status_combo(self):
+        """
+        Set (initialize) self.users_tab_status_combo.
+        """
+        self.users_tab_status_combo.clear()
+        status_list = ['ALL', 'DONE', 'EXIT']
+
+        for status in status_list:
+            self.users_tab_status_combo.addCheckBoxItem(status)
+
+        # Set "ALL" as checked status.
+        for (i, qBox) in enumerate(self.users_tab_status_combo.checkBoxList):
+            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+                self.users_tab_status_combo.checkBoxList[i].setChecked(True)
+                break
+
+    def gen_users_tab_table(self):
+        # self.users_tab_table
+        self.users_tab_table.setShowGrid(True)
+        self.users_tab_table.setSortingEnabled(True)
+        self.users_tab_table.setColumnCount(0)
+        self.users_tab_table.setColumnCount(9)
+        self.users_tab_table_title_list = ['User', 'Job_Num', 'Pass_Rate (%)', 'Total_Rusage_Mem (G)', 'Avg_Rusage_Mem (G)', 'Total_Max_Mem (G)', 'Avg_Max_Mem (G)', 'Total_Mem_Waste (G)', 'Avg_Mem_Waste (G)']
+        self.users_tab_table.setHorizontalHeaderLabels(self.users_tab_table_title_list)
+
+        self.users_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.users_tab_table.setColumnWidth(1, 70)
+        self.users_tab_table.setColumnWidth(2, 95)
+        self.users_tab_table.setColumnWidth(3, 150)
+        self.users_tab_table.setColumnWidth(4, 145)
+        self.users_tab_table.setColumnWidth(5, 130)
+        self.users_tab_table.setColumnWidth(6, 123)
+        self.users_tab_table.setColumnWidth(7, 145)
+        self.users_tab_table.setColumnWidth(8, 137)
+
+        # Fill self.users_tab_table items.
+        user_dic = self.get_user_info()
+        self.users_tab_table.setRowCount(0)
+        self.users_tab_table.setRowCount(len(user_dic.keys()))
+
+        i = -1
+
+        for user in user_dic.keys():
+            i += 1
+
+            # Fill "User" item.
+            j = 0
+            item = QTableWidgetItem(user)
+            item.setFont(QFont('song', 9, QFont.Bold))
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Job_Num" item.
+            j = j+1
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, user_dic[user]['job_num'])
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Pass_Rate" item.
+            j = j+1
+            pass_rate = 0
+
+            if user_dic[user]['job_num']:
+                pass_rate = round((100*float(user_dic[user]['done_num'])/float(user_dic[user]['job_num'])), 1)
+
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, pass_rate)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Total_Rusage_Mem" item.
+            j = j+1
+            item = QTableWidgetItem()
+            total_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024, 1)
+            item.setData(Qt.DisplayRole, total_rusage_mem)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Avg_Rusage_Mem" item.
+            j = j+1
+            item = QTableWidgetItem()
+            avg_rusage_mem = 0
+
+            if user_dic[user]['job_num']:
+                avg_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024/float(user_dic[user]['job_num']), 1)
+
+            item.setData(Qt.DisplayRole, avg_rusage_mem)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Total_Max_Mem" item.
+            j = j+1
+            item = QTableWidgetItem()
+            total_max_mem = round(float(user_dic[user]['max_mem'])/1024, 1)
+            item.setData(Qt.DisplayRole, total_max_mem)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Avg_Max_Mem" item.
+            j = j+1
+            item = QTableWidgetItem()
+            avg_max_mem = 0
+
+            if user_dic[user]['job_num']:
+                avg_max_mem = round(float(user_dic[user]['max_mem'])/1024/float(user_dic[user]['job_num']), 1)
+
+            item.setData(Qt.DisplayRole, avg_max_mem)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Total_Mem_Waste" item.
+            j = j+1
+            item = QTableWidgetItem()
+            total_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024, 1)
+            item.setData(Qt.DisplayRole, total_mem_waste)
+            self.users_tab_table.setItem(i, j, item)
+
+            # Fill "Avg_Mem_Waste" item.
+            j = j+1
+            item = QTableWidgetItem()
+            avg_mem_waste = 0
+
+            if user_dic[user]['job_num']:
+                avg_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024/float(user_dic[user]['job_num']), 1)
+
+            item.setData(Qt.DisplayRole, avg_mem_waste)
+            self.users_tab_table.setItem(i, j, item)
+
+    def get_user_info(self):
+        """
+        Get user history information from database.
+        """
+        common.bprint('Loading user history info, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+
+        my_show_message = ShowMessage('Info', 'Loading user history info, please wait a moment ...')
+        my_show_message.start()
+
+        user_dic = {'ALL': {'job_num': 0, 'done_num': 0, 'exit_num': 0, 'rusage_mem': 0, 'max_mem': 0}}
+        specified_status_list = self.users_tab_status_combo.currentText().strip().split()
+        specified_queue_list = self.users_tab_queue_line.text().strip().split()
+        specified_project_list = self.users_tab_project_line.text().strip().split()
+        specified_user_list = self.users_tab_user_line.text().strip().split()
+        begin_date = self.users_tab_begin_date_edit.date()
+        end_date = self.users_tab_end_date_edit.date()
+        current_date = begin_date
+
+        # Get select WHERE condition.
+        select_condition = ''
+
+        if specified_status_list and ('ALL' not in specified_status_list):
+            if len(specified_status_list) == 1:
+                select_condition = 'WHERE status = "' + str(specified_status_list[0]) + '"'
+            else:
+                select_condition = 'WHERE status IN ' + str(tuple(specified_status_list))
+
+        if specified_queue_list:
+            if select_condition:
+                if len(specified_queue_list) == 1:
+                    select_condition = str(select_condition) + ' AND queue = "' + str(specified_queue_list[0]) + '"'
+                else:
+                    select_condition = str(select_condition) + ' AND queue IN ' + str(tuple(specified_queue_list))
+            else:
+                if len(specified_queue_list) == 1:
+                    select_condition = 'WHERE queue = "' + str(specified_queue_list[0]) + '"'
+                else:
+                    select_condition = 'WHERE queue IN ' + str(tuple(specified_queue_list))
+
+        if specified_project_list:
+            if select_condition:
+                if len(specified_project_list) == 1:
+                    select_condition = str(select_condition) + ' AND project = "' + str(specified_project_list[0]) + '"'
+                else:
+                    select_condition = str(select_condition) + ' AND project IN ' + str(tuple(specified_project_list))
+            else:
+                if len(specified_project_list) == 1:
+                    select_condition = 'WHERE project = "' + str(specified_project_list[0]) + '"'
+                else:
+                    select_condition = 'WHERE project IN ' + str(tuple(specified_project_list))
+
+        while current_date <= end_date:
+            # Get all user/date history data.
+            current_date_string = current_date.toString('yyyyMMdd')
+            current_date = current_date.addDays(1)
+            user_db_file = str(self.db_path) + '/user/' + str(current_date_string)
+
+            if os.path.exists(user_db_file):
+                (user_db_file_connect_result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file)
+
+                if user_db_file_connect_result == 'failed':
+                    common.bprint('Failed on connecting user database file "' + str(user_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                else:
+                    user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
+
+                    for user in user_table_list:
+                        if (not specified_user_list) or (user in specified_user_list):
+                            user_dic.setdefault(user, {'job_num': 0, 'done_num': 0, 'exit_num': 0, 'rusage_mem': 0, 'max_mem': 0})
+                            data_dic = common_sqlite3.get_sql_table_data(user_db_file, user_db_conn, user, ['status', 'rusage_mem', 'max_mem'], select_condition)
+
+                            if data_dic:
+                                for i, status in enumerate(data_dic['status']):
+                                    user_dic[user]['job_num'] += 1
+                                    user_dic['ALL']['job_num'] += 1
+
+                                    if status == 'DONE':
+                                        user_dic[user]['done_num'] += 1
+                                        user_dic['ALL']['done_num'] += 1
+                                    elif status == 'EXIT':
+                                        user_dic[user]['exit_num'] += 1
+                                        user_dic['ALL']['exit_num'] += 1
+
+                                    if data_dic['rusage_mem'][i]:
+                                        rusage_mem = float(data_dic['rusage_mem'][i])
+                                    else:
+                                        rusage_mem = 0
+
+                                    if data_dic['max_mem'][i]:
+                                        max_mem = float(data_dic['max_mem'][i])
+                                    else:
+                                        max_mem = 0
+
+                                    user_dic[user]['rusage_mem'] += rusage_mem
+                                    user_dic['ALL']['rusage_mem'] += rusage_mem
+                                    user_dic[user]['max_mem'] += max_mem
+                                    user_dic['ALL']['max_mem'] += max_mem
+
+                user_db_conn.close()
+
+        time.sleep(0.01)
+        my_show_message.terminate()
+
+        return user_dic
+# For users TAB (end) #
 
 # For queues TAB (start) #
     def gen_queues_tab(self):
@@ -2196,6 +2909,10 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_num_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.queues_tab_num_toolbar = common_pyqt5.NavigationToolbar2QT(self.queues_tab_num_canvas, self)
 
+        if self.dark_mode:
+            fig = self.queues_tab_num_canvas.figure
+            fig.set_facecolor('#19232d')
+
         # self.queues_tab_frame1 - Grid
         queues_tab_frame1_grid = QGridLayout()
         queues_tab_frame1_grid.addWidget(self.queues_tab_num_toolbar, 0, 0)
@@ -2384,18 +3101,39 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
-        axes.set_title('Trends of RUN/PEND number for queue "' + str(queue) + '"')
+
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+            axes.set_title('Trends of RUN/PEND number for queue "' + str(queue) + '"', color='white')
+
+            if self.enable_queue_detail:
+                axes.set_xlabel('Sample Time', color='white')
+            else:
+                axes.set_xlabel('Sample Date', color='white')
+
+            axes.set_ylabel('Num', color='white')
+        else:
+            axes.set_title('Trends of RUN/PEND number for queue "' + str(queue) + '"')
+
+            if self.enable_queue_detail:
+                axes.set_xlabel('Sample Time')
+            else:
+                axes.set_xlabel('Sample Date')
+
+            axes.set_ylabel('Num')
 
         if self.enable_queue_detail:
-            axes.set_xlabel('Sample Time')
             expected_linewidth = 0.1
             expected_markersize = 0.1
         else:
-            axes.set_xlabel('Sample Date')
             expected_linewidth = 1
             expected_markersize = 1
 
-        axes.set_ylabel('Num')
         axes.plot(date_list, total_list, 'bo-', label='SLOTS', linewidth=expected_linewidth, markersize=expected_markersize)
         axes.fill_between(date_list, total_list, color='lightblue', alpha=0.3)
         axes.plot(date_list, run_list, 'go-', label='RUN', linewidth=expected_linewidth, markersize=expected_markersize)
@@ -2407,285 +3145,6 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.grid()
         self.queues_tab_num_canvas.draw()
 # For queues TAB (end) #
-
-# For load TAB (start) #
-    def gen_load_tab(self):
-        """
-        Generate the load tab on lsfMonitor GUI, show host load (ut/mem) information.
-        """
-        # self.load_tab
-        self.load_tab_frame0 = QFrame(self.load_tab)
-        self.load_tab_frame1 = QFrame(self.load_tab)
-        self.load_tab_frame2 = QFrame(self.load_tab)
-
-        self.load_tab_frame0.setFrameShadow(QFrame.Raised)
-        self.load_tab_frame0.setFrameShape(QFrame.Box)
-        self.load_tab_frame1.setFrameShadow(QFrame.Raised)
-        self.load_tab_frame1.setFrameShape(QFrame.Box)
-        self.load_tab_frame2.setFrameShadow(QFrame.Raised)
-        self.load_tab_frame2.setFrameShape(QFrame.Box)
-
-        # self.load_tab - Grid
-        load_tab_grid = QGridLayout()
-
-        load_tab_grid.addWidget(self.load_tab_frame0, 0, 0)
-        load_tab_grid.addWidget(self.load_tab_frame1, 1, 0)
-        load_tab_grid.addWidget(self.load_tab_frame2, 2, 0)
-
-        load_tab_grid.setRowStretch(0, 1)
-        load_tab_grid.setRowStretch(1, 10)
-        load_tab_grid.setRowStretch(2, 10)
-
-        self.load_tab.setLayout(load_tab_grid)
-
-        # Generate sub-frame
-        self.gen_load_tab_frame0()
-        self.gen_load_tab_frame1()
-        self.gen_load_tab_frame2()
-
-    def gen_load_tab_frame0(self):
-        # self.load_tab_frame0
-        # "Host" item.
-        load_tab_host_label = QLabel('Host', self.load_tab_frame0)
-        load_tab_host_label.setStyleSheet("font-weight: bold;")
-        load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
-        self.set_load_tab_host_combo()
-        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
-
-        # "Begin_Date" item.
-        load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
-        load_tab_begin_date_label.setStyleSheet("font-weight: bold;")
-        load_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.load_tab_begin_date_edit = QDateEdit(self.load_tab_frame0)
-        self.load_tab_begin_date_edit.setDisplayFormat('yyyy-MM-dd')
-        self.load_tab_begin_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.load_tab_begin_date_edit.setCalendarPopup(True)
-        self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
-
-        # "End_Date" item.
-        load_tab_end_date_label = QLabel('End_Date', self.load_tab_frame0)
-        load_tab_end_date_label.setStyleSheet("font-weight: bold;")
-        load_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.load_tab_end_date_edit = QDateEdit(self.load_tab_frame0)
-        self.load_tab_end_date_edit.setDisplayFormat('yyyy-MM-dd')
-        self.load_tab_end_date_edit.setMinimumDate(QDate.currentDate().addDays(-3652))
-        self.load_tab_end_date_edit.setCalendarPopup(True)
-        self.load_tab_end_date_edit.setDate(QDate.currentDate())
-
-        # "Check" button.
-        load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
-        load_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
-        load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
-
-        # self.load_tab_frame0 - Grid
-        load_tab_frame0_grid = QGridLayout()
-
-        load_tab_frame0_grid.addWidget(load_tab_host_label, 0, 0)
-        load_tab_frame0_grid.addWidget(self.load_tab_host_combo, 0, 1)
-        load_tab_frame0_grid.addWidget(load_tab_begin_date_label, 0, 2)
-        load_tab_frame0_grid.addWidget(self.load_tab_begin_date_edit, 0, 3)
-        load_tab_frame0_grid.addWidget(load_tab_end_date_label, 0, 4)
-        load_tab_frame0_grid.addWidget(self.load_tab_end_date_edit, 0, 5)
-        load_tab_frame0_grid.addWidget(load_tab_check_button, 0, 6)
-
-        load_tab_frame0_grid.setColumnStretch(0, 1)
-        load_tab_frame0_grid.setColumnStretch(1, 1)
-        load_tab_frame0_grid.setColumnStretch(2, 1)
-        load_tab_frame0_grid.setColumnStretch(3, 1)
-        load_tab_frame0_grid.setColumnStretch(4, 1)
-        load_tab_frame0_grid.setColumnStretch(5, 1)
-        load_tab_frame0_grid.setColumnStretch(6, 1)
-
-        self.load_tab_frame0.setLayout(load_tab_frame0_grid)
-
-    def gen_load_tab_frame1(self):
-        # self.load_tab_frame1
-        self.load_tab_ut_canvas = common_pyqt5.FigureCanvasQTAgg()
-        self.host_tab_ut_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_ut_canvas, self)
-
-        # self.load_tab_frame1 - Grid
-        load_tab_frame1_grid = QGridLayout()
-        load_tab_frame1_grid.addWidget(self.host_tab_ut_toolbar, 0, 0)
-        load_tab_frame1_grid.addWidget(self.load_tab_ut_canvas, 1, 0)
-        self.load_tab_frame1.setLayout(load_tab_frame1_grid)
-
-    def gen_load_tab_frame2(self):
-        # self.load_tab_frame2
-        self.load_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
-        self.host_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_mem_canvas, self)
-
-        # self.load_tab_frame2 - Grid
-        load_tab_frame2_grid = QGridLayout()
-        load_tab_frame2_grid.addWidget(self.host_tab_mem_toolbar, 0, 0)
-        load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
-        self.load_tab_frame2.setLayout(load_tab_frame2_grid)
-
-    def set_load_tab_host_combo(self, host_list=[]):
-        """
-        Set (initialize) self.load_tab_host_combo.
-        """
-        self.load_tab_host_combo.clear()
-
-        if not host_list:
-            self.fresh_lsf_info('bhosts')
-            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-            host_list.insert(0, '')
-
-        for host in host_list:
-            self.load_tab_host_combo.addItem(host)
-
-    def update_load_tab_load_info(self):
-        """
-        Update self.load_tab_frame1 (ut information) and self.load_tab_frame2 (memory information).
-        """
-        specified_host = self.load_tab_host_combo.currentText().strip()
-
-        if not specified_host:
-            warning_message = '*Warning*: No host is specified.'
-            self.gui_warning(warning_message)
-            return
-
-        self.update_load_tab_frame1(specified_host, [], [])
-        self.update_load_tab_frame2(specified_host, [], [])
-
-        common.bprint('Loading ut/mem load information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-
-        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
-        my_show_message.start()
-
-        (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
-
-        time.sleep(0.01)
-        my_show_message.terminate()
-
-        if sample_time_list:
-            self.update_load_tab_frame1(specified_host, sample_time_list, ut_list)
-            self.update_load_tab_frame2(specified_host, sample_time_list, mem_list)
-
-    def get_load_info(self, specified_host):
-        """
-        Get sample_time/ut/mem list for specified host.
-        """
-        sample_time_list = []
-        ut_list = []
-        mem_list = []
-
-        load_db_file = str(self.db_path) + '/load.db'
-
-        if not os.path.exists(load_db_file):
-            common.bprint('Load database "' + str(load_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-        else:
-            (load_db_file_connect_result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file)
-
-            if load_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting load database file "' + str(load_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-            else:
-                if specified_host:
-                    table_name = 'load_' + str(specified_host)
-                    begin_date = self.load_tab_begin_date_edit.date().toString(Qt.ISODate)
-                    begin_time = str(begin_date) + ' 00:00:00'
-                    begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
-                    end_date = self.load_tab_end_date_edit.date().toString(Qt.ISODate)
-                    end_time = str(end_date) + ' 23:59:59'
-                    end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
-                    select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
-                    data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
-
-                    if not data_dic:
-                        common.bprint('Load information is empty for "' + str(specified_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-                    else:
-                        for (i, sample_time) in enumerate(data_dic['sample_time']):
-                            # For sample_time
-                            sample_time = datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S')
-                            sample_time_list.append(sample_time)
-
-                            # For ut
-                            ut = data_dic['ut'][i]
-
-                            if ut:
-                                ut = int(re.sub(r'%', '', ut))
-                            else:
-                                ut = 0
-
-                            ut_list.append(ut)
-
-                            # For mem
-                            mem = data_dic['mem'][i]
-
-                            if mem:
-                                if re.match(r'.*M', mem):
-                                    mem = round(float(re.sub(r'M', '', mem))/1024, 1)
-                                elif re.match(r'.*G', mem):
-                                    mem = round(float(re.sub(r'G', '', mem)), 1)
-                                elif re.match(r'.*T', mem):
-                                    mem = round(float(re.sub(r'T', '', mem))*1024, 1)
-                            else:
-                                mem = 0
-
-                            mem_list.append(mem)
-
-                    load_db_conn.close()
-
-        return sample_time_list, ut_list, mem_list
-
-    def update_load_tab_frame1(self, specified_host, sample_time_list, ut_list):
-        """
-        Draw Ut curve for specified host on self.load_tab_frame1.
-        """
-        fig = self.load_tab_ut_canvas.figure
-        fig.clear()
-        self.load_tab_ut_canvas.draw()
-
-        if sample_time_list and ut_list:
-            self.draw_load_tab_ut_curve(fig, specified_host, sample_time_list, ut_list)
-
-    def draw_load_tab_ut_curve(self, fig, specified_host, sample_time_list, ut_list):
-        """
-        Draw ut curve for specified host.
-        """
-        fig.subplots_adjust(bottom=0.25)
-        axes = fig.add_subplot(111)
-        axes.set_title('ut curve for host "' + str(specified_host) + '"')
-        axes.set_xlabel('Sample Time')
-        axes.set_ylabel('Cpu Utilization (%)')
-        axes.plot(sample_time_list, ut_list, 'ro-', label='CPU', linewidth=0.1, markersize=0.1)
-        axes.fill_between(sample_time_list, ut_list, color='red', alpha=0.5)
-        axes.legend(loc='upper right')
-        axes.tick_params(axis='x', rotation=15)
-        axes.grid()
-        self.load_tab_ut_canvas.draw()
-
-    def update_load_tab_frame2(self, specified_host, sample_time_list, mem_list):
-        """
-        Draw mem curve for specified host on self.load_tab_frame2.
-        """
-        fig = self.load_tab_mem_canvas.figure
-        fig.clear()
-        self.load_tab_mem_canvas.draw()
-
-        if sample_time_list and mem_list:
-            self.draw_load_tab_mem_curve(fig, specified_host, sample_time_list, mem_list)
-
-    def draw_load_tab_mem_curve(self, fig, specified_host, sample_time_list, mem_list):
-        """
-        Draw mem curve for specified host.
-        """
-        fig.subplots_adjust(bottom=0.25)
-        axes = fig.add_subplot(111)
-        axes.set_title('available mem curve for host "' + str(specified_host) + '"')
-        axes.set_xlabel('Sample Time')
-        axes.set_ylabel('Available Mem (G)')
-        axes.plot(sample_time_list, mem_list, 'go-', label='MEM', linewidth=0.1, markersize=0.1)
-        axes.fill_between(sample_time_list, mem_list, color='green', alpha=0.5)
-        axes.legend(loc='upper right')
-        axes.tick_params(axis='x', rotation=15)
-        axes.grid()
-        self.load_tab_mem_canvas.draw()
-# For load TAB (end) #
 
 # For utilization TAB (start) #
     def gen_utilization_tab(self):
@@ -2783,11 +3242,6 @@ Please contact with liyanqing1987@163.com with any question."""
         # empty item.
         utilization_tab_empty_label = QLabel('', self.utilization_tab_frame0)
 
-        # Export button.
-        utilization_tab_export_button = QPushButton('Export', self.utilization_tab_frame0)
-        utilization_tab_export_button.setStyleSheet('''QPushButton:hover{background:rgb(170, 255, 127);}''')
-        utilization_tab_export_button.clicked.connect(self.export_utilization_table)
-
         # self.utilization_tab_frame0 - Grid
         utilization_tab_frame0_grid = QGridLayout()
 
@@ -2802,8 +3256,7 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_begin_date_edit, 1, 1)
         utilization_tab_frame0_grid.addWidget(utilization_tab_end_date_label, 1, 2)
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_end_date_edit, 1, 3)
-        utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 2)
-        utilization_tab_frame0_grid.addWidget(utilization_tab_export_button, 1, 6)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 3)
 
         utilization_tab_frame0_grid.setColumnStretch(0, 1)
         utilization_tab_frame0_grid.setColumnStretch(1, 1)
@@ -3150,6 +3603,10 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_utilization_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.utilization_tab_utilization_toolbar = common_pyqt5.NavigationToolbar2QT(self.utilization_tab_utilization_canvas, self)
 
+        if self.dark_mode:
+            fig = self.utilization_tab_utilization_canvas.figure
+            fig.set_facecolor('#19232d')
+
         # self.utilization_tab_frame1 - Grid
         utilization_tab_frame1_grid = QGridLayout()
         utilization_tab_frame1_grid.addWidget(self.utilization_tab_utilization_toolbar, 0, 0)
@@ -3208,15 +3665,30 @@ Please contact with liyanqing1987@163.com with any question."""
             else:
                 title = title_line
 
-        axes.set_title(title)
-
         # set_xlabel/set_ylabel.
-        if self.enable_utilization_detail:
-            axes.set_xlabel('Sample Time')
-        else:
-            axes.set_xlabel('Sample Date')
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
 
-        axes.set_ylabel('Utilization (%)')
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+
+            if self.enable_utilization_detail:
+                axes.set_xlabel('Sample Time', color='white')
+            else:
+                axes.set_xlabel('Sample Date', color='white')
+
+            axes.set_ylabel('Utilization (%)', color='white')
+            axes.set_title(title, color='white')
+        else:
+            if self.enable_utilization_detail:
+                axes.set_xlabel('Sample Time')
+            else:
+                axes.set_xlabel('Sample Date')
+
+            axes.set_ylabel('Utilization (%)')
+            axes.set_title(title)
 
         # axes.plot (sample_date_list / utilization_list)
         selected_resource_list = ['slot', 'mem', 'cpu']
@@ -3692,6 +4164,9 @@ Please contact with liyanqing1987@163.com with any question."""
     def export_hosts_table(self):
         self.export_table('hosts', self.hosts_tab_table, self.hosts_tab_table_title_list)
 
+    def export_users_table(self):
+        self.export_table('users', self.users_tab_table, self.users_tab_table_title_list)
+
     def export_queues_table(self):
         self.export_table('queues', self.queues_tab_table, self.queues_tab_table_title_list)
 
@@ -3809,9 +4284,9 @@ class ShowMessage(QThread):
 # Main Function #
 #################
 def main():
-    (specified_job, specified_user, specified_feature, specified_tab, disable_license) = read_args()
+    (specified_job, specified_user, specified_feature, specified_tab, disable_license, dark_mode) = read_args()
     app = QApplication(sys.argv)
-    mw = MainWindow(specified_job, specified_user, specified_feature, specified_tab, disable_license)
+    mw = MainWindow(specified_job, specified_user, specified_feature, specified_tab, disable_license, dark_mode)
     mw.show()
     sys.exit(app.exec_())
 

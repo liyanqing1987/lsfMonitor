@@ -1,5 +1,5 @@
 **Author:** liyanqing1987@163.com    
-**Version:** V1.5.1 (2024.08.01)    
+**Version:** V1.6 (2024.09.26)    
 
 ## What’s lsfMonitor?
 `lsfMonitor` is an open source software for LSF information data-collection,
@@ -52,10 +52,13 @@ Below is the suggested crontab setting on sampling data.
 
     SHELL=/bin/csh
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
+    10 11,23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
+    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -m
     */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
     */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
-    0 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
+    30 11,23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -u
+    */10 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
+    55 23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -UD
 
 
 More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_user_manual.pdf)
@@ -89,3 +92,6 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 |         |           | Replace export file from excel to csv file.                  |
 | V1.5.1  | (2024.08) | Add DONE/EXIT job sample function on tool bsample with json file. |
 |         |           | Support reading DONE/EXIT json file as source data on memPrediction. |
+| V1.6    | (2024.09) | Add user information sample function on tool bsample.        |
+|         |           | Add USERS tab on bmonitor to show user summary data.         |
+|         |           | Add darm_mode on bmonitor.                                   |
