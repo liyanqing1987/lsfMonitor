@@ -34,7 +34,7 @@ else:
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 VERSION = 'V1.6'
-VERSION_DATE = '2024.09.26'
+VERSION_DATE = '2024.11.07'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -43,8 +43,7 @@ if 'XDG_RUNTIME_DIR' not in os.environ:
 
     if not os.path.exists(os.environ['XDG_RUNTIME_DIR']):
         os.makedirs(os.environ['XDG_RUNTIME_DIR'])
-
-    os.chmod(os.environ['XDG_RUNTIME_DIR'], 0o777)
+        os.chmod(os.environ['XDG_RUNTIME_DIR'], 0o777)
 
 
 def read_args():
@@ -82,13 +81,13 @@ def read_args():
         if not args.tab:
             args.tab = 'JOB'
 
-    # Set default tab for args.feature.
-    if args.feature and (not args.tab):
-        args.tab = 'LICENSE'
-
     # Set default tab for args.user.
     if args.user and (not args.tab):
         args.tab = 'JOBS'
+
+    # Set default tab for args.feature.
+    if args.feature and (not args.tab):
+        args.tab = 'LICENSE'
 
     # Set default tab.
     if not args.tab:
@@ -103,6 +102,10 @@ class MainWindow(QMainWindow):
     """
     def __init__(self, specified_job, specified_user, specified_feature, specified_tab, disable_license, dark_mode):
         super().__init__()
+
+        # Show version information.
+        common.bprint('lsfMonitor Version: ' + str(VERSION) + ' (' + str(VERSION_DATE) + ')', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         # Check cluster info.
         cluster = self.check_cluster_info()
@@ -189,8 +192,8 @@ class MainWindow(QMainWindow):
             current_second = int(time.time())
 
             if current_second - self.lsf_info_dic[lsf_info]['update_second'] > 30:
-                common.bprint('Loading LSF ' + str(lsf_info) + ' information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information, please wait a moment ...')
+                common.bprint('Loading LSF ' + str(lsf_info) + ' information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information, wait a moment ...')
                 my_show_message.start()
 
                 exec(self.lsf_info_dic[lsf_info]['exec_cmd'])
@@ -213,9 +216,9 @@ class MainWindow(QMainWindow):
         self.license_dic_second = current_second
 
         # Print loading license message.
-        common.bprint('Loading License information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading License information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading license information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading license information, wait a moment ...')
         my_show_message.start()
 
         # Get self.license_dic.
@@ -277,7 +280,7 @@ class MainWindow(QMainWindow):
             self.gen_license_tab()
 
         # Show main window
-        common_pyqt5.auto_resize(self, 1200, 610)
+        common_pyqt5.auto_resize(self, 1300, 610)
         self.setWindowTitle('lsfMonitor ' + str(VERSION))
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)
@@ -411,25 +414,25 @@ class MainWindow(QMainWindow):
             self.enable_utilization_detail = False
             self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
-    def check_pend_reason(self):
+    def check_pend_reason(self, job=''):
         """
         Call a separate script to check job pend reason.
         """
-        self.my_check_issue_reason = CheckIssueReason(issue='PEND')
+        self.my_check_issue_reason = CheckIssueReason(job=job, issue='PEND')
         self.my_check_issue_reason.start()
 
-    def check_slow_reason(self):
+    def check_slow_reason(self, job=''):
         """
         Call a separate script to check job slow reason.
         """
-        self.my_check_issue_reason = CheckIssueReason(issue='SLOW')
+        self.my_check_issue_reason = CheckIssueReason(job=job, issue='SLOW')
         self.my_check_issue_reason.start()
 
-    def check_fail_reason(self):
+    def check_fail_reason(self, job=''):
         """
         Call a separate script to check job fail reason.
         """
-        self.my_check_issue_reason = CheckIssueReason(issue='FAIL')
+        self.my_check_issue_reason = CheckIssueReason(job=job, issue='FAIL')
         self.my_check_issue_reason.start()
 
     def show_version(self):
@@ -536,7 +539,7 @@ Please contact with liyanqing1987@163.com with any question."""
         # "Check" button.
         job_tab_trace_button = QPushButton('Trace', self.job_tab_frame0)
         job_tab_trace_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
-        job_tab_trace_button.clicked.connect(self.trace_job_on_job_tab)
+        job_tab_trace_button.clicked.connect(lambda: self.trace_job(jobid=self.job_tab_current_job, job_status=self.job_tab_current_job_dic[self.job_tab_current_job]['status']))
 
         # self.job_tab_frame0 - Grid
         job_tab_frame0_grid = QGridLayout()
@@ -580,6 +583,7 @@ Please contact with liyanqing1987@163.com with any question."""
         job_tab_started_on_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_started_on_line = QLineEdit()
+        self.job_tab_started_on_line.returnPressed.connect(self.job_tab_host_click)
 
         # "Start Time" item.
         job_tab_started_time_label = QLabel('Start Time', self.job_tab_frame1)
@@ -645,6 +649,36 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.job_tab_frame1.setLayout(job_tab_frame1_grid)
 
+    def job_tab_host_click(self):
+        """
+        Jump to LOAD tab when clicking Host line on self.job_tab.
+        """
+        job_started_on = self.job_tab_started_on_line.text().strip()
+
+        if job_started_on:
+            # Re-set self.load_tab_host_combo.
+            self.set_load_tab_host_combo(checked_host=job_started_on)
+
+            # Re-set self.load_tab_begin_date_edit.
+            job_start_time = self.job_tab_started_time_line.text().strip()
+
+            if job_start_time:
+                job_start_time = common_lsf.switch_bjobs_uf_time(job_start_time, '%Y%m%d')
+                self.load_tab_begin_date_edit.setDate(QDate.fromString(job_start_time, 'yyyyMMdd'))
+
+            # Re-set self.load_tab_end_date_edit.
+            job_finish_time = self.job_tab_finished_time_line.text().strip()
+
+            if job_finish_time:
+                job_finish_time = common_lsf.switch_bjobs_uf_time(job_finish_time, '%Y%m%d')
+                self.load_tab_end_date_edit.setDate(QDate.fromString(job_finish_time, 'yyyyMMdd'))
+            else:
+                self.load_tab_end_date_edit.setDate(QDate.currentDate())
+
+            # Switch to LOAD tab.
+            self.update_load_tab_load_info()
+            self.main_tab.setCurrentWidget(self.load_tab)
+
     def gen_job_tab_frame2(self):
         # self.job_tab_frame2
         self.job_tab_job_info_text = QTextEdit(self.job_tab_frame2)
@@ -683,7 +717,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.job_tab_current_job = self.job_tab_job_line.text().strip()
 
         if not re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job):
-            warning_message = '*Warning*: No valid job is specified!'
+            warning_message = 'No valid job is specified on JOB tab.'
             self.gui_warning(warning_message)
             return
 
@@ -693,9 +727,9 @@ Please contact with liyanqing1987@163.com with any question."""
         common.bprint('Checking job "' + str(current_job) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
         # Get job info
-        common.bprint('Getting LSF job information for "' + str(current_job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Getting LSF job information for "' + str(current_job) + '", wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", wait a moment ...')
         my_show_message.start()
 
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
@@ -718,7 +752,7 @@ Please contact with liyanqing1987@163.com with any question."""
         my_show_message.terminate()
 
         if not self.job_tab_current_job_dic:
-            warning_message = '*Warning*: Not find job information for job "' + str(current_job) + '".'
+            warning_message = 'Not find job information for job "' + str(current_job) + '" on JOB tab.'
             self.gui_warning(warning_message)
             return
 
@@ -763,20 +797,17 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return -1
 
-    def trace_job_on_job_tab(self):
+    def trace_job(self, jobid='', job_status='RUN'):
         """
-        Trace job on self.job_tab.
-        """
-        if self.job_tab_current_job:
-            self.trace_job(self.job_tab_current_job)
-
-    def trace_job(self, jobid=None):
-        """
-        Trace job process with tool process_tracer.
+        Trace job pend/slow/fail reason.
         """
         if jobid:
-            self.my_process_tracer = ProcessTracer(jobid)
-            self.my_process_tracer.start()
+            if job_status == 'PEND':
+                self.check_pend_reason(job=jobid)
+            elif job_status == 'RUN':
+                self.check_slow_reason(job=jobid)
+            elif (job_status == 'DONE') or (job_status == 'EXIT'):
+                self.check_fail_reason(job=jobid)
 
     def update_job_tab_frame1(self, init=False):
         """
@@ -979,8 +1010,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.jobs_tab_table = QTableWidget(self.jobs_tab)
         self.jobs_tab_table.itemClicked.connect(self.jobs_tab_check_click)
-        self.jobs_tab_table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.jobs_tab_table.customContextMenuRequested.connect(self.gen_jobs_tab_menu)
 
         # self.jobs_tab - Grid
         jobs_tab_grid = QGridLayout()
@@ -1128,9 +1157,9 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -m ' + str(specified_host_list[0])
 
         # Run command to get expected jobs information.
-        common.bprint('Loading LSF jobs information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading LSF jobs information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading LSF jobs information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading LSF jobs information, wait a moment ...')
         my_show_message.start()
 
         job_dic = common_lsf.get_bjobs_uf_info(command)
@@ -1257,36 +1286,6 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
 
-    def gen_jobs_tab_menu(self, pos):
-        """
-        Generate right click menu on self.jobs_tab_table.
-        """
-        item = self.jobs_tab_table.itemAt(pos)
-
-        if item and (item.column() == 0):
-            menu = QMenu(self.jobs_tab_table)
-
-            kill_job_action = QAction('Kill', self)
-            kill_job_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/gun.png'))
-            kill_job_action.triggered.connect(lambda: self.kill_job_on_jobs_tab(item.text()))
-            menu.addAction(kill_job_action)
-
-            trace_job_action = QAction('Trace', self)
-            trace_job_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/trace.png'))
-            trace_job_action.triggered.connect(lambda: self.trace_job(item.text()))
-            menu.addAction(trace_job_action)
-
-            menu.exec_(self.jobs_tab_table.mapToGlobal(pos))
-
-    def kill_job_on_jobs_tab(self, jobid=None):
-        """
-        Kill job, update self.jobs_tab_table.
-        """
-        return_code = self.kill_job(jobid)
-
-        if return_code == 0:
-            self.gen_jobs_tab_table()
-
     def jobs_tab_check_click(self, item=None):
         """
         If click the Job id, jump to the JOB tab and show the job information.
@@ -1305,76 +1304,64 @@ Please contact with liyanqing1987@163.com with any question."""
                 job_status = self.jobs_tab_table.item(current_row, 2).text().strip()
 
                 if job_status == 'PEND':
-                    common.bprint('Getting job pend reason for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-                    self.my_check_issue_reason = CheckIssueReason(job=job, issue='PEND')
-                    self.my_check_issue_reason.start()
+                    self.check_pend_reason(job=job)
                 elif job_status == 'RUN':
-                    common.bprint('Getting job process information for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-                    self.my_check_issue_reason = CheckIssueReason(job=job, issue='SLOW')
-                    self.my_check_issue_reason.start()
+                    self.check_slow_reason(job=job)
                 elif (job_status == 'DONE') or (job_status == 'EXIT'):
-                    common.bprint('Getting job fail reason for "' + str(job) + '", please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-                    self.my_check_issue_reason = CheckIssueReason(job=job, issue='FAIL')
-                    self.my_check_issue_reason.start()
+                    self.check_fail_reason(job=job)
 
-    def set_jobs_tab_status_combo(self, status_list=[]):
+    def set_jobs_tab_status_combo(self, checked_status_list=['RUN',]):
         """
         Set (initialize) self.jobs_tab_status_combo.
         """
         self.jobs_tab_status_combo.clear()
 
-        if not status_list:
-            status_list = ['RUN', 'PEND', 'DONE', 'EXIT', 'ALL']
+        status_list = ['ALL', 'RUN', 'PEND', 'DONE', 'EXIT']
 
         for status in status_list:
             self.jobs_tab_status_combo.addCheckBoxItem(status)
 
-        # Set "RUN" as checked status.
+        # Set to checked status for checked_status_list.
         for (i, qBox) in enumerate(self.jobs_tab_status_combo.checkBoxList):
-            if (qBox.text() == 'RUN') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_jobs_tab_queue_combo(self, queue_list=[]):
+    def set_jobs_tab_queue_combo(self, checked_queue_list=['ALL',]):
         """
         Set (initialize) self.jobs_tab_queue_combo.
         """
         self.jobs_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        if not queue_list:
-            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-            queue_list.sort()
-            queue_list.insert(0, 'ALL')
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+        queue_list.sort()
+        queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
             self.jobs_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_queue_list.
         for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_jobs_tab_host_combo(self, host_list=[]):
+    def set_jobs_tab_host_combo(self, checked_host_list=['ALL',]):
         """
         Set (initialize) self.jobs_tab_host_combo.
         """
         self.jobs_tab_host_combo.clear()
 
-        if not host_list:
-            self.fresh_lsf_info('bhosts')
-            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-            host_list.insert(0, 'ALL')
+        self.fresh_lsf_info('bhosts')
+        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        host_list.insert(0, 'ALL')
 
         for host in host_list:
             self.jobs_tab_host_combo.addCheckBoxItem(host)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_host_list.
         for (i, qBox) in enumerate(self.jobs_tab_host_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_host_list) and (qBox.isChecked() is False):
                 self.jobs_tab_host_combo.checkBoxList[i].setChecked(True)
-                break
 # For jobs TAB (end) #
 
 # For hosts TAB (start) #
@@ -1621,7 +1608,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "MaxMem" item.
+            # Fill "MaxMem" item with unit "GB".
             j = j+1
             maxmem = '0'
 
@@ -1629,24 +1616,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 index = self.lshosts_dic['HOST_NAME'].index(host)
                 maxmem = self.lshosts_dic['maxmem'][index]
 
-            if re.search(r'M', maxmem):
-                maxmem = float(re.sub(r'M', '', maxmem))/1024
-            elif re.search(r'G', maxmem):
-                maxmem = re.sub(r'G', '', maxmem)
-            elif re.search(r'T', maxmem):
-                maxmem = float(re.sub(r'T', '', maxmem))*1024
-            else:
-                maxmem = 0
-
+            maxmem = int(self.mem_unit_switch(maxmem))
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(maxmem)))
+            item.setData(Qt.DisplayRole, maxmem)
 
             if fatal_error or (maxmem == 0):
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Mem" item.
+            # Fill "Mem" item with unit "GB".
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
@@ -1655,24 +1634,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 mem = self.lsload_dic['mem'][index]
 
-            if re.search(r'M', mem):
-                mem = float(re.sub(r'M', '', mem))/1024
-            elif re.search(r'G', mem):
-                mem = re.sub(r'G', '', mem)
-            elif re.search(r'T', mem):
-                mem = float(re.sub(r'T', '', mem))*1024
-            else:
-                mem = 0
-
+            mem = int(self.mem_unit_switch(mem))
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(mem)))
+            item.setData(Qt.DisplayRole, mem)
 
             if fatal_error or (maxmem and (float(mem)/float(maxmem) < 0.1)):
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "MaxSwp" item.
+            # Fill "MaxSwp" item with unit "GB".
             j = j+1
             maxswp = '0'
 
@@ -1680,24 +1651,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 index = self.lshosts_dic['HOST_NAME'].index(host)
                 maxswp = self.lshosts_dic['maxswp'][index]
 
-            if re.search(r'M', maxswp):
-                maxswp = float(re.sub(r'M', '', maxswp))/1024
-            elif re.search(r'G', maxswp):
-                maxswp = re.sub(r'G', '', maxswp)
-            elif re.search(r'T', maxswp):
-                maxswp = float(re.sub(r'T', '', maxswp))*1024
-            else:
-                maxswp = 0
-
+            maxswp = int(self.mem_unit_switch(maxswp))
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(maxswp)))
+            item.setData(Qt.DisplayRole, maxswp)
 
             if fatal_error:
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Swp" item.
+            # Fill "Swp" item with unit "GB".
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
@@ -1706,24 +1669,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 swp = self.lsload_dic['swp'][index]
 
-            if re.search(r'M', swp):
-                swp = float(re.sub(r'M', '', swp))/1024
-            elif re.search(r'G', swp):
-                swp = re.sub(r'G', '', swp)
-            elif re.search(r'T', swp):
-                swp = float(re.sub(r'T', '', swp))*1024
-            else:
-                swp = 0
-
+            swp = int(self.mem_unit_switch(swp))
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(swp)))
+            item.setData(Qt.DisplayRole, swp)
 
             if fatal_error:
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Tmp" item.
+            # Fill "Tmp" item with unit "GB".
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
@@ -1732,22 +1687,29 @@ Please contact with liyanqing1987@163.com with any question."""
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 tmp = self.lsload_dic['tmp'][index]
 
-            if re.search(r'M', tmp):
-                tmp = float(re.sub(r'M', '', tmp))/1024
-            elif re.search(r'G', tmp):
-                tmp = re.sub(r'G', '', tmp)
-            elif re.search(r'T', tmp):
-                tmp = float(re.sub(r'T', '', tmp))*1024
-            else:
-                tmp = 0
-
+            tmp = int(self.mem_unit_switch(tmp))
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(float(tmp)))
+            item.setData(Qt.DisplayRole, tmp)
 
             if fatal_error or (int(float(tmp)) == 0):
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
+
+    def mem_unit_switch(self, mem_string):
+        """
+        Switch mem unit M/G/T into G, then remove the unit string.
+        """
+        if re.search(r'M', mem_string):
+            mem_string = float(re.sub(r'M', '', mem_string))/1024
+        elif re.search(r'G', mem_string):
+            mem_string = float(re.sub(r'G', '', mem_string))
+        elif re.search(r'T', mem_string):
+            mem_string = float(re.sub(r'T', '', mem_string))*1024
+        else:
+            mem_string = 0.0
+
+        return mem_string
 
     def gen_hosts_tab_menu(self, pos):
         """
@@ -1866,16 +1828,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 maxmem = 0
             else:
                 index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxmem = self.lshosts_dic['maxmem'][index]
-
-                if re.search(r'M', maxmem):
-                    maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
-                elif re.search(r'G', maxmem):
-                    maxmem = int(float(re.sub(r'G', '', maxmem)))
-                elif re.search(r'T', maxmem):
-                    maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
-                else:
-                    maxmem = 0
+                maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
 
             if 'ALL' not in specified_maxmem_list:
                 continue_mark = True
@@ -1909,30 +1862,19 @@ Please contact with liyanqing1987@163.com with any question."""
             njobs_num = self.hosts_tab_table.item(current_row, 4).text().strip()
 
             if item.column() == 0:
-                self.fresh_lsf_info('bhosts')
-                host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-                host_list.remove(host)
-                host_list.insert(0, host)
-                self.set_load_tab_host_combo(host_list)
+                self.set_load_tab_host_combo(checked_host=host)
                 self.update_load_tab_load_info()
                 self.main_tab.setCurrentWidget(self.load_tab)
             elif item.column() == 4:
                 if int(njobs_num) > 0:
                     self.set_jobs_tab_status_combo()
                     self.set_jobs_tab_queue_combo()
-                    self.set_jobs_tab_host_combo()
-
-                    for (i, qBox) in enumerate(self.jobs_tab_host_combo.checkBoxList):
-                        if qBox.text() == host:
-                            self.jobs_tab_host_combo.checkBoxList[i].setChecked(True)
-                        else:
-                            self.jobs_tab_host_combo.checkBoxList[i].setChecked(False)
-
+                    self.set_jobs_tab_host_combo(checked_host_list=[host,])
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
-    def set_hosts_tab_status_combo(self):
+    def set_hosts_tab_status_combo(self, checked_status_list=['ALL',]):
         """
         Set (initialize) self.hosts_tab_status_combo.
         """
@@ -1951,13 +1893,12 @@ Please contact with liyanqing1987@163.com with any question."""
         for status in status_list:
             self.hosts_tab_status_combo.addCheckBoxItem(status)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_status_list.
         for (i, qBox) in enumerate(self.hosts_tab_status_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.hosts_tab_status_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_hosts_tab_queue_combo(self):
+    def set_hosts_tab_queue_combo(self, checked_queue_list=['ALL',]):
         """
         Set (initialize) self.hosts_tab_queue_combo.
         """
@@ -1971,13 +1912,12 @@ Please contact with liyanqing1987@163.com with any question."""
         for queue in queue_list:
             self.hosts_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_queue_list.
         for (i, qBox) in enumerate(self.hosts_tab_queue_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.hosts_tab_queue_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_hosts_tab_max_combo(self):
+    def set_hosts_tab_max_combo(self, checked_max_list=['ALL',]):
         """
         Set (initialize) self.hosts_tab_max_combo.
         """
@@ -2002,13 +1942,12 @@ Please contact with liyanqing1987@163.com with any question."""
         for max in max_list:
             self.hosts_tab_max_combo.addCheckBoxItem(str(max))
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_max_list.
         for (i, qBox) in enumerate(self.hosts_tab_max_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_max_list) and (qBox.isChecked() is False):
                 self.hosts_tab_max_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_hosts_tab_maxmem_combo(self):
+    def set_hosts_tab_maxmem_combo(self, checked_maxmem_list=['ALL',]):
         """
         Set (initialize) self.hosts_tab_maxmem_combo.
         """
@@ -2023,17 +1962,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 maxmem = 0
             else:
                 index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxmem = self.lshosts_dic['maxmem'][index]
-
-                # Switch maxmem unit to "G".
-                if re.search(r'M', maxmem):
-                    maxmem = int(float(re.sub(r'M', '', maxmem))/1024)
-                elif re.search(r'G', maxmem):
-                    maxmem = int(float(re.sub(r'G', '', maxmem)))
-                elif re.search(r'T', maxmem):
-                    maxmem = int(float(re.sub(r'T', '', maxmem))*1024)
-                else:
-                    maxmem = 0
+                maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
 
             if maxmem not in maxmem_list:
                 maxmem_list.append(maxmem)
@@ -2051,11 +1980,10 @@ Please contact with liyanqing1987@163.com with any question."""
         for maxmem in maxmem_list:
             self.hosts_tab_maxmem_combo.addCheckBoxItem(maxmem)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_maxmem_list.
         for (i, qBox) in enumerate(self.hosts_tab_maxmem_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_maxmem_list) and (qBox.isChecked() is False):
                 self.hosts_tab_maxmem_combo.checkBoxList[i].setChecked(True)
-                break
 # For hosts TAB (end) #
 
 # For load TAB (start) #
@@ -2182,19 +2110,23 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
         self.load_tab_frame2.setLayout(load_tab_frame2_grid)
 
-    def set_load_tab_host_combo(self, host_list=[]):
+    def set_load_tab_host_combo(self, checked_host=''):
         """
         Set (initialize) self.load_tab_host_combo.
         """
         self.load_tab_host_combo.clear()
 
-        if not host_list:
-            self.fresh_lsf_info('bhosts')
-            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-            host_list.insert(0, '')
+        self.fresh_lsf_info('bhosts')
+        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        host_list.insert(0, '')
 
         for host in host_list:
             self.load_tab_host_combo.addItem(host)
+
+        # Set to checked status for checked_host.
+        for i in range(self.load_tab_host_combo.count()):
+            if self.load_tab_host_combo.itemText(i) == checked_host:
+                self.load_tab_host_combo.setCurrentIndex(i)
 
     def update_load_tab_load_info(self):
         """
@@ -2203,16 +2135,16 @@ Please contact with liyanqing1987@163.com with any question."""
         specified_host = self.load_tab_host_combo.currentText().strip()
 
         if not specified_host:
-            warning_message = '*Warning*: No host is specified.'
+            warning_message = 'No host is specified on LOAD tab.'
             self.gui_warning(warning_message)
             return
 
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
 
-        common.bprint('Loading ut/mem load information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading ut/mem load information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, wait a moment ...')
         my_show_message.start()
 
         (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
@@ -2272,18 +2204,7 @@ Please contact with liyanqing1987@163.com with any question."""
                             ut_list.append(ut)
 
                             # For mem
-                            mem = data_dic['mem'][i]
-
-                            if mem:
-                                if re.match(r'.*M', mem):
-                                    mem = round(float(re.sub(r'M', '', mem))/1024, 1)
-                                elif re.match(r'.*G', mem):
-                                    mem = round(float(re.sub(r'G', '', mem)), 1)
-                                elif re.match(r'.*T', mem):
-                                    mem = round(float(re.sub(r'T', '', mem))*1024, 1)
-                            else:
-                                mem = 0
-
+                            mem = round(self.mem_unit_switch(data_dic['mem'][i]), 1)
                             mem_list.append(mem)
 
                     load_db_conn.close()
@@ -2494,7 +2415,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.users_tab_frame0.setLayout(users_tab_frame0_grid)
 
-    def set_users_tab_status_combo(self):
+    def set_users_tab_status_combo(self, checked_status_list=['ALL',]):
         """
         Set (initialize) self.users_tab_status_combo.
         """
@@ -2504,11 +2425,10 @@ Please contact with liyanqing1987@163.com with any question."""
         for status in status_list:
             self.users_tab_status_combo.addCheckBoxItem(status)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_status_list.
         for (i, qBox) in enumerate(self.users_tab_status_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.users_tab_status_combo.checkBoxList[i].setChecked(True)
-                break
 
     def gen_users_tab_table(self):
         # self.users_tab_table
@@ -2520,14 +2440,14 @@ Please contact with liyanqing1987@163.com with any question."""
         self.users_tab_table.setHorizontalHeaderLabels(self.users_tab_table_title_list)
 
         self.users_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.users_tab_table.setColumnWidth(1, 70)
-        self.users_tab_table.setColumnWidth(2, 95)
-        self.users_tab_table.setColumnWidth(3, 150)
-        self.users_tab_table.setColumnWidth(4, 145)
-        self.users_tab_table.setColumnWidth(5, 130)
-        self.users_tab_table.setColumnWidth(6, 123)
-        self.users_tab_table.setColumnWidth(7, 145)
-        self.users_tab_table.setColumnWidth(8, 137)
+        self.users_tab_table.setColumnWidth(1, 80)
+        self.users_tab_table.setColumnWidth(2, 100)
+        self.users_tab_table.setColumnWidth(3, 155)
+        self.users_tab_table.setColumnWidth(4, 150)
+        self.users_tab_table.setColumnWidth(5, 135)
+        self.users_tab_table.setColumnWidth(6, 130)
+        self.users_tab_table.setColumnWidth(7, 150)
+        self.users_tab_table.setColumnWidth(8, 145)
 
         # Fill self.users_tab_table items.
         user_dic = self.get_user_info()
@@ -2542,7 +2462,6 @@ Please contact with liyanqing1987@163.com with any question."""
             # Fill "User" item.
             j = 0
             item = QTableWidgetItem(user)
-            item.setFont(QFont('song', 9, QFont.Bold))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Job_Num" item.
@@ -2620,9 +2539,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get user history information from database.
         """
-        common.bprint('Loading user history info, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading user history info, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading user history info, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading user history info, wait a moment ...')
         my_show_message.start()
 
         user_dic = {'ALL': {'job_num': 0, 'done_num': 0, 'exit_num': 0, 'rusage_mem': 0, 'max_mem': 0}}
@@ -2754,8 +2673,8 @@ Please contact with liyanqing1987@163.com with any question."""
         queues_tab_grid.setRowStretch(1, 14)
         queues_tab_grid.setRowStretch(2, 6)
 
-        queues_tab_grid.setColumnStretch(0, 1)
-        queues_tab_grid.setColumnStretch(1, 10)
+        queues_tab_grid.setColumnStretch(0, 37)
+        queues_tab_grid.setColumnStretch(1, 63)
 
         queues_tab_grid.setColumnMinimumWidth(0, 330)
 
@@ -2775,17 +2694,14 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_table.setHorizontalHeaderLabels(self.queues_tab_table_title_list)
 
         self.queues_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.queues_tab_table.setColumnWidth(1, 60)
-        self.queues_tab_table.setColumnWidth(2, 60)
-        self.queues_tab_table.setColumnWidth(3, 60)
+        self.queues_tab_table.setColumnWidth(1, 70)
+        self.queues_tab_table.setColumnWidth(2, 80)
+        self.queues_tab_table.setColumnWidth(3, 80)
 
         # Fresh LSF bhosts/queues/queue_host information.
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('bqueues')
         self.fresh_lsf_info('queue_host')
-
-        # Hide the vertical header
-        self.queues_tab_table.verticalHeader().setVisible(False)
 
         # Fill self.queues_tab_table items.
         self.queues_tab_table.setRowCount(0)
@@ -2808,6 +2724,7 @@ Please contact with liyanqing1987@163.com with any question."""
             # Fill "QUEUE" item.
             j = 0
             item = QTableWidgetItem(queue)
+            item.setFont(QFont('song', 9, QFont.Bold))
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "SLOTS" item.
@@ -2829,7 +2746,6 @@ Please contact with liyanqing1987@163.com with any question."""
                         total += int(host_max)
 
             item = QTableWidgetItem(str(total))
-            item.setFont(QFont('song', 9, QFont.Bold))
 
             if queue == 'lost_and_found':
                 item.setForeground(QBrush(Qt.red))
@@ -2947,37 +2863,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.update_queues_tab_frame2(queue)
             elif item.column() == 2:
                 if (pend_num != '') and (int(pend_num) > 0):
-                    self.set_jobs_tab_status_combo()
-
-                    for (i, qBox) in enumerate(self.jobs_tab_status_combo.checkBoxList):
-                        if qBox.text() == 'PEND':
-                            self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
-                        else:
-                            self.jobs_tab_status_combo.checkBoxList[i].setChecked(False)
-
-                    self.set_jobs_tab_queue_combo()
-
-                    for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
-                        if qBox.text() == queue:
-                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
-                        else:
-                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(False)
-
+                    self.set_jobs_tab_status_combo(checked_status_list=['PEND',])
+                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue,])
                     self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
             elif item.column() == 3:
                 if (run_num != '') and (int(run_num) > 0):
-                    self.set_jobs_tab_status_combo()
-                    self.set_jobs_tab_queue_combo()
-
-                    for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
-                        if qBox.text() == queue:
-                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
-                        else:
-                            self.jobs_tab_queue_combo.checkBoxList[i].setChecked(False)
-
+                    self.set_jobs_tab_status_combo(checked_status_list=['RUN',])
+                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue,])
                     self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
@@ -3159,6 +3054,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_frame0.setFrameShape(QFrame.Box)
 
         self.utilization_tab_table = QTableWidget(self.utilization_tab)
+        self.utilization_tab_table.itemClicked.connect(self.utilization_tab_check_click)
 
         self.utilization_tab_frame1 = QFrame(self.utilization_tab)
         self.utilization_tab_frame1.setFrameShadow(QFrame.Raised)
@@ -3174,8 +3070,8 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_grid.setRowStretch(0, 1)
         utilization_tab_grid.setRowStretch(1, 10)
 
-        utilization_tab_grid.setColumnStretch(0, 1)
-        utilization_tab_grid.setColumnStretch(1, 2)
+        utilization_tab_grid.setColumnStretch(0, 38)
+        utilization_tab_grid.setColumnStretch(1, 62)
 
         self.utilization_tab.setLayout(utilization_tab_grid)
 
@@ -3194,7 +3090,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_queue_combo()
-        self.utilization_tab_queue_combo.currentTextChanged.connect(self.update_utilization_tab_host_combo)
+        self.utilization_tab_queue_combo.currentTextChanged.connect(self.set_utilization_tab_host_combo)
 
         # "Host" item.
         utilization_tab_host_label = QLabel('Host', self.utilization_tab_frame0)
@@ -3202,7 +3098,7 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
-        self.set_utilization_tab_host_combo(select_all=True)
+        self.set_utilization_tab_host_combo()
 
         # "Resource" item.
         utilization_tab_resource_label = QLabel('Resource', self.utilization_tab_frame0)
@@ -3268,7 +3164,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.utilization_tab_frame0.setLayout(utilization_tab_frame0_grid)
 
-    def set_utilization_tab_queue_combo(self):
+    def set_utilization_tab_queue_combo(self, checked_queue_list=['ALL',]):
         """
         Set (initialize) self.utilization_tab_queue_combo.
         """
@@ -3282,27 +3178,40 @@ Please contact with liyanqing1987@163.com with any question."""
         for queue in queue_list:
             self.utilization_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_queue_list.
         for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.utilization_tab_queue_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_utilization_tab_host_combo(self, host_list=[], select_all=False):
+    def set_utilization_tab_host_combo(self):
         """
         Set (initialize) self.utilization_tab_host_combo.
         """
+        self.utilization_tab_host_combo.unselectAllItems()
         self.utilization_tab_host_combo.clear()
 
-        if not host_list:
+        # Get host_list based on selected queue info.
+        host_list = []
+        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+
+        if 'ALL' in selected_queue_dic.values():
             self.fresh_lsf_info('bhosts')
             host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        else:
+            self.fresh_lsf_info('queue_host')
+
+            for selected_queue in selected_queue_dic.values():
+                selected_queue_host_list = self.queue_host_dic[selected_queue]
+
+                for host in selected_queue_host_list:
+                    if host not in host_list:
+                        host_list.append(host)
 
         for host in host_list:
             self.utilization_tab_host_combo.addCheckBoxItem(host)
 
-        if select_all:
-            self.utilization_tab_host_combo.selectAllItems()
+        # Set all hosts as checked.
+        self.utilization_tab_host_combo.selectAllItems()
 
     def set_utilization_tab_resource_combo(self):
         """
@@ -3310,38 +3219,14 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         self.utilization_tab_resource_combo.clear()
 
-        for resource in self.utilization_tab_resource_list:
+        resource_list = copy.deepcopy(self.utilization_tab_resource_list)
+
+        for resource in resource_list:
             self.utilization_tab_resource_combo.addCheckBoxItem(resource)
 
-        # Set all resources as checked status.
-        self.utilization_tab_resource_combo.selectAllItems()
-
-    def update_utilization_tab_host_combo(self):
-        """
-        Update self.utilization_tab_host_combo with self.utilization_tab_queue_combo value.
-        """
-        # Get host_list based on selected queue info.
-        selected_host_list = []
-        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
-
-        if 'ALL' in selected_queue_dic.values():
-            self.fresh_lsf_info('bhosts')
-            selected_host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-        else:
-            self.fresh_lsf_info('queue_host')
-
-            for selected_queue in selected_queue_dic.values():
-                host_list = self.queue_host_dic[selected_queue]
-
-                for host in host_list:
-                    if host not in selected_host_list:
-                        selected_host_list.append(host)
-
-        # Update self.utilization_tab_host_combo with new host_list.
-        if selected_host_list:
-            self.set_utilization_tab_host_combo(host_list=selected_host_list, select_all=True)
-        else:
-            self.set_utilization_tab_host_combo()
+        # Set all resources as checked.
+        for (i, qBox) in enumerate(self.utilization_tab_resource_combo.checkBoxList):
+            self.utilization_tab_resource_combo.checkBoxList[i].setChecked(True)
 
     def update_utilization_tab_info(self):
         """
@@ -3358,9 +3243,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified queues.
         """
-        common.bprint('Loading queue utilization info, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading queue utilization info, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading queue utilization info, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading queue utilization info, wait a moment ...')
         my_show_message.start()
 
         utilization_dic = {}
@@ -3454,9 +3339,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified host.
         """
-        common.bprint('Loading resource utilization information, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading resource utilization information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading resource utilization information, please wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading resource utilization information, wait a moment ...')
         my_show_message.start()
 
         utilization_dic = {}
@@ -3544,8 +3429,9 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_table.setRowCount(len(queue_utilization_dic))
         self.utilization_tab_table_title_list = ['Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
         self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
+
         self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.utilization_tab_table.setColumnWidth(1, 60)
+        self.utilization_tab_table.setColumnWidth(1, 70)
         self.utilization_tab_table.setColumnWidth(2, 60)
         self.utilization_tab_table.setColumnWidth(3, 60)
         self.utilization_tab_table.setColumnWidth(4, 60)
@@ -3563,6 +3449,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                 # Fill "Queue" item.
                 item = QTableWidgetItem(queue)
+                item.setFont(QFont('song', 9, QFont.Bold))
                 self.utilization_tab_table.setItem(row, 0, item)
 
                 # Fill "slots" item.
@@ -3594,6 +3481,20 @@ Please contact with liyanqing1987@163.com with any question."""
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, queue_utilization_dic[queue][resource])
                     self.utilization_tab_table.setItem(row, i+2, item)
+
+    def utilization_tab_check_click(self, item=None):
+        """
+        If click QUEUE name, show queue slot/cpu/mem utilization information on UTILIZATION tab.
+        """
+        if item is not None:
+            current_row = self.utilization_tab_table.currentRow()
+            queue = self.utilization_tab_table.item(current_row, 0).text().strip()
+
+            if item.column() == 0:
+                common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
+
+                self.set_utilization_tab_queue_combo(checked_queue_list=[queue,])
+                self.update_utilization_tab_info()
 
     def gen_utilization_tab_frame1(self):
         """
@@ -3627,7 +3528,7 @@ Please contact with liyanqing1987@163.com with any question."""
         selected_host_list = list(selected_host_dic.values())
 
         if not selected_host_list:
-            warning_message = '*Warning*: No queue/host is specified.'
+            warning_message = 'No queue/host is specified on UTILIZATION tab.'
             self.gui_warning(warning_message)
             return
 
@@ -3635,7 +3536,7 @@ Please contact with liyanqing1987@163.com with any question."""
         selected_resource_list = list(selected_resource_dic.values())
 
         if not selected_resource_list:
-            warning_message = '*Warning*: No resource is specified.'
+            warning_message = 'No resource is specified on UTILIZATION tab.'
             self.gui_warning(warning_message)
             return
 
@@ -3698,9 +3599,9 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if self.enable_utilization_detail:
-                common.bprint('Drawing ' + str(selected_resource) + ' curve, please wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint('Drawing ' + str(selected_resource) + ' curve, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
 
-                my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve, please wait a moment ...')
+                my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve, wait a moment ...')
                 my_show_message.start()
 
             sample_date_list = []
@@ -3842,7 +3743,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.license_tab_server_combo = common_pyqt5.QComboCheckBox(self.license_tab_frame0)
         self.set_license_tab_server_combo()
-        self.license_tab_server_combo.currentTextChanged.connect(self.update_license_tab_vendor_combo)
+        self.license_tab_server_combo.currentTextChanged.connect(lambda: self.set_license_tab_vendor_combo())
 
         # "Vendor" item.
         license_tab_vendor_label = QLabel('Vendor', self.license_tab_frame0)
@@ -3924,7 +3825,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return feature_list
 
-    def set_license_tab_show_combo(self):
+    def set_license_tab_show_combo(self, checked_status_list=['ALL',]):
         self.license_tab_show_combo.clear()
 
         license_status_list = ['ALL', 'IN_USE', 'NOT_USED']
@@ -3932,13 +3833,12 @@ Please contact with liyanqing1987@163.com with any question."""
         for license_status in license_status_list:
             self.license_tab_show_combo.addCheckBoxItem(license_status)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_status_list.
         for (i, qBox) in enumerate(self.license_tab_show_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.license_tab_show_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_license_tab_server_combo(self):
+    def set_license_tab_server_combo(self, checked_server_list=['ALL',]):
         self.license_tab_server_combo.clear()
 
         license_server_list = list(self.license_dic.keys())
@@ -3947,13 +3847,12 @@ Please contact with liyanqing1987@163.com with any question."""
         for license_server in license_server_list:
             self.license_tab_server_combo.addCheckBoxItem(license_server)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_server_list.
         for (i, qBox) in enumerate(self.license_tab_server_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_server_list) and (qBox.isChecked() is False):
                 self.license_tab_server_combo.checkBoxList[i].setChecked(True)
-                break
 
-    def set_license_tab_vendor_combo(self):
+    def set_license_tab_vendor_combo(self, checked_vendor_list=['ALL',]):
         self.license_tab_vendor_combo.clear()
 
         # Get vendor_daemon list.
@@ -3967,25 +3866,20 @@ Please contact with liyanqing1987@163.com with any question."""
                         if vendor_daemon not in vendor_daemon_list:
                             vendor_daemon_list.append(vendor_daemon)
 
-        # Fill self.license_tab_vendor_combo.
         for vendor_daemon in vendor_daemon_list:
             self.license_tab_vendor_combo.addCheckBoxItem(vendor_daemon)
 
-        # Set "ALL" as checked status.
+        # Set to checked status for checked_vendor_list.
         for (i, qBox) in enumerate(self.license_tab_vendor_combo.checkBoxList):
-            if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
+            if (qBox.text() in checked_vendor_list) and (qBox.isChecked() is False):
                 self.license_tab_vendor_combo.checkBoxList[i].setChecked(True)
-                break
-
-    def update_license_tab_vendor_combo(self):
-        self.set_license_tab_vendor_combo()
 
     def update_license_info(self):
         # Get license information.
         self.get_license_dic()
 
         if not self.license_dic:
-            warning_message = '*Warning*: Not find any license information.'
+            warning_message = 'Not find any license information.'
             self.gui_warning(warning_message)
             return
 
@@ -4209,7 +4103,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Write csv
             common.bprint('Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
-
             common.write_csv(csv_file=output_file, content_dic=content_dic)
 # Export table (end) #
 
@@ -4233,6 +4126,7 @@ class CheckIssueReason(QThread):
         command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/check_issue_reason -i ' + str(self.issue)
 
         if self.job:
+            common.bprint('Getting job ' + str(self.issue.lower()) + ' reason for "' + str(self.job) + '", wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
             command = str(command) + ' -j ' + str(self.job)
 
         os.system(command)
