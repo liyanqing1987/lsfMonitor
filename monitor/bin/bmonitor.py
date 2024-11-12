@@ -2466,8 +2466,8 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Job_Num" item.
             j = j+1
-            item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, user_dic[user]['job_num'])
+            item = NumericTableWidgetItem()
+            item.setData(Qt.DisplayRole, str(user_dic[user]['job_num']))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Pass_Rate" item.
@@ -2477,62 +2477,62 @@ Please contact with liyanqing1987@163.com with any question."""
             if user_dic[user]['job_num']:
                 pass_rate = round((100*float(user_dic[user]['done_num'])/float(user_dic[user]['job_num'])), 1)
 
-            item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, pass_rate)
+            item = NumericTableWidgetItem()
+            item.setData(Qt.DisplayRole, str(pass_rate))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Rusage_Mem" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             total_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024, 1)
-            item.setData(Qt.DisplayRole, total_rusage_mem)
+            item.setData(Qt.DisplayRole, str(total_rusage_mem))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Rusage_Mem" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             avg_rusage_mem = 0
 
             if user_dic[user]['job_num']:
                 avg_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, avg_rusage_mem)
+            item.setData(Qt.DisplayRole, str(avg_rusage_mem))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Max_Mem" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             total_max_mem = round(float(user_dic[user]['max_mem'])/1024, 1)
-            item.setData(Qt.DisplayRole, total_max_mem)
+            item.setData(Qt.DisplayRole, str(total_max_mem))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Max_Mem" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             avg_max_mem = 0
 
             if user_dic[user]['job_num']:
                 avg_max_mem = round(float(user_dic[user]['max_mem'])/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, avg_max_mem)
+            item.setData(Qt.DisplayRole, str(avg_max_mem))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Mem_Waste" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             total_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024, 1)
-            item.setData(Qt.DisplayRole, total_mem_waste)
+            item.setData(Qt.DisplayRole, str(total_mem_waste))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Mem_Waste" item.
             j = j+1
-            item = QTableWidgetItem()
+            item = NumericTableWidgetItem()
             avg_mem_waste = 0
 
             if user_dic[user]['job_num']:
                 avg_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, avg_mem_waste)
+            item.setData(Qt.DisplayRole, str(avg_mem_waste))
             self.users_tab_table.setItem(i, j, item)
 
     def get_user_info(self):
@@ -4172,6 +4172,11 @@ class ShowMessage(QThread):
     def run(self):
         command = 'python3 ' + str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
         os.system(command)
+
+
+class NumericTableWidgetItem(QTableWidgetItem):
+    def __lt__(self, other):
+        return float(self.text()) < float(other.text())
 
 
 #################
