@@ -847,6 +847,7 @@ def get_queue_host_info():
     queue_host_dic = {}
     queue_compile = re.compile(r'^QUEUE:\s*(\S+)\s*$')
     hosts_compile = re.compile(r'^HOSTS:\s*(.*?)\s*$')
+    hosts_all_compile = re.compile(r'\ball\b')
     queue = ''
 
     command = 'bqueues -l'
@@ -864,7 +865,7 @@ def get_queue_host_info():
             my_match = hosts_compile.match(line)
             hosts_string = my_match.group(1)
 
-            if hosts_string == 'all':
+            if hosts_all_compile.search(hosts_string):
                 common.bprint('Queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.', level='Warning')
                 queue_host_dic[queue] = get_host_list()
             else:
