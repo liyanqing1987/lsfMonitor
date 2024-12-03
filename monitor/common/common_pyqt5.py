@@ -182,6 +182,7 @@ class QComboCheckBox(QComboBox):
         self.checkBoxList.append(qBox)
         self.qListWidget.setItemWidget(qItem, qBox)
         self.updateDropDownBoxWidth(text, qBox)
+        self.updateDropDownBoxHeight()
 
     def qBoxStateChanged(self, checkState):
         """
@@ -234,6 +235,17 @@ class QComboCheckBox(QComboBox):
         if textPixel > self.dropDownBoxWidthPixel:
             self.dropDownBoxWidthPixel = textPixel
             self.view().setMinimumWidth(self.dropDownBoxWidthPixel + indicatorPixel)
+
+    def updateDropDownBoxHeight(self):
+        fm = QFontMetrics(QFont())
+        fontPixel = fm.height() + 2
+        self.setStyleSheet(f"""
+            QComboBox QAbstractItemView::item {{
+                min-height: {fontPixel}px;
+                padding: 0px;
+                margin: 0px;
+            }}
+        """)
 
     def selectedItems(self):
         """
