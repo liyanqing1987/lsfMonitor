@@ -34,7 +34,7 @@ def read_args():
 
     predict_model_group.add_argument('--job_yaml',
                                      default=os.path.join(os.getcwd(), 'job.yaml'),
-                                     help='job infomation in order to predict job max memory(gb)')
+                                     help='job information in order to predict job max memory(gb)')
     predict_model_group.add_argument('-c', '--config',
                                      default=os.path.join(os.path.join(config.model_db_path, 'latest'), 'config/config'),
                                      help='predict model config')
@@ -46,6 +46,7 @@ def read_args():
     predict_model_group.add_argument('--started_time', help='job begin time')
     predict_model_group.add_argument('--rusage_mem', default=0, help='job reserve memory')
     predict_model_group.add_argument('--user', default=0, help='job submission user')
+    predict_model_group.add_argument('--extra', action='store_true', default=False, help='Using Other factors.')
     predict_model_group.add_argument('-d', '--debug', default=False, action='store_true', help='debug mode')
 
     args = parser.parse_args()
@@ -60,6 +61,12 @@ class PredictModel:
         self.encode_ori_list = ['user', 'project', 'queue']
         self.factor_ori_list = ['user', 'project', 'queue', 'rusage_mem']
         self.result_ori_list = ['max_mem']
+
+        # Extra Config
+        self.extra_encode_column_list = self.config_dic.get('extra_encode_column_list', [])
+        self.column_ori_list += self.extra_encode_column_list
+        self.encode_ori_list += self.extra_encode_column_list
+        self.factor_ori_list += self.extra_encode_column_list
 
         if 'model' in self.config_dic and 'model_file' in self.config_dic['model']:
             self.model = self.read_binary_file(self.config_dic['model']['model_file'])
@@ -269,8 +276,8 @@ class PredictModel:
 def get_job_predict_memory(args):
     job_dic = {}
 
-    if args.user and args.job_name and args.queue and args.project and args.cwd and args.command and args.started_time:
-        logger.debug("Try to get infomation from args")
+    if not args.extra and (args.user and args.job_name and args.queue and args.project and args.cwd and args.command and args.started_time):
+        logger.debug("Try to get information from args")
         job_dic['job_name'] = args.job_name
         job_dic['cwd'] = args.cwd
         job_dic['command'] = args.command
@@ -281,7 +288,7 @@ def get_job_predict_memory(args):
         job_dic['user'] = args.user
 
     elif args.job_yaml:
-        logger.debug("Try to get infomation from job.yaml")
+        logger.debug("Try to get information from job.yaml")
 
         if not os.path.exists(args.job_yaml):
             logger.error("Could not find job.yaml: %s, please check!" % args.job_yaml)
@@ -289,7 +296,7 @@ def get_job_predict_memory(args):
         with open(args.job_yaml, 'r') as jf:
             job_dic = yaml.load(jf, Loader=yaml.FullLoader)
     else:
-        logger.error("Could not find any valid job infomation, please check!")
+        logger.error("Could not find any valid job information, please check!")
         return 1
 
     if not os.path.exists(args.config):

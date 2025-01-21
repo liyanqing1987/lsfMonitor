@@ -12,6 +12,8 @@ import getpass
 import argparse
 import logging
 import pickle
+import traceback
+
 import yaml
 import copy
 import numpy as np
@@ -66,30 +68,41 @@ def read_args():
     return args
 
 
+class MemoryPredictionException(Exception):
+    """
+    Flow Template Creation Exception.
+    """
+
+    def __init__(self, message='MemoryPrediction failed.', code=1):
+        self.message = message
+        self.code = code
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f'{self.__class__.__name__}: [{self.code}] {self.message}'
+
+
 class TrainingModel:
     def __init__(self, start_date, end_date, data_path, training_cfg):
         self.start_date, self.end_date, self.data_path, self.training_yaml = (start_date, end_date, data_path, training_cfg)
         self.start_date_utc = datetime.strptime(start_date, '%Y-%m-%d')
         self.end_date_utc = datetime.strptime(end_date, '%Y-%m-%d')
 
-        # training config
-        self.training_config_dic = self.dump_training_config()
+        # Training Config Yaml
+        self.training_config_dic = self.read_config(config_yaml=self.training_yaml)
 
-        # working main path
-        if hasattr(config, 'model_db_path') and os.path.exists(config.model_db_path):
-            work_dir = config.model_db_path
-        else:
-            work_dir = os.getcwd()
-
+        # Working Path Generation
+        work_dir = config.model_db_path if hasattr(config, 'model_db_path') and os.path.exists(config.model_db_path) else os.getcwd()
         self.working_dir = os.path.join(work_dir, r'%s/' % datetime.now().strftime('%Y_%m_%d_%H_%M'))
         self.model_dir = os.path.join(self.working_dir, r'model/')
         self.cat_dir = os.path.join(self.working_dir, r'cat_encs/')
         self.config_dir = os.path.join(self.working_dir, r'config/')
         self.rpt_dir = os.path.join(self.working_dir, r'rpt/')
+
         new_dir_list = [self.working_dir, self.model_dir, self.cat_dir, self.config_dir, self.rpt_dir]
 
         for new_dir in new_dir_list:
-            self.generate_working_path(new_dir)
+            self.create_path(new_dir)
 
         sibling_path_list = os.listdir(work_dir)
         link_flag = False
@@ -108,11 +121,18 @@ class TrainingModel:
         self.model_config_dic = {}
         self.model_config_dic = copy.deepcopy(self.training_config_dic)
 
-        # data_process
+        # Init Config
         self.column_name_list = ['started_time', 'job_name', 'user', 'project', 'queue', 'cwd', 'command', 'rusage_mem', 'max_mem']
         self.encode_name_list = ['user', 'project', 'queue']
         self.factor_name_list = ['user', 'project', 'queue', 'rusage_mem']
         self.result_name_list = ['max_mem']
+        self.memory_item_list = ['max_mem', 'rusage_mem']
+
+        # Extra Config
+        self.extra_encode_column_list = self.model_config_dic.get('extra_encode_column_list', [])
+        self.column_name_list += self.extra_encode_column_list
+        self.encode_name_list += self.extra_encode_column_list
+        self.factor_name_list += self.extra_encode_column_list
 
         self.df = pd.DataFrame()
         self.struct_data = pd.DataFrame()
@@ -139,17 +159,16 @@ class TrainingModel:
         # dump config
         self.dump_config()
 
-    def dump_training_config(self):
-        if not os.path.exists(self.training_yaml):
-            logger.error("Could not find a valid config for training: %s" % self.training_yaml)
-            sys.exit(1)
+    @staticmethod
+    def read_config(config_yaml: str):
+        if not os.path.exists(config_yaml):
+            raise MemoryPredictionException(message=f'Could not find Config Yaml {config_yaml}.')
 
-        with open(self.training_yaml, 'r') as tf:
+        with open(config_yaml, 'r') as tf:
             training_config_dic = yaml.load(tf, Loader=yaml.FullLoader)
 
-        if not training_config_dic:
-            logger.error("Could not find training yaml infomation in %s, please check!" % self.training_yaml)
-            sys.exit(1)
+        if training_config_dic is None:
+            raise MemoryPredictionException(message=f'Invalid Config Yaml {config_yaml}.')
 
         return training_config_dic
 
@@ -168,25 +187,26 @@ class TrainingModel:
 
         self.data_analysis_rpt(pre_y_test)
 
-    def generate_working_path(self, new_dir):
-        if not os.path.exists(new_dir):
-            try:
-                os.makedirs(new_dir)
-            except Exception as error:
-                logger.error(r'*Error*: Failed on creating report picture directory %s' % (str(new_dir)))
-                logger.error(str(error))
-                sys.exit(1)
+    @staticmethod
+    def create_path(new_dir):
+        try:
+            os.makedirs(new_dir, exist_ok=True)
+        except Exception as error:
+            logger.error(str(error))
+            raise MemoryPredictionException(message=f'Create directory {new_dir} failed.')
 
     def data_preparation(self):
+        """
+        Training Data Preparation.
+        """
         self.merge_data()
-        self.drop_data()
-        self.fill_data()
+        self.drop_null_result()
+        self.fill_null_factor()
         self.unit_convert()
 
     def merge_data(self):
         if not os.path.exists(self.data_path):
-            logger.error("The db path is not exists: %s, please check!" % self.data_path)
-            sys.exit(1)
+            raise MemoryPredictionException(message=f'Data Path {self.data_path} does not exist.')
 
         logger.info("Staring merge data from %s to %s, totally %s days" % (self.start_date, self.end_date, str((self.end_date_utc - self.start_date_utc).days)))
 
@@ -194,11 +214,10 @@ class TrainingModel:
         merge_path = os.path.join(self.working_dir, 'merge.csv')
 
         try:
-            original_column_list = self.column_name_list
+            original_column_list = self.column_name_list + self.extra_encode_column_list
         except Exception as error:
-            logger.error("Could not find data column definition in yaml, please check!")
             logger.error("Error: %s" % str(error))
-            sys.exit(1)
+            raise MemoryPredictionException(message='Could not find data column definition in yaml')
 
         if os.path.exists(self.data_path):
             for file in os.listdir(self.data_path):
@@ -224,6 +243,10 @@ class TrainingModel:
 
                 if df is not None:
                     df = df.drop_duplicates(subset=['job_id'], keep='first')
+
+                    # For extra test
+                    df['block'] = 'top'
+
                     df = df[original_column_list]
                     df['rusage_mem'] = 0
 
@@ -238,30 +261,29 @@ class TrainingModel:
                     num += 1
 
         if not os.path.exists(merge_path):
-            logger.error("Could not find merge result csv: %s, please check!" % str(merge_path))
-            sys.exit(1)
+            raise MemoryPredictionException(message=f'Finding Training Data failed: {merge_path}')
         else:
             if hasattr(config, 'max_training_lines') and config.max_training_lines:
                 self.df = pd.read_csv(merge_path, nrows=int(config.max_training_lines))
             else:
                 self.df = pd.read_csv(merge_path)
 
-            os.remove(merge_path)
-            logger.info("Reading csv done, the db dateframe shape is %s" % str(self.df.shape))
-            logger.info("dataframe column including: %s" % str(self.df))
+            # os.remove(merge_path)
+            logger.info(f"Reading csv done, the shape of dataframe is {str(self.df.shape)}")
+            logger.info(f"Dataframe column: {str(self.df)}")
 
             self.model_config_dic['training_shape'] = str(self.df.shape)
 
-    def drop_data(self):
+    def drop_null_result(self):
         """
         drop result=Null record
         """
         logger.info("Drop data whose result column is NULL")
         self.df.dropna(subset=self.result_name_list, inplace=True)
 
-    def fill_data(self):
+    def fill_null_factor(self):
         """
-        Fill Null record record with 0
+        Fill Null factor record with 0
         """
         logger.info("Replace data based on dataframe dtypes ...")
 
@@ -280,14 +302,11 @@ class TrainingModel:
         """
         logger.info("Convert unit from mb to gb")
 
-        memory_item_list = ['max_mem', 'rusage_mem']
-
-        for mem_item in memory_item_list:
+        for mem_item in self.memory_item_list:
             if mem_item in self.df.columns:
                 self.df[mem_item] = common.memory_unit_to_gb(self.df[mem_item], unit='MB')
             else:
-                logger.error("Could not find column %s in dataframe, please check!" % mem_item)
-                sys.exit(1)
+                raise MemoryPredictionException(message=f'Could not find column {mem_item} in dataframe')
 
     def prefeature_process(self):
         # extract feature from started time
@@ -624,8 +643,13 @@ class TrainingModel:
 @common.timer
 def main():
     args = read_args()
-    training_model = TrainingModel(args.start_date, args.end_date, args.data_path, args.training_cfg)
-    training_model.training()
+
+    try:
+        training_model = TrainingModel(args.start_date, args.end_date, args.data_path, args.training_cfg)
+        training_model.training()
+    except Exception as error:
+        logger.error(f'{str(error)}')
+        logger.debug(f'{traceback.format_exc()}')
 
 
 if __name__ == '__main__':

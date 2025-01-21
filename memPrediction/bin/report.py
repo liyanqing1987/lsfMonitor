@@ -187,7 +187,7 @@ class MemoryReport:
             self.df["run_time"] = 0
             self.df["total_hours"] = 1 / 3600
 
-        self.df['run_time'].fillna(0, inplace=True)
+        self.df['run_time'].fillna(pd.Timedelta(0), inplace=True)
         self.df['total_hours'].fillna(1 / 3600, inplace=True)
 
         logger.debug("df runtime: \n %s \n df total_hours \n  %s" % (str(self.df["run_time"]), str(self.df["total_hours"])))
