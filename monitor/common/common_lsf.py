@@ -11,8 +11,8 @@ from common import common
 
 def get_command_dict(command):
     """
-    Collect (common) LSF command info into a dict.
-    It only works with the Title-Item type informations.
+    Collect LSF command output message into a dict.
+    It only works with the "title <-> item" type informations.
     """
     my_dic = collections.OrderedDict()
     key_list = []
@@ -56,7 +56,7 @@ def get_command_dict(command):
 
 def get_bqueues_info(command='bqueues -w'):
     """
-    Get bqueues info with command 'bqueues'.
+    Get bqueues info with command "bqueues".
     ====
     QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS
     normal           30  Open:Active       -    -    -    -     2     0     2     0    0     0
@@ -68,7 +68,7 @@ def get_bqueues_info(command='bqueues -w'):
 
 def get_bhosts_info(command='bhosts -w'):
     """
-    Get bhosts info with command 'bhosts'.
+    Get bhosts info with command "bhosts".
     ====
     HOST_NAME          STATUS          JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV
     cmp01              ok              -       4    2        2    0      0        0
@@ -80,7 +80,7 @@ def get_bhosts_info(command='bhosts -w'):
 
 def get_bjobs_info(command='bjobs -u all -w'):
     """
-    Get bjobs info with command 'bjobs'.
+    Get bjobs info with command "bjobs'.
     ====
     JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
     101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
@@ -122,7 +122,7 @@ def get_bjobs_info(command='bjobs -u all -w'):
 
 def get_bhosts_load_info(command='bhosts -l'):
     """
-    Get "CURRENT LOAD USED FOR SCHEDULING" information with command
+    Get "CURRENT LOAD USED FOR SCHEDULING" information with command "bhosts".
     ====
     HOST  n212-206-212
     STATUS           CPUF  JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV DISPATCH_WINDOW
@@ -138,7 +138,6 @@ def get_bhosts_load_info(command='bhosts -l'):
     load_info_mark = False
     hostname = ''
     head_list = []
-
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -182,7 +181,7 @@ def get_bhosts_load_info(command='bhosts -l'):
 
 def get_lshosts_info(command='lshosts -w'):
     """
-    Get lshosts info with command 'lshosts'.
+    Get lshosts info with command "lshosts".
     ====
     HOST_NAME                     type       model           cpuf     ncpus maxmem maxswp server RESOURCES
     cmp01                         X86_64     Intel_Platinum  15.0     4     1.7_g   1.9_g   Yes    (mg)
@@ -194,7 +193,7 @@ def get_lshosts_info(command='lshosts -w'):
 
 def get_lsload_info(command='lsload -w'):
     """
-    Get lsload info with command 'lsload'.
+    Get lsload info with command "lsload".
     ====
     HOST_NAME               status  r15s   r1m  r15m   ut    pg    ls    it   tmp    swp   mem
     cmp01                 ok      0.7    0.3  0.2    5%    0.0   1     0    7391_m  1.9_g  931_m
@@ -206,7 +205,7 @@ def get_lsload_info(command='lsload -w'):
 
 def get_busers_info(command='busers all'):
     """
-    Get lsload info with command 'busers'.
+    Get lsload info with command "busers".
     ====
     USER/GROUP          JL/P    MAX  NJOBS   PEND    RUN  SSUSP  USUSP    RSV
     liyanqing           -       -    2       0       2    0      0        0
@@ -216,15 +215,15 @@ def get_busers_info(command='busers all'):
     return busers_dic
 
 
-def get_lsid_info():
+def get_lsid_info(command='lsid'):
     """
-    Get information of "tool/tool_version/cluster/master" from command "lsid".
+    Get "tool/tool_version/cluster/master" info with command "lsid".
     """
     tool = ''
     tool_version = ''
     cluster = ''
     master = ''
-    (return_code, stdout, stderr) = common.run_command('lsid')
+    (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
@@ -235,14 +234,13 @@ def get_lsid_info():
         elif re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line):
             my_match = re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line)
             master = my_match.group(1)
-        elif re.search(r'LSF', line) or re.search(r'volclava', line):
-            tool = 'LSF'
-
-            if re.match(r'^.*\s+([\d\.]+),.*$', line):
-                my_match = re.match(r'^.*\s+([\d\.]+),.*$', line)
-                tool_version = my_match.group(1)
-        elif re.search(r'Open_lava', line) or re.search(r'openlava', line) or re.search(r'Openlava', line) or re.search(r'OpenLava', line):
-            tool = 'openlava'
+        elif re.search(r'LSF', line) or re.search(r'volclava', line) or re.search(r'Open_lava', line) or re.search(r'openlava', line) or re.search(r'Openlava', line) or re.search(r'OpenLava', line):
+            if re.search(r'LSF', line):
+                tool = 'LSF'
+            elif re.search(r'volclava', line):
+                tool = 'volclava'
+            elif re.search(r'Open_lava', line) or re.search(r'openlava', line) or re.search(r'Openlava', line) or re.search(r'OpenLava', line):
+                tool = 'openlava'
 
             if re.match(r'^.*\s+([\d\.]+),.*$', line):
                 my_match = re.match(r'^.*\s+([\d\.]+),.*$', line)
@@ -251,14 +249,14 @@ def get_lsid_info():
     return tool, tool_version, cluster, master
 
 
-def get_bjobs_uf_info(command='bjobs -u all -UF'):
+def get_bjobs_uf_info(command='bjobs -u all -UF', get_lsid_info_command='lsid'):
     """
-    Get job information with "bjobs -UF".
+    Get job information with command "bjobs".
     """
-    (tool, tool_version, cluster, master) = get_lsid_info()
+    (tool, tool_version, cluster, master) = get_lsid_info(get_lsid_info_command)
     my_dic = {}
 
-    if tool == 'LSF':
+    if (tool == 'LSF') or (tool == 'volclava'):
         my_dic = get_lsf_bjobs_uf_info(command)
     elif tool == 'openlava':
         my_dic = get_openlava_bjobs_uf_info(command)
@@ -266,9 +264,9 @@ def get_bjobs_uf_info(command='bjobs -u all -UF'):
     return my_dic
 
 
-def get_lsf_bjobs_uf_info(command):
+def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_command='badmin showconf mbd all'):
     """
-    Parse job info which are from command 'bjobs -u all -UF'.
+    Get job info with command "bjobs".
     ====
     Job <101>, Job Name <Tesf for lsfMonitor>, User <liyanqing>, Project <lsf_test>, Status <RUN>, Queue <normal>, Command <sleep 12345>, Share group charged </liyanqing>
     Mon Oct 26 17:43:07: Submitted from host <cmp01>, CWD <$HOME>, 2 Task(s), Requested Resources <span[hosts=1] rusage[mem=123]>;
@@ -306,7 +304,7 @@ def get_lsf_bjobs_uf_info(command):
                        'requested_resources_compile': re.compile(r'.*Requested Resources <(.+)>;.*'),
                        'span_hosts_compile': re.compile(r'.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                        'rusage_mem_compile': re.compile(r'.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
-                       'started_on_compile': re.compile(r'(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
+                       'started_on_compile': re.compile(r'(.*): (\[\d+\] )?([sS]tarted|[dD]ispatched) \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>|Termination request issued).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
                        'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
@@ -324,8 +322,7 @@ def get_lsf_bjobs_uf_info(command):
     job = ''
     run_limit_mark = False
     pending_mark = False
-
-    lsf_unit_for_limits = get_lsf_unit_for_limits()
+    lsf_unit_for_limits = get_lsf_unit_for_limits(get_lsf_unit_for_limits_command)
     line_list = []
     lsf_jobs_debug_file = './lsf_jobs.debug'
 
@@ -467,7 +464,7 @@ def get_lsf_bjobs_uf_info(command):
                 if job_compile_dic['started_on_compile'].match(line):
                     my_match = job_compile_dic['started_on_compile'].match(line)
                     my_dic[job]['started_time'] = my_match.group(1)
-                    started_host = my_match.group(3)
+                    started_host = my_match.group(4)
                     started_host = re.sub(r'<', '', started_host)
                     started_host = re.sub(r'>', '', started_host)
                     started_host = re.sub(r'\d+\*', '', started_host)
@@ -573,9 +570,9 @@ def get_lsf_bjobs_uf_info(command):
     return my_dic
 
 
-def get_openlava_bjobs_uf_info(command):
+def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
     """
-    Parse job info which are from command 'bjobs -u all -UF'.
+    Get job info with command "bjobs".
     ====
     Job <205>, User <liyanqing>, Project <default>, Status <PEND>, Queue <normal>, Command <sleep 1000>
     Sun May 13 18:08:26: Submitted from host <lava_host1>, CWD <$HOME>, 2 Processors Requested, Requested Resources <rusage[mem=1234] span[hosts=1]>;
@@ -607,7 +604,7 @@ def get_openlava_bjobs_uf_info(command):
                        'requested_resources_compile': re.compile(r'.*Requested Resources <(.+)>;.*'),
                        'span_hosts_compile': re.compile(r'.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                        'rusage_mem_compile': re.compile(r'.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
-                       'started_on_compile': re.compile(r'.*[sS]tarted on ([0-9]+ Hosts/Processors )?([^;,]+).*'),
+                       'started_on_compile': re.compile(r'.*([sS]tarted|[dD]ispatched) on ([0-9]+ Hosts/Processors )?([^;,]+).*'),
                        'started_time_compile': re.compile(r'(.*): (\[\d+\])?\s*[sS]tarted on.*'),
                        'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited with).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
@@ -618,7 +615,6 @@ def get_openlava_bjobs_uf_info(command):
 
     my_dic = collections.OrderedDict()
     job = ''
-
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -722,7 +718,7 @@ def get_openlava_bjobs_uf_info(command):
 
                 if job_compile_dic['started_on_compile'].match(line):
                     my_match = job_compile_dic['started_on_compile'].match(line)
-                    started_host = my_match.group(2)
+                    started_host = my_match.group(3)
                     started_host = re.sub(r'<', '', started_host)
                     started_host = re.sub(r'>', '', started_host)
                     my_dic[job]['started_on'] = started_host
@@ -754,12 +750,12 @@ def get_openlava_bjobs_uf_info(command):
     return my_dic
 
 
-def get_host_list():
+def get_host_list(command='bhosts -w'):
     """
-    Get all of the hosts.
+    Get host list with command "bhosts".
     """
     host_list = []
-    bhosts_dic = get_bhosts_info()
+    bhosts_dic = get_bhosts_info(command)
 
     if 'HOST_NAME' in bhosts_dic:
         host_list = bhosts_dic['HOST_NAME']
@@ -767,12 +763,12 @@ def get_host_list():
     return host_list
 
 
-def get_queue_list():
+def get_queue_list(command='bqueues -w'):
     """
-    Get all of the queues.
+    Get queue list with command "bqueues".
     """
     queue_list = []
-    bqueues_dic = get_bqueues_info()
+    bqueues_dic = get_bqueues_info(command)
 
     if 'QUEUE_NAME' in bqueues_dic:
         queue_list = bqueues_dic['QUEUE_NAME']
@@ -780,78 +776,50 @@ def get_queue_list():
     return queue_list
 
 
-def get_host_group_members(host_group_name):
+def get_bmgroup_info(command='bmgroup -w -r'):
     """
-    Get host group members with bmgroup.
+    Get host group members with command "bmgroup".
     ====
-    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup pd
+    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup -w -r
+    GROUP_NAME    HOSTS                     GROUP_ADMIN
+    pd           dm006 dm007 dm010 dm009 dm002 dm003 dm005  ( - )
+    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup -w -r pd
     GROUP_NAME    HOSTS
     pd           dm006 dm007 dm010 dm009 dm002 dm003 dm005
     ====
     """
-    host_list = []
-    command = 'bmgroup -w -r ' + str(host_group_name)
+    bmgroup_dic = {}
+    group_name_compile = re.compile(r'^\s*GROUP_NAME\s+HOSTS.*$')
+    line_compile = re.compile(r'\s*(\S+)\s+(.+?)\s*(\(.*\))?\s*$')
+    mark = False
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
 
-        if re.search(r'No such user/host group', line):
-            break
-        elif re.match(r'^' + str(host_group_name) + ' .*$', line):
-            line_list = line.split()
+        if mark and line_compile.match(line):
+            my_match = line_compile.match(line)
+            group_name = my_match.group(1)
+            hosts_string = my_match.group(2).strip()
+            host_list = hosts_string.split()
+            bmgroup_dic[group_name] = host_list
+        elif group_name_compile.match(line):
+            mark = True
 
-            for (i, host) in enumerate(line_list):
-                if i >= 1:
-                    if host == '(':
-                        break
-                    else:
-                        host_list.append(host)
-
-    return host_list
+    return bmgroup_dic
 
 
-def get_user_group_members(user_group_name):
+def get_queue_host_info(command='bqueues -l', get_hosts_list_command='bhosts -w', get_bmgroup_info_command='bmgroup -w -r'):
     """
-    Get user group members with bugroup.
-    ====
-    [yanqing.li@nxnode03 lsfMonitor]$ bugroup pd
-    GROUP_NAME    USERS
-    pd           yanqing.li san.zhang si.li
-    ====
-    """
-    user_list = []
-    command = 'bugroup -r ' + str(user_group_name)
-    (return_code, stdout, stderr) = common.run_command(command)
-
-    for line in str(stdout, 'utf-8').split('\n'):
-        line = line.strip()
-
-        if re.match(r'^' + str(user_group_name) + ' .*$', line):
-            line_list = line.split()
-
-            for (i, user) in enumerate(line_list):
-                if i >= 1:
-                    if user == '(':
-                        break
-                    else:
-                        user_list.append(user)
-
-    return user_list
-
-
-def get_queue_host_info():
-    """
-    Get hosts on (specified) queues.
+    Get host info of specified queues with command "bqueues/bmgroup".
     """
     queue_host_dic = {}
     queue_compile = re.compile(r'^QUEUE:\s*(\S+)\s*$')
     hosts_compile = re.compile(r'^HOSTS:\s*(.*?)\s*$')
     hosts_all_compile = re.compile(r'\ball\b')
     queue = ''
-
-    command = 'bqueues -l'
     (return_code, stdout, stderr) = common.run_command(command)
+    bmgroup_dic = get_bmgroup_info(get_bmgroup_info_command)
 
     for line in str(stdout, 'utf-8').split('\n'):
         line = line.strip()
@@ -867,40 +835,37 @@ def get_queue_host_info():
 
             if hosts_all_compile.search(hosts_string):
                 common.bprint('Queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.', level='Warning')
-                queue_host_dic[queue] = get_host_list()
+                queue_host_dic[queue] = get_host_list(get_hosts_list_command)
             else:
                 queue_host_dic.setdefault(queue, [])
                 hosts_list = hosts_string.split()
 
                 for hosts in hosts_list:
-                    if re.match(r'.+/', hosts):
+                    if re.match(r'\S+/', hosts):
                         host_group_name = re.sub(r'/$', '', hosts)
-                        host_list = get_host_group_members(host_group_name)
+                        host_list = []
+
+                        if host_group_name in bmgroup_dic.keys():
+                            host_list = bmgroup_dic[host_group_name]
 
                         if len(host_list) > 0:
                             queue_host_dic[queue].extend(host_list)
-                    elif re.match(r'^(.+)\+\d+$', hosts):
-                        my_match = re.match(r'^(.+)\+\d+$', hosts)
-                        host_group_name = my_match.group(1)
-                        host_list = get_host_group_members(host_group_name)
-
-                        if len(host_list) == 0:
-                            queue_host_dic[queue].append(hosts)
-                        else:
-                            queue_host_dic[queue].extend(host_list)
+                    elif re.match(r'^(\S+)\+\d+$', hosts):
+                        my_match = re.match(r'^(\S+)\+\d+$', hosts)
+                        host = my_match.group(1)
+                        queue_host_dic[queue].append(host)
                     else:
                         queue_host_dic[queue].append(hosts)
 
     return queue_host_dic
 
 
-def get_host_queue_info():
+def get_host_queue_info(command='bqueues -l', get_hosts_list_command='bhosts -w', get_bmgroup_info_command='bmgroup -w -r'):
     """
-    Get queues which (specified) host belongs to.
+    Get queue info of specified hosts with command "bqueues/bmgroup".
     """
     host_queue_dic = {}
-
-    queue_host_dic = get_queue_host_info()
+    queue_host_dic = get_queue_host_info(command, get_hosts_list_command, get_bmgroup_info_command)
     queue_list = list(queue_host_dic.keys())
 
     for queue in queue_list:
@@ -915,13 +880,11 @@ def get_host_queue_info():
     return host_queue_dic
 
 
-def get_lsf_unit_for_limits():
+def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
     """
     Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
     """
     lsf_unit_for_limits = 'MB'
-    command = 'badmin showconf mbd all'
-
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -946,14 +909,22 @@ def switch_bjobs_uf_time(bjobs_uf_time, format=''):
         current_year = datetime.date.today().year
         bjobs_uf_time_list = bjobs_uf_time.split()
 
-        bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
-        start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
         current_seconds = time.time()
+        bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
+
+        try:
+            start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
+        except Exception:
+            return new_bjobs_uf_time
 
         if int(start_seconds) > int(current_seconds):
             current_year = int(datetime.date.today().year) - 1
             bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
-            start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
+
+            try:
+                start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
+            except Exception:
+                return new_bjobs_uf_time
 
         # Switch start_seconds to expected time format.
         new_bjobs_uf_time = time.strftime(format, time.localtime(start_seconds))
