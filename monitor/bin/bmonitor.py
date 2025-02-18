@@ -206,11 +206,17 @@ class MainWindow(QMainWindow):
         if self.disable_license:
             return
 
-        # Not update license_dic repeatedly in 300 seconds.
+        # Setup default license update waiting time.
+        license_update_waiting_time = 300
+
+        if ('LICENSE_UPDATE_WAITING_TIME' in os.environ) and re.match(r'^\d+$', os.environ['LICENSE_UPDATE_WAITING_TIME']):
+            license_update_waiting_time = int(os.environ['LICENSE_UPDATE_WAITING_TIME'])
+
+        # Not update license_dic repeatedly in license_update_waiting_time seconds.
         current_second = int(time.time())
 
-        if current_second - self.license_dic_second <= 300:
-            common.bprint('Will not get license information repeatedly in 300 seconds.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+        if current_second - self.license_dic_second <= license_update_waiting_time:
+            common.bprint('Will not get license information repeatedly in ' + str(license_update_waiting_time) + ' seconds.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             return
 
         self.license_dic_second = current_second
@@ -2739,11 +2745,12 @@ Please contact with liyanqing1987@163.com with any question."""
                 total = 'N/A'
             else:
                 for queue_host in self.queue_host_dic[queue]:
-                    host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
-                    host_max = self.bhosts_dic['MAX'][host_index]
+                    if queue_host in self.bhosts_dic['HOST_NAME']:
+                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                        host_max = self.bhosts_dic['MAX'][host_index]
 
-                    if re.match(r'^\d+$', host_max):
-                        total += int(host_max)
+                        if re.match(r'^\d+$', host_max):
+                            total += int(host_max)
 
             item = QTableWidgetItem(str(total))
 
@@ -3463,11 +3470,12 @@ Please contact with liyanqing1987@163.com with any question."""
                     total = 'N/A'
                 else:
                     for queue_host in self.queue_host_dic[queue]:
-                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
-                        host_max = self.bhosts_dic['MAX'][host_index]
+                        if queue_host in self.bhosts_dic['HOST_NAME']:
+                            host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                            host_max = self.bhosts_dic['MAX'][host_index]
 
-                        if re.match(r'^\d+$', host_max):
-                            total += int(host_max)
+                            if re.match(r'^\d+$', host_max):
+                                total += int(host_max)
 
                 item = QTableWidgetItem(str(total))
 
