@@ -24,6 +24,7 @@ if os.path.exists(local_config):
 else:
     from conf import config
 
+os.environ['LSB_NTRIES'] = '3'
 os.environ["PYTHONUNBUFFERED"] = '1'
 
 

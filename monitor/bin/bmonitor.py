@@ -32,9 +32,10 @@ if os.path.exists(local_config):
 else:
     from conf import config
 
+os.environ['LSB_NTRIES'] = '3'
 os.environ['PYTHONUNBUFFERED'] = '1'
 VERSION = 'V1.6'
-VERSION_DATE = '2025.01.21'
+VERSION_DATE = '2025.03.04'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
