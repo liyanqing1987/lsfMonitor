@@ -142,31 +142,41 @@ class Sampling:
         Sample (finished) job information into json file.
         """
         print('>>> Sampling job info ...')
-
+        print('    * Getting finished job information with command "bjobs -u all -d -UF" ...')
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
 
         # Re-organize jobs_dic with finished_date.
+        print('    * Getting job finished date ...')
         date_bjobs_dic = {}
 
         for job in bjobs_dic.keys():
             finished_date = common_lsf.switch_bjobs_uf_time(bjobs_dic[job]['finished_time'], '%Y%m%d')
-            date_bjobs_dic.setdefault(finished_date, {})
-            date_bjobs_dic[finished_date][job] = bjobs_dic[job]
+
+            if finished_date not in date_bjobs_dic:
+                print('      ' + str(finished_date))
+                date_bjobs_dic[finished_date] = {}
+                date_bjobs_dic[finished_date][job] = bjobs_dic[job]
 
         # Write json file based on finished_date.
+        print('    * Saving finished job information ...')
+
         for finished_date in date_bjobs_dic.keys():
             finished_date_bjobs_dic = date_bjobs_dic[finished_date]
             finished_date_json = str(self.job_db_path) + '/' + str(finished_date)
 
             if os.path.exists(finished_date_json):
-                with open(finished_date_json, 'r') as FDJ:
-                    old_finished_date_bjobs_dic = json.loads(FDJ.read())
+                try:
+                    with open(finished_date_json, 'r') as FDJ:
+                        old_finished_date_bjobs_dic = json.loads(FDJ.read())
 
-                    for job in old_finished_date_bjobs_dic.keys():
-                        if job not in finished_date_bjobs_dic:
-                            finished_date_bjobs_dic[job] = old_finished_date_bjobs_dic[job]
+                        for job in old_finished_date_bjobs_dic.keys():
+                            if job not in finished_date_bjobs_dic:
+                                finished_date_bjobs_dic[job] = old_finished_date_bjobs_dic[job]
+                except Exception as warning:
+                    common.bprint('Failed on opening "' + str(finished_date_json) + '" for write, ' + str(warning), level='Warning', indent=6)
 
             with open(finished_date_json, 'w') as FDJ:
+                print('      Writing ' + str(finished_date_json) + ' ...')
                 FDJ.write(str(json.dumps(finished_date_bjobs_dic, ensure_ascii=False)) + '\n')
 
         print('    Done (' + str(len(bjobs_dic.keys())) + ' jobs).')
