@@ -305,7 +305,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                        'span_hosts_compile': re.compile(r'.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
                        'rusage_mem_compile': re.compile(r'.*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*'),
                        'started_on_compile': re.compile(r'(.*): (\[\d+\] )?([sS]tarted|[dD]ispatched) \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
-                       'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited|Completed <exit>|Termination request issued).*'),
+                       'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited|Termination request issued).*'),
                        'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
                        'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
                        'cpu_time_compile': re.compile(r'.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
