@@ -390,6 +390,17 @@ class Sampling:
                     key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                     common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
 
+                # Update "ut" value.
+                ut = re.sub(r'%', '', lsload_dic['ut'][i])
+
+                if re.match(r'^\d+\.\d+$', ut):
+                    ut = str(int(float(ut)))
+
+                if int(ut) > 100:
+                    ut = '100'
+
+                lsload_dic['ut'][i] = str(ut) + '%'
+
                 # Insert sql table value.
                 value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
