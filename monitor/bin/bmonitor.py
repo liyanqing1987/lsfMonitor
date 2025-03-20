@@ -1224,8 +1224,14 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
 
-            if (job_dic[job]['status'] == 'PEND') or (job_dic[job]['status'] == 'EXIT'):
-                item.setBackground(QBrush(Qt.red))
+            if (job_dic[job]['status'] == 'RUN'):
+                item.setForeground(QBrush(Qt.darkGreen))
+            elif (job_dic[job]['status'] == 'PEND'):
+                item.setForeground(QBrush(Qt.blue))
+            elif (job_dic[job]['status'] == 'DONE'):
+                item.setForeground(QBrush(Qt.gray))
+            elif (job_dic[job]['status'] == 'EXIT'):
+                item.setForeground(QBrush(Qt.red))
 
             self.jobs_tab_table.setItem(i, j, item)
 
@@ -1535,11 +1541,14 @@ Please contact with liyanqing1987@163.com with any question."""
             status = self.bhosts_dic['STATUS'][index]
             item = QTableWidgetItem(status)
 
-            if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
-                fatal_error = True
-
-            if fatal_error:
-                item.setBackground(QBrush(Qt.red))
+            if str(status) == 'ok':
+                item.setForeground(QBrush(Qt.darkGreen))
+            else:
+                if (str(status) == 'unavail') or (str(status) == 'unreach') or (str(status) == 'closed_LIM'):
+                    fatal_error = True
+                    item.setForeground(QBrush(Qt.red))
+                else:
+                    item.setForeground(QBrush(Qt.magenta))
 
             self.hosts_tab_table.setItem(i, j, item)
 
@@ -2773,7 +2782,7 @@ Please contact with liyanqing1987@163.com with any question."""
             item.setFont(QFont('song', 9, QFont.Bold))
 
             if int(pend) > 0:
-                item.setForeground(QBrush(Qt.red))
+                item.setForeground(QBrush(Qt.blue))
 
             self.queues_tab_table.setItem(i, j, item)
 
