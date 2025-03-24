@@ -270,7 +270,7 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
         return
 
     try:
-        command = "INSERT INTO '" + str(table_name) + "' VALUES " + str(value_string)
+        command = "INSERT OR IGNORE INTO '" + str(table_name) + "' VALUES " + str(value_string)
         curs.execute(command)
         curs.close()
 

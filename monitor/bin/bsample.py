@@ -3,7 +3,6 @@
 import os
 import re
 import sys
-import json
 import time
 import datetime
 import argparse
@@ -98,7 +97,7 @@ class Sampling:
 
         # Update self.db_path with cluster information.
         self.db_path = str(config.db_path) + '/monitor'
-        cluster = self.check_cluster_info()
+        (self.tool, cluster) = self.check_cluster_info()
 
         if cluster:
             self.db_path = str(config.db_path) + '/' + str(cluster)
@@ -122,7 +121,7 @@ class Sampling:
             common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
             sys.exit(1)
 
-        return cluster
+        return tool, cluster
 
     def create_dir(self, dir_path):
         """
@@ -139,53 +138,53 @@ class Sampling:
 
     def sample_job_info(self):
         """
-        Sample (finished) job information into json file.
+        Sample (finished) job information.
         """
-        print('>>> Sampling job info ...')
-        print('    * Getting finished job information with command "bjobs -u all -d -UF" ...')
+        common.bprint('>>> Sampling job info ...', date_format='%Y-%m-%d %H:%M:%S', )
+        common.bprint('* Getting finished job information with command "bjobs -u all -d -UF" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
 
         # Re-organize jobs_dic with finished_date.
-        print('    * Getting job finished date ...')
         date_bjobs_dic = {}
 
         for job in bjobs_dic.keys():
             finished_date = common_lsf.switch_bjobs_uf_time(bjobs_dic[job]['finished_time'], '%Y%m%d')
 
             if finished_date not in date_bjobs_dic:
-                print('      ' + str(finished_date))
                 date_bjobs_dic[finished_date] = {}
-                date_bjobs_dic[finished_date][job] = bjobs_dic[job]
 
-        # Write json file based on finished_date.
-        print('    * Saving finished job information ...')
+            date_bjobs_dic[finished_date][job] = bjobs_dic[job]
+
+        # Write db_file with finished_date.
+        common.bprint('* Saving finished job information ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        key_list = ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info']
+        key_type_list = ['PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+        key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
 
         for finished_date in date_bjobs_dic.keys():
-            finished_date_bjobs_dic = date_bjobs_dic[finished_date]
-            finished_date_json = str(self.job_db_path) + '/' + str(finished_date)
+            finished_date_db_file = str(self.job_db_path) + '/' + str(finished_date) + '.db'
+            common.bprint('Writing ' + str(finished_date_db_file) + ' ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
+            (result, finished_date_db_conn) = common_sqlite3.connect_db_file(finished_date_db_file, mode='write')
 
-            if os.path.exists(finished_date_json):
-                try:
-                    with open(finished_date_json, 'r') as FDJ:
-                        old_finished_date_bjobs_dic = json.loads(FDJ.read())
+            if result == 'passed':
+                common_sqlite3.create_sql_table(finished_date_db_file, finished_date_db_conn, 'job', key_string, commit=False)
 
-                        for job in old_finished_date_bjobs_dic.keys():
-                            if job not in finished_date_bjobs_dic:
-                                finished_date_bjobs_dic[job] = old_finished_date_bjobs_dic[job]
-                except Exception as warning:
-                    common.bprint('Failed on opening "' + str(finished_date_json) + '" for write, ' + str(warning), level='Warning', indent=6)
+                for job in date_bjobs_dic[finished_date].keys():
+                    # Insert sql table value if not exists.
+                    value_list = [job, date_bjobs_dic[finished_date][job]['job_name'], date_bjobs_dic[finished_date][job]['job_description'], date_bjobs_dic[finished_date][job]['user'], date_bjobs_dic[finished_date][job]['project'], date_bjobs_dic[finished_date][job]['status'], date_bjobs_dic[finished_date][job]['interactive_mode'], date_bjobs_dic[finished_date][job]['queue'], date_bjobs_dic[finished_date][job]['command'], date_bjobs_dic[finished_date][job]['submitted_from'], date_bjobs_dic[finished_date][job]['submitted_time'], date_bjobs_dic[finished_date][job]['cwd'], date_bjobs_dic[finished_date][job]['processors_requested'], date_bjobs_dic[finished_date][job]['requested_resources'], date_bjobs_dic[finished_date][job]['span_hosts'], date_bjobs_dic[finished_date][job]['rusage_mem'], date_bjobs_dic[finished_date][job]['started_on'], date_bjobs_dic[finished_date][job]['started_time'], date_bjobs_dic[finished_date][job]['finished_time'], date_bjobs_dic[finished_date][job]['exit_code'], date_bjobs_dic[finished_date][job]['term_signal'], date_bjobs_dic[finished_date][job]['cpu_time'], date_bjobs_dic[finished_date][job]['mem'], date_bjobs_dic[finished_date][job]['swap'], ' '.join(date_bjobs_dic[finished_date][job]['run_limit']), ' '.join(date_bjobs_dic[finished_date][job]['pids']), date_bjobs_dic[finished_date][job]['max_mem'], date_bjobs_dic[finished_date][job]['avg_mem'], ' '.join(date_bjobs_dic[finished_date][job]['pending_reasons']), date_bjobs_dic[finished_date][job]['job_info']]
+                    value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                    common_sqlite3.insert_into_sql_table(finished_date_db_file, finished_date_db_conn, 'job', value_string, commit=False)
 
-            with open(finished_date_json, 'w') as FDJ:
-                print('      Writing ' + str(finished_date_json) + ' ...')
-                FDJ.write(str(json.dumps(finished_date_bjobs_dic, ensure_ascii=False)) + '\n')
+                finished_date_db_conn.commit()
+                finished_date_db_conn.close()
 
-        print('    Done (' + str(len(bjobs_dic.keys())) + ' jobs).')
+        common.bprint('Done (' + str(len(bjobs_dic.keys())) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_job_mem_info(self):
         """
         Sample (running) job memory usage information.
         """
-        print('>>> Sampling job mem usage info ...')
+        common.bprint('>>> Sampling job mem usage info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -r -UF')
         job_list = list(bjobs_dic.keys())
@@ -213,7 +212,7 @@ class Sampling:
                                 last_sample_second = int(data_dic['sample_second'][-1])
 
                                 if self.sample_second - last_sample_second > 3600:
-                                    common.bprint('Table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.', level='Warning', indent=4)
+                                    common.bprint('Table "' + str(job_table_name) + '" already existed even one hour ago, will drop it.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                                     common_sqlite3.drop_sql_table(job_mem_db_file, job_mem_db_conn, job_table_name, commit=False)
                                     job_table_list.remove(job_table_name)
 
@@ -230,13 +229,13 @@ class Sampling:
                 job_mem_db_conn.commit()
                 job_mem_db_conn.close()
 
-        print('    Done (' + str(len(job_list)) + ' jobs).')
+        common.bprint('Done (' + str(len(job_list)) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_queue_info(self):
         """
         Sample queue info and save it into sqlite db.
         """
-        print('>>> Sampling queue info ...')
+        common.bprint('>>> Sampling queue info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         queue_db_file = str(self.db_path) + '/queue.db'
         (result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file, mode='write')
@@ -266,7 +265,7 @@ class Sampling:
                             begin_line = 0
                             end_line = int(queue_table_count) - 10000
 
-                            print('    Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                            common.bprint('Deleting database "' + str(queue_db_file) + '" table "' + str(queue_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                             common_sqlite3.delete_sql_table_rows(queue_db_file, queue_db_conn, queue_table_name, row_id, begin_line, end_line)
 
@@ -299,14 +298,14 @@ class Sampling:
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 common_sqlite3.insert_into_sql_table(queue_db_file, queue_db_conn, queue_table_name, value_string, commit=False)
 
-        queue_db_conn.commit()
-        queue_db_conn.close()
+            queue_db_conn.commit()
+            queue_db_conn.close()
 
     def sample_host_info(self):
         """
         Sample host info and save it into sqlite db.
         """
-        print('>>> Sampling host info ...')
+        common.bprint('>>> Sampling host info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         host_db_file = str(self.db_path) + '/host.db'
         (result, host_db_conn) = common_sqlite3.connect_db_file(host_db_file, mode='write')
@@ -333,7 +332,7 @@ class Sampling:
                             begin_line = 0
                             end_line = int(host_table_count) - 10000
 
-                            print('    Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.')
+                            common.bprint('Deleting database "' + str(host_db_file) + '" table "' + str(host_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 10000 items.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                             common_sqlite3.delete_sql_table_rows(host_db_file, host_db_conn, host_table_name, row_id, begin_line, end_line)
 
@@ -347,21 +346,26 @@ class Sampling:
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, value_string, commit=False)
 
-        host_db_conn.commit()
-        host_db_conn.close()
+            host_db_conn.commit()
+            host_db_conn.close()
 
     def sample_load_info(self):
         """
         Sample host load info and save it into sqlite db.
         """
-        print('>>> Sampling host load info ...')
+        common.bprint('>>> Sampling host load info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         load_db_file = str(self.db_path) + '/load.db'
         (result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file, mode='write')
 
         if result == 'passed':
             load_table_list = common_sqlite3.get_sql_table_list(load_db_file, load_db_conn)
-            lsload_dic = common_lsf.get_lsload_info()
+
+            if self.tool == 'openlava':
+                lsload_dic = common_lsf.get_lsload_info(command='lsload -l')
+            else:
+                lsload_dic = common_lsf.get_lsload_info()
+
             host_list = lsload_dic['HOST_NAME']
 
             key_list = ['sample_second', 'sample_time', 'ut', 'tmp', 'swp', 'mem']
@@ -381,7 +385,7 @@ class Sampling:
                             begin_line = 0
                             end_line = int(load_table_count) - 100000
 
-                            print('    Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            common.bprint('Deleting database "' + str(load_db_file) + '" table "' + str(load_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                             common_sqlite3.delete_sql_table_rows(load_db_file, load_db_conn, load_table_name, row_id, begin_line, end_line)
 
@@ -391,30 +395,33 @@ class Sampling:
                     common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
 
                 # Update "ut" value.
-                ut = re.sub(r'%', '', lsload_dic['ut'][i])
+                if not lsload_dic['ut'][i]:
+                    lsload_dic['ut'][i] = '0%'
+                else:
+                    ut = re.sub(r'%', '', lsload_dic['ut'][i])
 
-                if re.match(r'^\d+\.\d+$', ut):
-                    ut = str(int(float(ut)))
+                    if re.match(r'^\d+\.\d+$', ut):
+                        ut = str(int(float(ut)))
 
-                if int(ut) > 100:
-                    ut = '100'
+                    if int(ut) > 100:
+                        ut = '100'
 
-                lsload_dic['ut'][i] = str(ut) + '%'
+                    lsload_dic['ut'][i] = str(ut) + '%'
 
                 # Insert sql table value.
                 value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, value_string, commit=False)
 
-        load_db_conn.commit()
-        load_db_conn.close()
+            load_db_conn.commit()
+            load_db_conn.close()
 
     def sample_user_info(self):
         """
         Sample user info and save it into json file.
         """
-        print('>>> Sampling user job info ...')
-
+        common.bprint('>>> Sampling job info ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('* Getting finished job information with command "bjobs -u all -d -UF" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
 
         # Re-organize jobs_dic with finished_date.
@@ -428,46 +435,42 @@ class Sampling:
             date_bjobs_dic[finished_date][user][job] = {'status': bjobs_dic[job]['status'], 'queue': bjobs_dic[job]['queue'], 'project': bjobs_dic[job]['project'], 'rusage_mem': bjobs_dic[job]['rusage_mem'], 'max_mem': bjobs_dic[job]['max_mem']}
 
         # Write db_file with finished_date.
+        common.bprint('* Saving user job information ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         key_list = ['job', 'status', 'queue', 'project', 'rusage_mem', 'max_mem']
         key_type_list = ['PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
         for finished_date in date_bjobs_dic.keys():
-            finished_date_db_file = str(self.user_db_path) + '/' + str(finished_date)
+            finished_date_db_file = str(self.user_db_path) + '/' + str(finished_date) + '.db'
+            common.bprint('Writing ' + str(finished_date_db_file) + ' ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
             (result, finished_date_db_conn) = common_sqlite3.connect_db_file(finished_date_db_file, mode='write')
 
             if result == 'passed':
                 user_table_list = common_sqlite3.get_sql_table_list(finished_date_db_file, finished_date_db_conn)
 
                 for user in date_bjobs_dic[finished_date]:
+                    user_table_name = 'user_' + str(user)
+
                     # Generate sql table (user) if not exitst.
-                    if user not in user_table_list:
+                    if user_table_name not in user_table_list:
                         key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
-                        common_sqlite3.create_sql_table(finished_date_db_file, finished_date_db_conn, user, key_string, commit=False)
-
-                    # Get user list from finished_date_db_file.
-                    user_db_data_dic = common_sqlite3.get_sql_table_data(finished_date_db_file, finished_date_db_conn, user, ['job',], '')
-                    user_db_job_list = []
-
-                    if user_db_data_dic:
-                        user_db_job_list = user_db_data_dic['job']
+                        common_sqlite3.create_sql_table(finished_date_db_file, finished_date_db_conn, user_table_name, key_string, commit=False)
 
                     for job in date_bjobs_dic[finished_date][user]:
                         # Insert sql table value if not exists.
-                        if job not in user_db_job_list:
-                            value_list = [job, bjobs_dic[job]['status'], bjobs_dic[job]['queue'], bjobs_dic[job]['project'], bjobs_dic[job]['rusage_mem'], bjobs_dic[job]['max_mem']]
-                            value_string = common_sqlite3.gen_sql_table_value_string(value_list)
-                            common_sqlite3.insert_into_sql_table(finished_date_db_file, finished_date_db_conn, user, value_string, commit=False)
+                        value_list = [job, bjobs_dic[job]['status'], bjobs_dic[job]['queue'], bjobs_dic[job]['project'], bjobs_dic[job]['rusage_mem'], bjobs_dic[job]['max_mem']]
+                        value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                        common_sqlite3.insert_into_sql_table(finished_date_db_file, finished_date_db_conn, user_table_name, value_string, commit=False)
 
                 finished_date_db_conn.commit()
                 finished_date_db_conn.close()
 
-        print('    Done (' + str(len(bjobs_dic.keys())) + ' jobs).')
+        common.bprint('Done (' + str(len(bjobs_dic.keys())) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_utilization_info(self):
         """
         Sample host resource utilization info and save it into sqlite db.
         """
-        print('>>> Sampling utilization info ...')
+        common.bprint('>>> Sampling utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         utilization_db_file = str(self.db_path) + '/utilization.db'
         (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
@@ -476,7 +479,12 @@ class Sampling:
             utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
             bhosts_dic = common_lsf.get_bhosts_info()
             lshosts_dic = common_lsf.get_lshosts_info()
-            lsload_dic = common_lsf.get_lsload_info()
+
+            if self.tool == 'openlava':
+                lsload_dic = common_lsf.get_lsload_info(command='lsload -l')
+            else:
+                lsload_dic = common_lsf.get_lsload_info()
+
             host_list = lsload_dic['HOST_NAME']
 
             key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
@@ -496,7 +504,7 @@ class Sampling:
                             begin_line = 0
                             end_line = int(utilization_table_count) - 100000
 
-                            print('    Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            common.bprint('Deleting database "' + str(utilization_db_file) + '" table "' + str(utilization_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                             common_sqlite3.delete_sql_table_rows(utilization_db_file, utilization_db_conn, utilization_table_name, row_id, begin_line, end_line)
 
@@ -513,7 +521,7 @@ class Sampling:
                         slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
 
                         if int(slot_utilization) > 100:
-                            common.bprint('For host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".', level='Warning', indent=4)
+                            common.bprint('For host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
 
                             if bhosts_dic['STATUS'][j] == 'unavail':
                                 slot_utilization = 0.0
@@ -556,7 +564,7 @@ class Sampling:
                         mem_utilization = round((maxmem-mem)*100/maxmem, 1)
 
                         if int(mem_utilization) > 100:
-                            common.bprint('For host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".', level='Warning', indent=4)
+                            common.bprint('For host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                             mem_utilization = 100.0
 
                         break
@@ -566,8 +574,8 @@ class Sampling:
                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                 common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
 
-        utilization_db_conn.commit()
-        utilization_db_conn.close()
+            utilization_db_conn.commit()
+            utilization_db_conn.close()
 
     def get_utilization_day_info(self):
         """
@@ -575,7 +583,6 @@ class Sampling:
         Reture slot/cpu/mem average utilization info with utilization_day_dic.
         """
         utilization_day_dic = {}
-
         begin_time = str(self.sample_date) + ' 00:00:00'
         begin_second = time.mktime(time.strptime(begin_time, '%Y%m%d %H:%M:%S'))
         end_time = str(self.sample_date) + ' 23:59:59'
@@ -609,15 +616,15 @@ class Sampling:
                     mem_avg_utilization = round(mem_utilization_sum/len(utilization_db_data_dic['slot']), 1)
 
                     if int(slot_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".', level='Warning', indent=4)
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         slot_avg_utilization = 100.0
 
                     if int(cpu_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".', level='Warning', indent=4)
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         cpu_avg_utilization = 100.0
 
                     if int(mem_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".', level='Warning', indent=4)
+                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         mem_avg_utilization = 100.0
 
                     utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}
@@ -628,7 +635,7 @@ class Sampling:
         """
         Count host resource utilization day average info and save it into sqlite db.
         """
-        print('>>> Counting utilization (day average) info ...')
+        common.bprint('>>> Counting utilization (day average) info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         utilization_day_db_file = str(self.db_path) + '/utilization_day.db'
         (result, utilization_day_db_conn) = common_sqlite3.connect_db_file(utilization_day_db_file, mode='write')
@@ -643,7 +650,7 @@ class Sampling:
             for (utilization_day_table_name, utilization_day_table_dic) in utilization_day_dic.items():
                 host = re.sub('utilization_', '', utilization_day_table_name)
 
-                print('    Counting utilization (day average) info for host "' + str(host) + '" ...')
+                common.bprint('Counting utilization (day average) info for host "' + str(host) + '" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                 # Clean up utilization database, only keep 3650 items.
                 if utilization_day_table_name in utilization_day_table_list:
@@ -655,7 +662,7 @@ class Sampling:
                             begin_line = 0
                             end_line = int(utilization_day_table_count) - 3650
 
-                            print('    Deleting database "' + str(utilization_day_db_file) + '" table "' + str(utilization_day_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.')
+                            common.bprint('Deleting database "' + str(utilization_day_db_file) + '" table "' + str(utilization_day_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep 100000 items.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                             common_sqlite3.delete_sql_table_rows(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, row_id, begin_line, end_line)
 

@@ -5,7 +5,6 @@ import re
 import sys
 import copy
 import time
-import json
 import getpass
 import datetime
 import argparse
@@ -34,8 +33,8 @@ else:
 
 os.environ['LSB_NTRIES'] = '3'
 os.environ['PYTHONUNBUFFERED'] = '1'
-VERSION = 'V1.6'
-VERSION_DATE = '2025.03.04'
+VERSION = 'V1.7'
+VERSION_DATE = '2025.03.24'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -193,8 +192,8 @@ class MainWindow(QMainWindow):
             current_second = int(time.time())
 
             if current_second - self.lsf_info_dic[lsf_info]['update_second'] > 30:
-                common.bprint('Loading LSF ' + str(lsf_info) + ' information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information, wait a moment ...')
+                common.bprint('Loading LSF ' + str(lsf_info) + ' information ...', date_format='%Y-%m-%d %H:%M:%S')
+                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information ...')
                 my_show_message.start()
 
                 exec(self.lsf_info_dic[lsf_info]['exec_cmd'])
@@ -223,9 +222,9 @@ class MainWindow(QMainWindow):
         self.license_dic_second = current_second
 
         # Print loading license message.
-        common.bprint('Loading License information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading License information ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading license information, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading license information ...')
         my_show_message.start()
 
         # Get self.license_dic.
@@ -734,26 +733,29 @@ Please contact with liyanqing1987@163.com with any question."""
         common.bprint('Checking job "' + str(current_job) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
         # Get job info
-        common.bprint('Getting LSF job information for "' + str(current_job) + '", wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Getting LSF job information for "' + str(current_job) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '", wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '" ...')
         my_show_message.start()
 
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
 
         if not self.job_tab_current_job_dic:
             job_db_path = str(self.db_path) + '/job'
-            finished_date_list = list(os.listdir(job_db_path))
+            job_finished_date_db_list = list(os.listdir(job_db_path))
 
-            for finished_date in finished_date_list[::-1]:
-                finished_date_json = str(job_db_path) + '/' + str(finished_date)
+            for job_finished_date_db in job_finished_date_db_list[::-1]:
+                if os.path.exists(job_finished_date_db):
+                    (job_finished_date_db_connect_result, job_finished_date_db_conn) = common_sqlite3.connect_db_file(job_finished_date_db)
 
-                with open(finished_date_json, 'r') as FDJ:
-                    finished_date_dic = json.loads(FDJ.read())
+                    if job_finished_date_db_connect_result == 'failed':
+                        common.bprint('Failed on connecting job database file "' + str(job_finished_date_db) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                    else:
+                        finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job')
 
-                    if self.job_tab_current_job in finished_date_dic:
-                        self.job_tab_current_job_dic = {self.job_tab_current_job: finished_date_dic[self.job_tab_current_job]}
-                        break
+                        if current_job in finished_job_list:
+                            self.job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition='job='+str(current_job))
+                            break
 
         time.sleep(0.01)
         my_show_message.terminate()
@@ -1164,9 +1166,9 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -m ' + str(specified_host_list[0])
 
         # Run command to get expected jobs information.
-        common.bprint('Loading LSF jobs information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading LSF jobs information ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading LSF jobs information, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading LSF jobs information ...')
         my_show_message.start()
 
         job_dic = common_lsf.get_bjobs_uf_info(command)
@@ -2158,9 +2160,9 @@ Please contact with liyanqing1987@163.com with any question."""
         self.update_load_tab_frame1(specified_host, [], [])
         self.update_load_tab_frame2(specified_host, [], [])
 
-        common.bprint('Loading ut/mem load information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading ut/mem load information ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading ut/mem load information, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading ut/mem load information ...')
         my_show_message.start()
 
         (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
@@ -2555,9 +2557,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get user history information from database.
         """
-        common.bprint('Loading user history info, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading user history info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading user history info, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading user history info ...')
         my_show_message.start()
 
         user_dic = {'ALL': {'job_num': 0, 'done_num': 0, 'exit_num': 0, 'rusage_mem': 0, 'max_mem': 0}}
@@ -2606,7 +2608,7 @@ Please contact with liyanqing1987@163.com with any question."""
             # Get all user/date history data.
             current_date_string = current_date.toString('yyyyMMdd')
             current_date = current_date.addDays(1)
-            user_db_file = str(self.db_path) + '/user/' + str(current_date_string)
+            user_db_file = str(self.db_path) + '/user/' + str(current_date_string) + '.db'
 
             if os.path.exists(user_db_file):
                 (user_db_file_connect_result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file)
@@ -2616,10 +2618,12 @@ Please contact with liyanqing1987@163.com with any question."""
                 else:
                     user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
 
-                    for user in user_table_list:
+                    for user_table_name in user_table_list:
+                        user = re.sub(r'^user_', '', user_table_name)
+
                         if (not specified_user_list) or (user in specified_user_list):
                             user_dic.setdefault(user, {'job_num': 0, 'done_num': 0, 'exit_num': 0, 'rusage_mem': 0, 'max_mem': 0})
-                            data_dic = common_sqlite3.get_sql_table_data(user_db_file, user_db_conn, user, ['status', 'rusage_mem', 'max_mem'], select_condition)
+                            data_dic = common_sqlite3.get_sql_table_data(user_db_file, user_db_conn, user_table_name, ['status', 'rusage_mem', 'max_mem'], select_condition)
 
                             if data_dic:
                                 for i, status in enumerate(data_dic['status']):
@@ -2962,7 +2966,6 @@ Please contact with liyanqing1987@163.com with any question."""
                 end_time = str(end_date) + ' 23:59:59'
                 end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
                 select_condition = 'WHERE sample_second>=' + str(begin_second) + ' AND sample_second<=' + str(end_second)
-
                 data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'TOTAL', 'PEND', 'RUN'], select_condition)
 
                 if not data_dic:
@@ -3204,6 +3207,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Set (initialize) self.utilization_tab_host_combo.
         """
+        my_show_message = ShowMessage('Info', 'Updating Host combo on UTILIZATION tab ...')
+        my_show_message.start()
+
         self.utilization_tab_host_combo.unselectAllItems()
         self.utilization_tab_host_combo.clear()
 
@@ -3229,6 +3235,9 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Set all hosts as checked.
         self.utilization_tab_host_combo.selectAllItems()
+
+        time.sleep(0.01)
+        my_show_message.terminate()
 
     def set_utilization_tab_resource_combo(self):
         """
@@ -3260,9 +3269,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified queues.
         """
-        common.bprint('Loading queue utilization info, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading queue utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading queue utilization info, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading queue utilization info ...')
         my_show_message.start()
 
         utilization_dic = {}
@@ -3356,9 +3365,9 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get sample_time/ut/mem list for specified host.
         """
-        common.bprint('Loading resource utilization information, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint('Loading resource utilization information ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Loading resource utilization information, wait a moment ...')
+        my_show_message = ShowMessage('Info', 'Loading resource utilization information ...')
         my_show_message.start()
 
         utilization_dic = {}
@@ -3509,7 +3518,7 @@ Please contact with liyanqing1987@163.com with any question."""
             queue = self.utilization_tab_table.item(current_row, 0).text().strip()
 
             if item.column() == 0:
-                common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint('Checking utilization for queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
                 self.set_utilization_tab_queue_combo(checked_queue_list=[queue,])
                 self.update_utilization_tab_info()
@@ -3617,9 +3626,9 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if self.enable_utilization_detail:
-                common.bprint('Drawing ' + str(selected_resource) + ' curve, wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint('Drawing ' + str(selected_resource) + ' curve ...', date_format='%Y-%m-%d %H:%M:%S')
 
-                my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve, wait a moment ...')
+                my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve ...')
                 my_show_message.start()
 
             sample_date_list = []
@@ -4144,7 +4153,7 @@ class CheckIssueReason(QThread):
         command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/check_issue_reason -i ' + str(self.issue)
 
         if self.job:
-            common.bprint('Getting job ' + str(self.issue.lower()) + ' reason for "' + str(self.job) + '", wait a moment ...', date_format='%Y-%m-%d %H:%M:%S')
+            common.bprint('Getting job ' + str(self.issue.lower()) + ' reason for "' + str(self.job) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
             command = str(command) + ' -j ' + str(self.job)
 
         os.system(command)

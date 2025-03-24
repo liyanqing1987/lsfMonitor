@@ -181,8 +181,6 @@ class QComboCheckBox(QComboBox):
         qBox.stateChanged.connect(self.qBoxStateChanged)
         self.checkBoxList.append(qBox)
         self.qListWidget.setItemWidget(qItem, qBox)
-        self.updateDropDownBoxWidth(text, qBox)
-        self.updateDropDownBoxHeight()
 
     def qBoxStateChanged(self, checkState):
         """

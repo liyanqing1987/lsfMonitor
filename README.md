@@ -1,5 +1,5 @@
 **Author:** liyanqing1987@163.com    
-**Version:** V1.6
+**Version:** V1.6.1
 
 ## What’s lsfMonitor?
 `lsfMonitor` is an open source software for LSF information data-collection,
@@ -96,3 +96,4 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 |         |           | Add USERS tab on bmonitor to show user summary data.         |
 |         |           | Add darm_mode on bmonitor.                                   |
 |         |           | Support volclava, an open-source scheduler compatible with LSF. |
+| V1.7    | (2025.03) | Swith job database from json to sqlite3.                     |
