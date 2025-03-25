@@ -1,5 +1,5 @@
 **Author:** liyanqing1987@163.com    
-**Version:** V1.6.1
+**Version:** V1.7
 
 ## What’s lsfMonitor?
 `lsfMonitor` is an open source software for LSF information data-collection,
