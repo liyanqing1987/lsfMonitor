@@ -418,7 +418,7 @@ class Sampling:
 
     def sample_user_info(self):
         """
-        Sample user info and save it into json file.
+        Sample user info.
         """
         common.bprint('>>> Sampling job info ...', date_format='%Y-%m-%d %H:%M:%S')
         common.bprint('* Getting finished job information with command "bjobs -u all -d -UF" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
