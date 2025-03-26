@@ -190,7 +190,7 @@ def get_lshosts_info(command='lshosts -w'):
     return lshosts_dic
 
 
-def get_lsload_info(command='lsload -w'):
+def get_lsload_info(command='lsload -l'):
     """
     Get lsload info with command "lsload".
     ====
