@@ -34,7 +34,7 @@ else:
 os.environ['LSB_NTRIES'] = '3'
 os.environ['PYTHONUNBUFFERED'] = '1'
 VERSION = 'V1.7'
-VERSION_DATE = '2025.03.24'
+VERSION_DATE = '2025.03.26'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
@@ -1493,8 +1493,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_table.setShowGrid(True)
         self.hosts_tab_table.setSortingEnabled(True)
         self.hosts_tab_table.setColumnCount(0)
-        self.hosts_tab_table.setColumnCount(11)
-        self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'Mem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
+        self.hosts_tab_table.setColumnCount(12)
+        self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'aMem (G)', 'saMem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
         self.hosts_tab_table.setHorizontalHeaderLabels(self.hosts_tab_table_title_list)
 
         self.hosts_tab_table.setColumnWidth(0, 150)
@@ -1504,10 +1504,11 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_table.setColumnWidth(4, 60)
         self.hosts_tab_table.setColumnWidth(5, 60)
         self.hosts_tab_table.setColumnWidth(6, 100)
-        self.hosts_tab_table.setColumnWidth(7, 75)
-        self.hosts_tab_table.setColumnWidth(8, 100)
-        self.hosts_tab_table.setColumnWidth(9, 75)
+        self.hosts_tab_table.setColumnWidth(7, 85)
+        self.hosts_tab_table.setColumnWidth(8, 90)
+        self.hosts_tab_table.setColumnWidth(9, 100)
         self.hosts_tab_table.setColumnWidth(10, 75)
+        self.hosts_tab_table.setColumnWidth(11, 75)
 
         # Fill self.hosts_tab_table items.
         hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
@@ -1643,16 +1644,35 @@ Please contact with liyanqing1987@163.com with any question."""
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Mem" item with unit "GB".
+            # Fill "aMem" item with unit "GB".
+            # "aMem" means avaliable mem, it is from "lsload -l" command, same with "free -g" result.
+            j = j+1
+
+            if ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
+                index = self.lsload_dic['HOST_NAME'].index(host)
+                mem = self.lsload_dic['mem'][index]
+                mem = int(self.mem_unit_switch(mem))
+            else:
+                mem = 0
+
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, mem)
+
+            if fatal_error or (maxmem and (float(mem)/float(maxmem) < 0.1)):
+                item.setBackground(QBrush(Qt.red))
+
+            self.hosts_tab_table.setItem(i, j, item)
+
+            # Fill "saMem" item with unit "GB".
+            # "saMem" means scheduling avaliable mem, it is from "bhosts -l" command.
             j = j+1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
                 mem = self.bhosts_load_dic[host]['Total']['mem']
+                mem = int(self.mem_unit_switch(mem))
             else:
-                index = self.lsload_dic['HOST_NAME'].index(host)
-                mem = self.lsload_dic['mem'][index]
+                mem = 0
 
-            mem = int(self.mem_unit_switch(mem))
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, mem)
 
