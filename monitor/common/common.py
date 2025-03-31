@@ -314,8 +314,8 @@ def get_job_range_dic(job_list):
     for job in job_list:
         job_org = job
         job = re.sub(r'\[.*', '', job)
-        job_head = (int(int(job)/10000))*10000
-        job_tail = job_head + 9999
+        job_head = (int(int(job)/100000))*100000
+        job_tail = job_head + 99999
         job_range = str(job_head) + '_' + str(job_tail)
         job_range_dic.setdefault(job_range, [])
         job_range_dic[job_range].append(job_org)

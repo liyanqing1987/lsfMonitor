@@ -212,6 +212,30 @@ def delete_sql_table_rows(db_file, orig_conn, table_name, row_id, begin_line, en
         common.bprint(error, color='red', display_method=1, indent=9)
 
 
+def cleanup_sql_table(db_file, orig_conn, table_name, commit=True):
+    """
+    Cleanup table if it exists.
+    """
+    (result, conn, curs) = connect_preprocess(db_file, orig_conn, mode='write')
+
+    if (result == 'failed') or (result == 'locked'):
+        return
+
+    try:
+        command = "DELETE FROM '" + str(table_name) + "'"
+        curs.execute(command)
+        curs.close()
+
+        if commit:
+            conn.commit()
+
+            if orig_conn == '':
+                conn.close()
+    except Exception as error:
+        common.bprint('Failed on cleaning up table "' + str(table_name) + '" from db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
+
+
 def drop_sql_table(db_file, orig_conn, table_name, commit=True):
     """
     Drop table if it exists.

@@ -96,4 +96,5 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 |         |           | Add USERS tab on bmonitor to show user summary data.         |
 |         |           | Add darm_mode on bmonitor.                                   |
 |         |           | Support volclava, an open-source scheduler compatible with LSF. |
-| V1.7    | (2025.03) | Swith job database from json to sqlite3.                     |
+| V1.7    | (2025.03) | Optimize bsample to speed up data sample.                    |
+|         |           | Splite Mem into aMem and saMem on HOSTS tab.                 |
