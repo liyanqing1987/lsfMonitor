@@ -1,0 +1,32 @@
+{
+  "name": "mem_web",
+  "version": "1.0.0",
+  "dependencies": {
+    "recharts": "2.5.0",
+    "three": "^0.158.0",
+    "framer-motion": "^10.16.4",
+    "@react-spring/web": "^9.7.2",
+    "@react-spring/three": "^9.7.2",
+    "react-icons": "^4.11.0",
+    "@nextui-org/react": "2.4.8",
+    "react-datepicker": "4.16.0",
+    "date-fns": "^2.30.0",
+    "react-router-dom": "6.8.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@rsbuild/core": "^0.6.5",
+    "@rsbuild/plugin-react": "^0.6.5",
+    "@types/react": "^18.2.75",
+    "@types/react-dom": "^18.2.24",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15"
+  },
+  "scripts": {
+    "dev": "rsbuild dev --open",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview"
+  }
+}

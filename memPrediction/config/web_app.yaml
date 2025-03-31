@@ -1,0 +1,10 @@
+ESDB:
+    ESURL: {ESURL}
+    ES_USER: {USER}
+    ES_PASS: {PASS}
+    ES_AUTH: True
+    ES_CERT: {CERT}
+    TIMEOUT: 1
+    MAX_RETRIES: 5
+DataCollector:
+    data_format: csv

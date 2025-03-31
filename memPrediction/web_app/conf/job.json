@@ -1,0 +1,80 @@
+{
+    "index_patterns" : [
+        "job_*"
+    ],
+    "template" : {
+        "settings" : {
+           "number_of_shards": 1,
+           "number_of_replicas": 2
+        },
+        "mappings" : {
+            "properties" : {
+                "job_id" : {
+                    "type": "integer"
+                },
+                "date": {
+                    "type": "date",
+                    "format": "yyyy-MM-dd"
+                },
+                "started_time": {
+                    "type": "integer"
+                },
+                "job_name": {
+                    "type": "keyword"
+                },
+                "user": {
+                    "type": "keyword"
+                },
+                "status": {
+                    "type": "keyword"
+                },
+                "project": {
+                    "type": "keyword"
+                },
+                "queue": {
+                    "type": "keyword"
+                },
+                "cwd": {
+                    "type": "keyword"
+                },
+                "command": {
+                    "type": "keyword"
+                },
+                "rusage_mem": {
+                    "type": "integer"
+                },
+                "max_mem": {
+                    "type": "integer"
+                },
+                "avg_mem": {
+                    "type": "integer"
+                },
+                "finished_time": {
+                    "type": "integer"
+                },
+                "run_time": {
+                    "type": "integer"
+                },
+                "job_description": {
+                    "type": "keyword"
+                },
+                "interactive_mode": {
+                    "type": "boolean"
+                },
+                "cpu_time": {
+                    "type": "integer"
+                },
+                "span_hosts": {
+                    "type": "integer"
+                },
+                "processors_requested": {
+                    "type": "integer"
+                },
+                "cpu_utilization": {
+                    "type": "float"
+                }
+            }
+        },
+        "aliases" : { }
+    }
+}

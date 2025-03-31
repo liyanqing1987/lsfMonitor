@@ -1,0 +1,17 @@
+{
+  "recharts": "2.5.0",
+  "three": "^0.158.0",
+  "framer-motion": "^10.16.4",
+  "@react-spring/web": "^9.7.2",
+  "@react-spring/three": "^9.7.2",
+  "three/examples/jsm/geometries/ParametricGeometry": "^0.157.0",
+  "three/examples/jsm/controls/OrbitControls": "^0.158.0",
+  "react-icons": "4.10.0",
+  "three/examples/jsm/loaders/TextureLoader": "^0.158.0",
+  "react-icons/fa": "^4.11.0",
+  "@nextui-org/react": "2.4.8",
+  "react-datepicker": "4.16.0",
+  "react-datepicker/dist/react-datepicker.css": "4.16.0",
+  "date-fns": "^2.30.0",
+  "react-router-dom": "6.8.0"
+}
