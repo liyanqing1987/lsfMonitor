@@ -7,6 +7,7 @@
 ################################
 import os
 import re
+import sqlite3
 import sys
 import copy
 import getpass
@@ -72,6 +73,17 @@ def merge_data(start_date='', end_date='', csv_path=os.getcwd(), mode='memory'):
                     file_path = os.path.join(csv_path, file)
                     df = pd.read_json(file_path, orient='index')
                     df.rename(columns={'index': 'job_id'}, inplace=True)
+                    df.reset_index(inplace=True)
+            elif hasattr(config, 'job_format') and config.job_format.lower() == 'sqlite':
+                file_date = datetime.strptime(file.replace('.db', ''), '%Y%m%d')
+
+                if datetime.strptime(start_date, '%Y-%m-%d') <= file_date <= datetime.strptime(end_date, '%Y-%m-%d'):
+                    logger.info("reading %s data ..." % file_date)
+                    file_path = os.path.join(csv_path, file)
+                    conn = sqlite3.connect(file_path)
+                    query = 'SELECT * FROM job'
+                    df = pd.read_sql_query(query, conn)
+                    df.rename(columns={'job': 'job_id'}, inplace=True)
                     df.reset_index(inplace=True)
             else:
                 if my_match := re.match(r'^job_info_(\S+).csv$', file):
@@ -1075,6 +1087,9 @@ class SlotsReport:
             self.df["span_hosts"], self.df["processors_requested"]
         """
         if hasattr(config, 'job_format') and config.job_format.lower() == 'json':
+            self.df['start'] = pd.to_datetime(self.df["started_time"], format="%a-%b-%d %H:%M:%S", errors='coerce')
+            self.df['end'] = pd.to_datetime(self.df['finished_time'], format="%a-%b-%d %H:%M:%S", errors='coerce')
+        elif hasattr(config, 'job_format') and config.job_format.lower() == 'sqlite':
             self.df['start'] = pd.to_datetime(self.df["started_time"], format="%a-%b-%d %H:%M:%S", errors='coerce')
             self.df['end'] = pd.to_datetime(self.df['finished_time'], format="%a-%b-%d %H:%M:%S", errors='coerce')
         else:

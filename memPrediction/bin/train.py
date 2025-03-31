@@ -7,6 +7,7 @@
 ################################
 import os
 import re
+import sqlite3
 import sys
 import getpass
 import argparse
@@ -231,6 +232,17 @@ class TrainingModel:
                         file_path = os.path.join(self.data_path, file)
                         df = pd.read_json(file_path, orient='index')
                         df.rename(columns={'index': 'job_id'}, inplace=True)
+                        df.reset_index(inplace=True)
+                elif hasattr(config, 'job_format') and config.job_format.lower() == 'sqlite':
+                    file_date = datetime.strptime(file.replace('.db', ''), '%Y%m%d')
+
+                    if self.start_date_utc <= file_date <= self.end_date_utc:
+                        logger.info("reading %s data ..." % file_date)
+                        file_path = os.path.join(self.data_path, file)
+                        conn = sqlite3.connect(file_path)
+                        query = 'SELECT * FROM job LIMIT 1000'
+                        df = pd.read_sql_query(query, conn)
+                        df.rename(columns={'job': 'job_id'}, inplace=True)
                         df.reset_index(inplace=True)
                 else:
                     if my_match := re.match(r'^job_info_(\S+).csv$', file):

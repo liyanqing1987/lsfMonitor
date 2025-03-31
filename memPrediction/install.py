@@ -34,7 +34,7 @@ def gen_shell_tools():
     """
     Generate shell scripts under <MEM_PREDICTION_INSTALL_PATH>/tools.
     """
-    tool_list = ['bin/sample', 'bin/report', 'bin/train', 'bin/predict', 'tools/update']
+    tool_list = ['bin/sample', 'bin/report', 'bin/train', 'bin/predict', 'tools/update', 'web_app/setup', 'web_app/backend/dataCollector']
 
     for tool_name in tool_list:
         tool = str(CWD) + '/' + str(tool_name)
