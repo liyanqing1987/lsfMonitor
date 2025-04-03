@@ -742,20 +742,22 @@ Please contact with liyanqing1987@163.com with any question."""
 
         if not self.job_tab_current_job_dic:
             job_db_path = str(self.db_path) + '/job'
-            job_finished_date_db_list = list(os.listdir(job_db_path))
 
-            for job_finished_date_db in job_finished_date_db_list[::-1]:
-                if os.path.exists(job_finished_date_db):
-                    (job_finished_date_db_connect_result, job_finished_date_db_conn) = common_sqlite3.connect_db_file(job_finished_date_db)
+            if os.path.exists(job_db_path):
+                job_finished_date_db_list = list(os.listdir(job_db_path))
 
-                    if job_finished_date_db_connect_result == 'failed':
-                        common.bprint('Failed on connecting job database file "' + str(job_finished_date_db) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-                    else:
-                        finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job')
+                for job_finished_date_db in job_finished_date_db_list[::-1]:
+                    if os.path.exists(job_finished_date_db):
+                        (job_finished_date_db_connect_result, job_finished_date_db_conn) = common_sqlite3.connect_db_file(job_finished_date_db)
 
-                        if current_job in finished_job_list:
-                            self.job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition='job='+str(current_job))
-                            break
+                        if job_finished_date_db_connect_result == 'failed':
+                            common.bprint('Failed on connecting job database file "' + str(job_finished_date_db) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                        else:
+                            finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job')
+
+                            if current_job in finished_job_list:
+                                self.job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition='job='+str(current_job))
+                                break
 
         time.sleep(0.01)
         my_show_message.terminate()
