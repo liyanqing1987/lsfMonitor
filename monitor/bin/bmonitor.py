@@ -34,7 +34,7 @@ else:
 os.environ['LSB_NTRIES'] = '3'
 os.environ['PYTHONUNBUFFERED'] = '1'
 VERSION = 'V1.7'
-VERSION_DATE = '2025.03.31'
+VERSION_DATE = '2025.04.14'
 
 # Solve some unexpected warning message.
 if 'XDG_RUNTIME_DIR' not in os.environ:
