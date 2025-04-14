@@ -744,19 +744,30 @@ Please contact with liyanqing1987@163.com with any question."""
             job_db_path = str(self.db_path) + '/job'
 
             if os.path.exists(job_db_path):
+                select_condition = 'WHERE job="' + str(current_job) + '"'
                 job_finished_date_db_list = list(os.listdir(job_db_path))
 
                 for job_finished_date_db in job_finished_date_db_list[::-1]:
+                    job_finished_date_db = str(job_db_path) + '/' + str(job_finished_date_db)
+
                     if os.path.exists(job_finished_date_db):
+                        common.bprint('Searching for "' + str(job_finished_date_db) + '" ...', indent=4, date_format='%Y-%m-%d %H:%M:%S')
                         (job_finished_date_db_connect_result, job_finished_date_db_conn) = common_sqlite3.connect_db_file(job_finished_date_db)
 
                         if job_finished_date_db_connect_result == 'failed':
                             common.bprint('Failed on connecting job database file "' + str(job_finished_date_db) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                         else:
-                            finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job')
+                            finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job', 'job')
 
                             if current_job in finished_job_list:
-                                self.job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition='job='+str(current_job))
+                                job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition)
+
+                                if job_tab_current_job_dic:
+                                    self.job_tab_current_job_dic[current_job] = {}
+
+                                    for key in job_tab_current_job_dic:
+                                        self.job_tab_current_job_dic[current_job][key] = job_tab_current_job_dic[key][0]
+
                                 break
 
         time.sleep(0.01)
@@ -1120,7 +1131,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.jobs_tab_table.setColumnWidth(0, 80)
         self.jobs_tab_table.setColumnWidth(1, 120)
-        self.jobs_tab_table.setColumnWidth(2, 60)
+        self.jobs_tab_table.setColumnWidth(2, 65)
         self.jobs_tab_table.setColumnWidth(3, 125)
         self.jobs_tab_table.setColumnWidth(4, 120)
         self.jobs_tab_table.setColumnWidth(5, 150)
@@ -1158,6 +1169,8 @@ Please contact with liyanqing1987@163.com with any question."""
             command = str(command) + ' -d'
         elif (len(specified_status_list) == 2) and ('DONE' in specified_status_list) and ('EXIT' in specified_status_list):
             command = str(command) + ' -d'
+        elif (len(specified_status_list) == 1) and (specified_status_list[0] in ['PSUSP', 'USUSP', 'SSUSP']):
+            command = str(command) + ' -s'
         else:
             command = str(command) + ' -a'
 
@@ -1230,11 +1243,11 @@ Please contact with liyanqing1987@163.com with any question."""
 
             if (job_dic[job]['status'] == 'RUN'):
                 item.setForeground(QBrush(Qt.darkGreen))
-            elif (job_dic[job]['status'] == 'PEND'):
+            elif (job_dic[job]['status'] in ['PEND', 'PSUSP', 'USUSP', 'SSUSP', 'WAIT', 'PROV']):
                 item.setForeground(QBrush(Qt.blue))
             elif (job_dic[job]['status'] == 'DONE'):
                 item.setForeground(QBrush(Qt.gray))
-            elif (job_dic[job]['status'] == 'EXIT'):
+            elif (job_dic[job]['status'] in ['EXIT', 'UNKWN', 'ZOMBI']):
                 item.setForeground(QBrush(Qt.red))
 
             self.jobs_tab_table.setItem(i, j, item)
@@ -1333,7 +1346,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         self.jobs_tab_status_combo.clear()
 
-        status_list = ['ALL', 'RUN', 'PEND', 'DONE', 'EXIT']
+        status_list = ['ALL', 'RUN', 'PEND', 'DONE', 'EXIT', 'PSUSP', 'USUSP', 'SSUSP', 'UNKWN', 'WAIT', 'ZOMBI', 'PROV']
 
         for status in status_list:
             self.jobs_tab_status_combo.addCheckBoxItem(status)

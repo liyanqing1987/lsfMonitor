@@ -110,7 +110,7 @@ def get_sql_table_count(db_file, orig_conn, table_name):
     return count
 
 
-def get_sql_table_key_list(db_file, orig_conn, table_name):
+def get_sql_table_key_list(db_file, orig_conn, table_name, key):
     """
     Get key list from the specified table on specified db file.
     """
@@ -122,9 +122,9 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
         return key_list
 
     try:
-        command = "SELECT * FROM '" + str(table_name) + "'"
+        command = "SELECT " + str(key) + " FROM '" + str(table_name) + "'"
         curs.execute(command)
-        key_list = [tuple[0] for tuple in curs.description]
+        key_list = [tuple[0] for tuple in curs.fetchall()]
         curs.close()
 
         if orig_conn == '':
@@ -182,8 +182,8 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condi
                     else:
                         data_dic[key] = [value, ]
     except Exception as error:
-        common.bprint('Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '".', level='Error')
-        common.bprint(error, color='red', display_method=1, indent=9)
+        common.bprint('Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '".', level='Warning')
+        common.bprint(error, color='yellow', display_method=1, indent=11)
 
     return data_dic
 
