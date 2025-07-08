@@ -1,32 +1,57 @@
 import os
 import re
 import sys
-import time
-import datetime
+import collections
 
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+sys.path.append(str(os.environ["LSFMONITOR_INSTALL_PATH"]) + "/monitor")
 from common import common
+
+# Multi-scheduler support constants and documentation
+# ===================================================
+# This module supports three job scheduling systems:
+# - LSF (Platform LSF)
+# - OpenLava (Open source LSF alternative)
+# - Zscheduler (zsub-based scheduler, LSF-compatible syntax)
+#
+# Command mapping for different schedulers:
+# LSF/OpenLava commands → Zscheduler commands
+# bjobs    → zjobs     (job status and information)
+# bqueues  → zqueues   (queue information)
+# bhosts   → zhosts    (host status)
+# busers   → zusers    (user information)
+# bmgroup  → zmgroup   (host group management)
+# bugroup  → zugroup   (user group management)
+# bkill    → zkill     (kill jobs)
+# bsub     → zsub      (submit jobs)
+#
+# lshosts and lsload commands remain unchanged across all schedulers
+# ===================================================
+
+# Supported scheduler types
+SCHEDULER_LSF = "lsf"
+SCHEDULER_OPENLAVA = "openlava"
+SCHEDULER_ZSCHEDULER = "zscheduler"
 
 
 def get_command_dict(command):
     """
-    Collect LSF command output message into a dict.
-    It only works with the "title <-> item" type informations.
+    Collect (common) LSF command info into a dict.
+    It only works with the Title-Item type informations.
     """
-    my_dic = {}
+    my_dic = collections.OrderedDict()
     key_list = []
     (return_code, stdout, stderr) = common.run_command(command)
     i = -1
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
         if line:
             i += 1
 
             # Some speciall preprocess.
-            if re.search(r'lsload', command):
-                line = re.sub(r'\*', ' ', line)
+            if re.search(r"lsload", command):
+                line = re.sub(r"\*", " ", line)
 
             if i == 0:
                 key_list = line.split()
@@ -36,9 +61,13 @@ def get_command_dict(command):
             else:
                 command_info = line.split()
 
-                if (len(command_info) < len(key_list)) and ('unavail' not in command_info):
-                    common.bprint('For command "' + str(command) + '", below info line is incomplate/unexpected.', level='Warning')
-                    common.bprint(line, color='yellow', display_method=1, indent=11)
+                if len(command_info) < len(key_list):
+                    common.print_warning(
+                        '*Warning* (get_command_dict) : For command "'
+                        + str(command)
+                        + '", below info line is incomplate/unexpected.'
+                    )
+                    common.print_warning("           " + str(line))
 
                 for j in range(len(key_list)):
                     key = key_list[j]
@@ -46,82 +75,64 @@ def get_command_dict(command):
                     if j < len(command_info):
                         value = command_info[j]
                     else:
-                        value = ''
+                        value = ""
 
                     my_dic[key].append(value)
 
     return my_dic
 
 
-def get_bqueues_info(command='bqueues -w'):
+def get_bjobs_info(command=None):
     """
-    Get bqueues info with command "bqueues".
-    ====
-    QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS
-    normal           30  Open:Active       -    -    -    -     2     0     2     0    0     0
-    ====
-    """
-    bqueues_dic = get_command_dict(command)
-    return bqueues_dic
-
-
-def get_bhosts_info(command='bhosts -w'):
-    """
-    Get bhosts info with command "bhosts".
-    ====
-    HOST_NAME          STATUS          JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV
-    cmp01              ok              -       4    2        2    0      0        0
-    ====
-    """
-    bhosts_dic = get_command_dict(command)
-    return bhosts_dic
-
-
-def get_bjobs_info(command='bjobs -u all -w'):
-    """
-    Get bjobs info with command "bjobs'.
+    Get jobs info with command 'bjobs' or 'zjobs' based on scheduler type.
     ====
     JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
     101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
     ====
     """
-    bjobs_dic = {}
-    key_list = []
-    (return_code, stdout, stderr) = common.run_command(command)
-    i = -1
+    if command is None:
+        base_cmd = get_command_name("bjobs")
+        command = base_cmd + " -u all -w"
 
-    for line in str(stdout, 'utf-8').split('\n'):
-        line = line.strip()
-
-        if line:
-            i += 1
-
-            if i == 0:
-                key_list = line.split()
-
-                for key in key_list:
-                    bjobs_dic[key] = []
-            else:
-                if not re.match(r'^\s*(\d+(\[\d+\])?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line):
-                    common.bprint('Invalid bjobs information for below line.', level='Warning')
-                    common.bprint(line, color='yellow', display_method=1, indent=11)
-                else:
-                    my_match = re.match(r'^\s*(\d+(\[\d+\])?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)\s+((Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d+ \d+:\d+)\s*$', line)
-                    bjobs_dic['JOBID'].append(my_match.group(1))
-                    bjobs_dic['USER'].append(my_match.group(3))
-                    bjobs_dic['STAT'].append(my_match.group(4))
-                    bjobs_dic['QUEUE'].append(my_match.group(5))
-                    bjobs_dic['FROM_HOST'].append(my_match.group(6))
-                    bjobs_dic['EXEC_HOST'].append(my_match.group(7))
-                    bjobs_dic['JOB_NAME'].append(my_match.group(8))
-                    bjobs_dic['SUBMIT_TIME'].append(my_match.group(9))
-
+    bjobs_dic = get_command_dict(command)
     return bjobs_dic
 
 
-def get_bhosts_load_info(command='bhosts -l'):
+def get_bqueues_info(command=None):
     """
-    Get "CURRENT LOAD USED FOR SCHEDULING" information with command "bhosts".
+    Get queues info with command 'bqueues' or 'zqueues' based on scheduler type.
+    ====
+    QUEUE_NAME      PRIO STATUS          MAX JL/U JL/P JL/H NJOBS  PEND   RUN  SUSP  RSV PJOBS
+    normal           30  Open:Active       -    -    -    -     2     0     2     0    0     0
+    ====
+    """
+    if command is None:
+        base_cmd = get_command_name("bqueues")
+        command = base_cmd + " -w"
+
+    bqueues_dic = get_command_dict(command)
+    return bqueues_dic
+
+
+def get_bhosts_info(command=None):
+    """
+    Get hosts info with command 'bhosts' or 'zhosts' based on scheduler type.
+    ====
+    HOST_NAME          STATUS          JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV
+    cmp01              ok              -       4    2        2    0      0        0
+    ====
+    """
+    if command is None:
+        base_cmd = get_command_name("bhosts")
+        command = base_cmd + " -w"
+
+    bhosts_dic = get_command_dict(command)
+    return bhosts_dic
+
+
+def get_bhosts_load_info(command="bhosts -l"):
+    """
+    Get "CURRENT LOAD USED FOR SCHEDULING" information with command
     ====
     HOST  n212-206-212
     STATUS           CPUF  JL/U    MAX  NJOBS    RUN  SSUSP  USUSP    RSV DISPATCH_WINDOW
@@ -133,54 +144,55 @@ def get_bhosts_load_info(command='bhosts -l'):
      Reserved        0.0   0.0   0.0    0%   0.0     0    0     0    0_m    0_m  178_g      -
     ====
     """
-    bhosts_load_dic = {}
+    bhosts_load_dic = collections.OrderedDict()
     load_info_mark = False
-    hostname = ''
+    hostname = ""
     head_list = []
+
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
-        if re.match(r'^\s*HOST\s+(.+?)\s*$', line):
-            my_match = re.match(r'^\s*HOST\s+(.+?)\s*$', line)
+        if re.match(r"^\s*HOST\s+(.+?)\s*$", line):
+            my_match = re.match(r"^\s*HOST\s+(.+?)\s*$", line)
             hostname = my_match.group(1)
             bhosts_load_dic.setdefault(hostname, {})
             load_info_mark = False
-        elif re.match(r'^\s*CURRENT LOAD USED FOR SCHEDULING:\s*$', line):
+        elif re.match(r"^\s*CURRENT LOAD USED FOR SCHEDULING:\s*$", line):
             load_info_mark = True
         elif load_info_mark:
-            if re.match(r'^\s*$', line):
+            if re.match(r"^\s*$", line):
                 load_info_mark = False
-            elif re.match(r'^\s*Total\s+(.+?)\s*$', line):
-                bhosts_load_dic[hostname].setdefault('Total', {})
+            elif re.match(r"^\s*Total\s+(.+?)\s*$", line):
+                bhosts_load_dic[hostname].setdefault("Total", {})
 
-                my_match = re.match(r'^\s*Total\s+(.+?)\s*$', line)
+                my_match = re.match(r"^\s*Total\s+(.+?)\s*$", line)
                 total_load_string = my_match.group(1)
                 total_load_list = total_load_string.split()
 
-                for (i, head_name) in enumerate(head_list):
-                    load = re.sub(r'\*', '', total_load_list[i])
-                    bhosts_load_dic[hostname]['Total'].setdefault(head_name, load)
-            elif re.match(r'^\s*Reserved\s+(.+?)\s*$', line):
-                bhosts_load_dic[hostname].setdefault('Reserved', {})
+                for i, head_name in enumerate(head_list):
+                    load = re.sub(r"\*", "", total_load_list[i])
+                    bhosts_load_dic[hostname]["Total"].setdefault(head_name, load)
+            elif re.match(r"^\s*Reserved\s+(.+?)\s*$", line):
+                bhosts_load_dic[hostname].setdefault("Reserved", {})
 
-                my_match = re.match(r'^\s*Reserved\s+(.+?)\s*$', line)
+                my_match = re.match(r"^\s*Reserved\s+(.+?)\s*$", line)
                 reserved_load_string = my_match.group(1)
                 reserved_load_list = reserved_load_string.split()
 
-                for (i, head_name) in enumerate(head_list):
-                    load = re.sub(r'\*', '', reserved_load_list[i])
-                    bhosts_load_dic[hostname]['Reserved'].setdefault(head_name, load)
+                for i, head_name in enumerate(head_list):
+                    load = re.sub(r"\*", "", reserved_load_list[i])
+                    bhosts_load_dic[hostname]["Reserved"].setdefault(head_name, load)
             else:
                 head_list = line.split()
 
     return bhosts_load_dic
 
 
-def get_lshosts_info(command='lshosts -w'):
+def get_lshosts_info(command="lshosts -w"):
     """
-    Get lshosts info with command "lshosts".
+    Get lshosts info with command 'lshosts'.
     ====
     HOST_NAME                     type       model           cpuf     ncpus maxmem maxswp server RESOURCES
     cmp01                         X86_64     Intel_Platinum  15.0     4     1.7_g   1.9_g   Yes    (mg)
@@ -190,82 +202,106 @@ def get_lshosts_info(command='lshosts -w'):
     return lshosts_dic
 
 
-def get_lsload_info(command='lsload -l'):
+def get_lsload_info(command="lsload -w"):
     """
-    Get lsload info with command "lsload".
+    Get lsload info with command 'lsload'.
     ====
     HOST_NAME               status  r15s   r1m  r15m   ut    pg    ls    it   tmp    swp   mem
     cmp01                 ok      0.7    0.3  0.2    5%    0.0   1     0    7391_m  1.9_g  931_m
     ====
     """
     lsload_dic = get_command_dict(command)
+
     return lsload_dic
 
 
-def get_busers_info(command='busers all'):
+def get_busers_info(command=None):
     """
-    Get lsload info with command "busers".
+    Get users info with command 'busers' or 'zusers' based on scheduler type.
     ====
     USER/GROUP          JL/P    MAX  NJOBS   PEND    RUN  SSUSP  USUSP    RSV
     liyanqing           -       -    2       0       2    0      0        0
     ====
     """
+    if command is None:
+        base_cmd = get_command_name("busers")
+        command = base_cmd + " all"
+
     busers_dic = get_command_dict(command)
     return busers_dic
 
 
-def get_lsid_info(command='lsid'):
+def get_tool_name():
     """
-    Get "tool/tool_version/cluster/master" info with command "lsid".
+    Make sure it is lsf, openlava or zscheduler.
     """
-    tool = ''
-    tool_version = ''
-    cluster = ''
-    master = ''
+    command = "lsid"
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
-        if re.match(r'^\s*My\s+cluster\s+name\s+is\s+(\S+)\s*$', line):
-            my_match = re.match(r'^\s*My\s+cluster\s+name\s+is\s+(\S+)\s*$', line)
-            cluster = my_match.group(1)
-        elif re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line):
-            my_match = re.match(r'^\s*My\s+master\s+name\s+is\s+(\S+)\s*$', line)
-            master = my_match.group(1)
-        elif re.search(r'LSF', line) or re.search(r'volclava', line) or re.search(r'Open_lava', line) or re.search(r'openlava', line) or re.search(r'Openlava', line) or re.search(r'OpenLava', line):
-            if re.search(r'LSF', line):
-                tool = 'LSF'
-            elif re.search(r'volclava', line):
-                tool = 'volclava'
-            elif re.search(r'Open_lava', line) or re.search(r'openlava', line) or re.search(r'Openlava', line) or re.search(r'OpenLava', line):
-                tool = 'openlava'
+        if re.search(r"LSF", line):
+            return "lsf"
+        elif re.search(r"Open_lava", line) or re.search(r"openlava", line):
+            return "openlava"
+        elif re.search(r"Zscheduler", line):
+            return "zscheduler"
 
-            if re.match(r'^.*\s+([\d\.]+),.*$', line):
-                my_match = re.match(r'^.*\s+([\d\.]+),.*$', line)
-                tool_version = my_match.group(1)
-
-    return tool, tool_version, cluster, master
+    print("*Warning*: Not sure current cluster is LSF, Openlava or Zscheduler.")
+    return ""
 
 
-def get_bjobs_uf_info(command='bjobs -u all -UF', get_lsid_info_command='lsid'):
+def get_command_name(base_command):
     """
-    Get job information with command "bjobs".
+    Get actual command name based on scheduler type.
+    Maps LSF/OpenLava commands to corresponding Zscheduler commands.
     """
-    (tool, tool_version, cluster, master) = get_lsid_info(get_lsid_info_command)
+    tool = get_tool_name()
+
+    # Command mapping for different schedulers
+    command_mapping = {
+        "zscheduler": {
+            "bjobs": "zjobs",
+            "bqueues": "zqueues",
+            "bhosts": "zhosts",
+            "busers": "zusers",
+            "bmgroup": "zmgroup",
+            "bugroup": "zugroup",
+            "bkill": "zkill",
+            "bsub": "zsub",
+        }
+    }
+
+    if tool == "zscheduler" and base_command in command_mapping["zscheduler"]:
+        return command_mapping["zscheduler"][base_command]
+    else:
+        # For LSF and OpenLava, return original command
+        return base_command
+
+
+def get_bjobs_uf_info(command=None):
+    """
+    Get job information with "bjobs -UF" or "zjobs -UF" based on scheduler type.
+    """
+    if command is None:
+        base_cmd = get_command_name("bjobs")
+        command = base_cmd + " -u all -UF"
+
+    tool = get_tool_name()
     my_dic = {}
 
-    if (tool == 'LSF') or (tool == 'volclava'):
+    if tool == "lsf" or tool == "zscheduler":
         my_dic = get_lsf_bjobs_uf_info(command)
-    elif tool == 'openlava':
+    elif tool == "openlava":
         my_dic = get_openlava_bjobs_uf_info(command)
 
     return my_dic
 
 
-def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_command='badmin showconf mbd all'):
+def get_lsf_bjobs_uf_info(command):
     """
-    Get job info with command "bjobs".
+    Parse job info which are from command 'bjobs -u all -UF'.
     ====
     Job <101>, Job Name <Tesf for lsfMonitor>, User <liyanqing>, Project <lsf_test>, Status <RUN>, Queue <normal>, Command <sleep 12345>, Share group charged </liyanqing>
     Mon Oct 26 17:43:07: Submitted from host <cmp01>, CWD <$HOME>, 2 Task(s), Requested Resources <span[hosts=1] rusage[mem=123]>;
@@ -286,586 +322,575 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
      Effective: select[type == local] order[r15s:pg] rusage[mem=123.00] span[hosts=1]
     ====
     """
-    job_compile_dic = {'job_compile': re.compile(r'.*Job <([0-9]+(\[[0-9]+\])?)>.*'),
-                       'job_name_compile': re.compile(r'.*Job Name <([^>]+)>.*'),
-                       'user_compile': re.compile(r'.*User <([^>]+)>.*'),
-                       'project_compile': re.compile(r'.*Project <([^>]+)>.*'),
-                       'status_compile': re.compile(r'.*Status <([A-Z]+)>*'),
-                       'queue_compile': re.compile(r'.*Queue <([^>]+)>.*'),
-                       'interactive_mode_compile': re.compile(r'.*Interactive pseudo-terminal shell mode.*'),
-                       'command_compile': re.compile(r'.*Command <(.+?\S)>.*$'),
-                       'job_description_compile': re.compile(r'.*Job Description <([^>]+)>.*'),
-                       'submitted_from_compile': re.compile(r'(.*): Submitted from host <([^>]+)>.*'),
-                       'cwd_compile': re.compile(r'.*CWD <([^>]+)>.*'),
-                       'processors_requested_compile': re.compile(r'.* (\d+) Task\(s\).*'),
-                       'requested_resources_compile': re.compile(r'.*Requested Resources <(.+)>;.*'),
-                       'span_hosts_compile': re.compile(r'.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
-                       'rusage_mem_compile': re.compile(r'.*Requested Resources <.*rusage\[.*mem=([1-9][0-9]*).*>.*'),
-                       'started_on_compile': re.compile(r'(.*): (\[\d+\] )?([sS]tarted|[dD]ispatched) \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*'),
-                       'resource_usage_collected_compile': re.compile(r'.*Resource usage collected.*'),
-                       'cpu_time_compile': re.compile(r'.*The CPU time used is (\d+(\.\d+)?) seconds.*'),
-                       'mem_compile': re.compile(r'.*[\.\;]\s+MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
-                       'swap_compile': re.compile(r'.*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
-                       'pids_compile': re.compile(r'PIDs:\s+(.+?);'),
-                       'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited|Termination request issued).*'),
-                       'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
-                       'run_limit_compile': re.compile(r'\s*RUNLIMIT\s*'),
-                       'max_mem_compile': re.compile(r'\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*'),
-                       'pending_reasons_compile': re.compile(r'\s*PENDING REASONS:\s*')}
+    job_compile_dic = {
+        "job_compile": re.compile(r".*Job <([0-9]+(\[[0-9]+\])?)>.*"),
+        "job_name_compile": re.compile(r".*Job Name <([^>]+)>.*"),
+        "user_compile": re.compile(r".*User <([^>]+)>.*"),
+        "project_compile": re.compile(r".*Project <([^>]+)>.*"),
+        "status_compile": re.compile(r".*Status <([A-Z]+)>*"),
+        "queue_compile": re.compile(r".*Queue <([^>]+)>.*"),
+        "command_compile": re.compile(r".*Command <(.+?\S)>.*$"),
+        "submitted_from_compile": re.compile(r".*Submitted from host <([^>]+)>.*"),
+        "submitted_time_compile": re.compile(r"(.*): Submitted from host.*"),
+        "cwd_compile": re.compile(r".*CWD <([^>]+)>.*"),
+        "processors_requested_compile": re.compile(r".* (\d+) Task\(s\).*"),
+        "requested_resources_compile": re.compile(r".*Requested Resources <(.+)>;.*"),
+        "span_hosts_compile": re.compile(
+            r".*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*"
+        ),
+        "rusage_mem_compile": re.compile(
+            r".*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*"
+        ),
+        "started_on_compile": re.compile(
+            r"(.*): (\[\d+\] )?[sS]tarted \d+ Task\(s\) on Host\(s\) (.+?), Allocated (\d+) Slot\(s\) on Host\(s\).*"
+        ),
+        "finished_time_compile": re.compile(
+            r"(.*): (Done successfully|Exited with exit code|Exited by LSF signal|Completed <exit>).*"
+        ),
+        "exit_code_compile": re.compile(r".*Exited with exit code (\d+)\..*"),
+        "lsf_signal_compile": re.compile(r".*Exited by LSF signal (\S+?)\..*"),
+        "term_owner_compile": re.compile(r".*TERM_OWNER: (.+?\.).*"),
+        "cpu_time_compile": re.compile(
+            r".*The CPU time used is (\d+(\.\d+)?) seconds.*"
+        ),
+        "mem_compile": re.compile(r".*MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*"),
+        "swap_compile": re.compile(r".*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*"),
+        "run_limit_compile": re.compile(r"\s*RUNLIMIT\s*"),
+        "pids_compile": re.compile(r"PIDs:\s+(.+?);"),
+        "max_mem_compile": re.compile(
+            r"\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*"
+        ),
+        "pending_reasons_compile": re.compile(r"\s*PENDING REASONS:\s*"),
+        "empty_line_compile": re.compile(r"^\s*$"),
+    }
 
-    my_dic = {}
-    job = ''
+    my_dic = collections.OrderedDict()
+    job = ""
     run_limit_mark = False
     pending_mark = False
-    lsf_unit_for_limits = get_lsf_unit_for_limits(get_lsf_unit_for_limits_command)
+
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in stdout.decode('utf-8', 'ignore').split('\n'):
+    for line in stdout.decode("utf-8", "ignore").split("\n"):
         line = line.strip()
 
-        if line:
-            if job_compile_dic['job_compile'].match(line):
-                if re.match(r'Job <' + str(job) + '> is not found', line):
-                    continue
-
-                my_match = job_compile_dic['job_compile'].match(line)
+        if re.match(r"Job <" + str(job) + "> is not found", line):
+            continue
+        else:
+            if job_compile_dic["job_compile"].match(line):
+                my_match = job_compile_dic["job_compile"].match(line)
                 job = my_match.group(1)
 
                 # Initialization for my_dic[job].
-                my_dic[job] = {'job_info': '',
-                               'job_id': job,
-                               'job_name': '',
-                               'job_description': '',
-                               'user': '',
-                               'project': '',
-                               'status': '',
-                               'interactive_mode': 'False',
-                               'queue': '',
-                               'command': '',
-                               'submitted_from': '',
-                               'submitted_time': '',
-                               'cwd': '',
-                               'processors_requested': '1',
-                               'requested_resources': '',
-                               'span_hosts': '',
-                               'rusage_mem': '',
-                               'started_on': '',
-                               'started_time': '',
-                               'finished_time': '',
-                               'exit_code': '',
-                               'term_signal': '',
-                               'cpu_time': '',
-                               'mem': '',
-                               'swap': '',
-                               'run_limit': [],
-                               'pids': [],
-                               'max_mem': '',
-                               'avg_mem': '',
-                               'pending_reasons': []}
+                my_dic[job] = collections.OrderedDict()
+                my_dic[job]["job_info"] = ""
+                my_dic[job]["job_id"] = job
+                my_dic[job]["job_name"] = ""
+                my_dic[job]["user"] = ""
+                my_dic[job]["project"] = ""
+                my_dic[job]["status"] = ""
+                my_dic[job]["queue"] = ""
+                my_dic[job]["command"] = ""
+                my_dic[job]["submitted_from"] = ""
+                my_dic[job]["submitted_time"] = ""
+                my_dic[job]["cwd"] = ""
+                my_dic[job]["processors_requested"] = "1"
+                my_dic[job]["requested_resources"] = ""
+                my_dic[job]["span_hosts"] = ""
+                my_dic[job]["rusage_mem"] = ""
+                my_dic[job]["started_on"] = ""
+                my_dic[job]["started_time"] = ""
+                my_dic[job]["finished_time"] = ""
+                my_dic[job]["exit_code"] = ""
+                my_dic[job]["lsf_signal"] = ""
+                my_dic[job]["term_owner"] = ""
+                my_dic[job]["cpu_time"] = ""
+                my_dic[job]["mem"] = ""
+                my_dic[job]["swap"] = ""
+                my_dic[job]["run_limit"] = ""
+                my_dic[job]["pids"] = []
+                my_dic[job]["max_mem"] = ""
+                my_dic[job]["avg_mem"] = ""
+                my_dic[job]["pending_reasons"] = []
 
-                if job_compile_dic['job_name_compile'].match(line):
-                    my_match = job_compile_dic['job_name_compile'].match(line)
-                    my_dic[job]['job_name'] = my_match.group(1)
+            if job != "":
+                if my_dic[job]["job_info"]:
+                    my_dic[job]["job_info"] = (
+                        str(my_dic[job]["job_info"]) + "\n" + str(line)
+                    )
+                else:
+                    my_dic[job]["job_info"] = line
 
-                if job_compile_dic['job_description_compile'].match(line):
-                    my_match = job_compile_dic['job_description_compile'].match(line)
-                    my_dic[job]['job_description'] = my_match.group(1)
+                if job_compile_dic["empty_line_compile"].match(line):
+                    if run_limit_mark:
+                        run_limit_mark = False
 
-                if job_compile_dic['user_compile'].match(line):
-                    my_match = job_compile_dic['user_compile'].match(line)
-                    my_dic[job]['user'] = my_match.group(1)
+                    if pending_mark:
+                        pending_mark = False
+                else:
+                    if run_limit_mark:
+                        my_dic[job]["run_limit"] = re.sub(r"min", "", line)
+                        my_dic[job]["run_limit"] = re.sub(
+                            r"\s", "", my_dic[job]["run_limit"]
+                        )
+                        continue
 
-                if job_compile_dic['project_compile'].match(line):
-                    my_match = job_compile_dic['project_compile'].match(line)
-                    my_dic[job]['project'] = my_match.group(1)
+                    if pending_mark:
+                        my_dic[job]["pending_reasons"].append(line.strip())
+                        continue
 
-                if job_compile_dic['status_compile'].match(line):
-                    my_match = job_compile_dic['status_compile'].match(line)
-                    my_dic[job]['status'] = my_match.group(1)
+                    if job_compile_dic["job_name_compile"].match(line):
+                        my_match = job_compile_dic["job_name_compile"].match(line)
+                        my_dic[job]["job_name"] = my_match.group(1)
 
-                if job_compile_dic['queue_compile'].match(line):
-                    my_match = job_compile_dic['queue_compile'].match(line)
-                    my_dic[job]['queue'] = my_match.group(1)
+                    if job_compile_dic["user_compile"].match(line):
+                        my_match = job_compile_dic["user_compile"].match(line)
+                        my_dic[job]["user"] = my_match.group(1)
 
-                if job_compile_dic['interactive_mode_compile'].match(line):
-                    my_dic[job]['interactive_mode'] = 'True'
+                    if job_compile_dic["project_compile"].match(line):
+                        my_match = job_compile_dic["project_compile"].match(line)
+                        my_dic[job]["project"] = my_match.group(1)
 
-                if job_compile_dic['command_compile'].match(line):
-                    my_match = job_compile_dic['command_compile'].match(line)
-                    my_dic[job]['command'] = my_match.group(1)
-            elif job_compile_dic['submitted_from_compile'].match(line):
-                my_match = job_compile_dic['submitted_from_compile'].match(line)
-                my_dic[job]['submitted_time'] = my_match.group(1)
-                my_dic[job]['submitted_from'] = my_match.group(2)
+                    if job_compile_dic["status_compile"].match(line):
+                        my_match = job_compile_dic["status_compile"].match(line)
+                        my_dic[job]["status"] = my_match.group(1)
 
-                if job_compile_dic['cwd_compile'].match(line):
-                    my_match = job_compile_dic['cwd_compile'].match(line)
-                    my_dic[job]['cwd'] = my_match.group(1)
+                    if job_compile_dic["queue_compile"].match(line):
+                        my_match = job_compile_dic["queue_compile"].match(line)
+                        my_dic[job]["queue"] = my_match.group(1)
 
-                if job_compile_dic['processors_requested_compile'].match(line):
-                    my_match = job_compile_dic['processors_requested_compile'].match(line)
-                    my_dic[job]['processors_requested'] = my_match.group(1)
+                    if job_compile_dic["command_compile"].match(line):
+                        my_match = job_compile_dic["command_compile"].match(line)
+                        my_dic[job]["command"] = my_match.group(1)
+                        continue
 
-                if job_compile_dic['requested_resources_compile'].match(line):
-                    my_match = job_compile_dic['requested_resources_compile'].match(line)
-                    my_dic[job]['requested_resources'] = my_match.group(1)
+                    if job_compile_dic["submitted_time_compile"].match(line):
+                        my_match = job_compile_dic["submitted_time_compile"].match(line)
+                        my_dic[job]["submitted_time"] = my_match.group(1)
 
-                if job_compile_dic['span_hosts_compile'].match(line):
-                    my_match = job_compile_dic['span_hosts_compile'].match(line)
-                    my_dic[job]['span_hosts'] = my_match.group(1)
+                    if job_compile_dic["cwd_compile"].match(line):
+                        my_match = job_compile_dic["cwd_compile"].match(line)
+                        my_dic[job]["cwd"] = my_match.group(1)
 
-                if job_compile_dic['rusage_mem_compile'].match(line):
-                    my_match = job_compile_dic['rusage_mem_compile'].match(line)
-                    my_dic[job]['rusage_mem'] = my_match.group(1)
+                    if job_compile_dic["processors_requested_compile"].match(line):
+                        my_match = job_compile_dic[
+                            "processors_requested_compile"
+                        ].match(line)
+                        my_dic[job]["processors_requested"] = my_match.group(1)
 
-                    # Switch rusage_mem unit into "MB".
-                    if lsf_unit_for_limits == 'KB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])/1024, 1)
-                    elif lsf_unit_for_limits == 'MB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']), 1)
-                    elif lsf_unit_for_limits == 'GB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024, 1)
-                    elif lsf_unit_for_limits == 'TB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024*1024, 1)
-            elif job_compile_dic['started_on_compile'].match(line):
-                my_match = job_compile_dic['started_on_compile'].match(line)
-                my_dic[job]['started_time'] = my_match.group(1)
-                started_host = my_match.group(4)
-                started_host = re.sub(r'<', '', started_host)
-                started_host = re.sub(r'>', '', started_host)
-                started_host = re.sub(r'\d+\*', '', started_host)
-                my_dic[job]['started_on'] = started_host
-            elif job_compile_dic['resource_usage_collected_compile'].match(line):
-                if job_compile_dic['cpu_time_compile'].match(line):
-                    my_match = job_compile_dic['cpu_time_compile'].match(line)
-                    my_dic[job]['cpu_time'] = my_match.group(1)
+                    if job_compile_dic["requested_resources_compile"].match(line):
+                        my_match = job_compile_dic["requested_resources_compile"].match(
+                            line
+                        )
+                        my_dic[job]["requested_resources"] = my_match.group(1)
 
-                if job_compile_dic['mem_compile'].match(line) and (not my_dic[job]['mem']):
-                    my_match = job_compile_dic['mem_compile'].match(line)
-                    my_dic[job]['mem'] = my_match.group(1)
-                    unit = my_match.group(3)
+                    if job_compile_dic["span_hosts_compile"].match(line):
+                        my_match = job_compile_dic["span_hosts_compile"].match(line)
+                        my_dic[job]["span_hosts"] = my_match.group(1)
 
-                    # Switch mem unit into "MB".
-                    if unit == 'Kbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])/1024, 1)
-                    elif unit == 'Mbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem']), 1)
-                    elif unit == 'Gbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024, 1)
-                    elif unit == 'Tbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024*1024, 1)
+                    if job_compile_dic["rusage_mem_compile"].match(line):
+                        my_match = job_compile_dic["rusage_mem_compile"].match(line)
+                        my_dic[job]["rusage_mem"] = my_match.group(1)
 
-                if job_compile_dic['swap_compile'].match(line):
-                    my_match = job_compile_dic['swap_compile'].match(line)
-                    my_dic[job]['swap'] = my_match.group(1)
-                    unit = my_match.group(3)
+                    if job_compile_dic["submitted_from_compile"].match(line):
+                        my_match = job_compile_dic["submitted_from_compile"].match(line)
+                        my_dic[job]["submitted_from"] = my_match.group(1)
+                        continue
 
-                    # Switch swap unit into "MB".
-                    if unit == 'Kbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])/1024, 1)
-                    elif unit == 'Mbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap']), 1)
-                    elif unit == 'Gbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024, 1)
-                    elif unit == 'Tbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024*1024, 1)
+                    if job_compile_dic["started_on_compile"].match(line):
+                        my_match = job_compile_dic["started_on_compile"].match(line)
+                        my_dic[job]["started_time"] = my_match.group(1)
+                        started_host = my_match.group(3)
+                        started_host = re.sub(r"<", "", started_host)
+                        started_host = re.sub(r">", "", started_host)
+                        started_host = re.sub(r"\d+\*", "", started_host)
+                        my_dic[job]["started_on"] = started_host
+                        continue
 
-                if job_compile_dic['pids_compile'].findall(line):
-                    my_match = job_compile_dic['pids_compile'].findall(line)
-                    my_string = ' '.join(my_match)
-                    my_dic[job]['pids'] = my_string.split()
-            elif job_compile_dic['finished_time_compile'].match(line):
-                my_match = job_compile_dic['finished_time_compile'].match(line)
-                my_dic[job]['finished_time'] = my_match.group(1)
+                    if job_compile_dic["cpu_time_compile"].match(line):
+                        my_match = job_compile_dic["cpu_time_compile"].match(line)
+                        my_dic[job]["cpu_time"] = my_match.group(1)
 
-                if job_compile_dic['exit_code_compile'].match(line):
-                    my_match = job_compile_dic['exit_code_compile'].match(line)
-                    my_dic[job]['exit_code'] = my_match.group(1)
-            elif job_compile_dic['term_signal_compile'].match(line):
-                my_match = job_compile_dic['term_signal_compile'].match(line)
-                my_dic[job]['term_signal'] = my_match.group(1)
-            elif job_compile_dic['max_mem_compile'].match(line):
-                my_match = job_compile_dic['max_mem_compile'].match(line)
-                my_dic[job]['max_mem'] = my_match.group(1)
-                unit = my_match.group(3)
+                    if job_compile_dic["mem_compile"].match(line) and (
+                        not my_dic[job]["mem"]
+                    ):
+                        my_match = job_compile_dic["mem_compile"].match(line)
+                        my_dic[job]["mem"] = my_match.group(1)
+                        unit = my_match.group(3)
 
-                # Switch max_mem unit into "MB".
-                if unit == 'Kbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])/1024, 1)
-                elif unit == 'Mbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem']), 1)
-                elif unit == 'Gbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024, 1)
-                elif unit == 'Tbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024*1024, 1)
+                        if unit == "Kbytes":
+                            my_dic[job]["mem"] = float(my_dic[job]["mem"]) / 1024
+                        elif unit == "Gbytes":
+                            my_dic[job]["mem"] = float(my_dic[job]["mem"]) * 1024
+                        elif unit == "Tbytes":
+                            my_dic[job]["mem"] = float(my_dic[job]["mem"]) * 1024 * 1024
 
-                my_dic[job]['avg_mem'] = my_match.group(4)
-                unit = my_match.group(6)
+                    if job_compile_dic["swap_compile"].match(line):
+                        my_match = job_compile_dic["swap_compile"].match(line)
+                        my_dic[job]["swap"] = my_match.group(1)
+                        unit = my_match.group(3)
 
-                # Switch avg_mem unit into "MB".
-                if unit == 'Kbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])/1024, 1)
-                elif unit == 'Mbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem']), 1)
-                elif unit == 'Gbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024, 1)
-                elif unit == 'Tbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024*1024, 1)
-            else:
-                if run_limit_mark:
-                    my_dic[job]['run_limit'].append(line.strip())
-                    run_limit_mark = False
+                        if unit == "Kbytes":
+                            my_dic[job]["swap"] = float(my_dic[job]["swap"]) / 1024
+                        elif unit == "Gbytes":
+                            my_dic[job]["swap"] = float(my_dic[job]["swap"]) * 1024
+                        elif unit == "Tbytes":
+                            my_dic[job]["swap"] = (
+                                float(my_dic[job]["swap"]) * 1024 * 1024
+                            )
 
-                if pending_mark:
-                    my_dic[job]['pending_reasons'].append(line.strip())
-                    pending_mark = False
+                    if job_compile_dic["finished_time_compile"].match(line):
+                        my_match = job_compile_dic["finished_time_compile"].match(line)
+                        my_dic[job]["finished_time"] = my_match.group(1)
 
-                if job_compile_dic['run_limit_compile'].match(line):
-                    run_limit_mark = True
+                    if job_compile_dic["exit_code_compile"].match(line):
+                        my_match = job_compile_dic["exit_code_compile"].match(line)
+                        my_dic[job]["exit_code"] = my_match.group(1)
 
-                if job_compile_dic['pending_reasons_compile'].match(line):
-                    pending_mark = True
+                    if job_compile_dic["lsf_signal_compile"].match(line):
+                        my_match = job_compile_dic["lsf_signal_compile"].match(line)
+                        my_dic[job]["lsf_signal"] = my_match.group(1)
 
-        if job:
-            if my_dic[job]['job_info']:
-                my_dic[job]['job_info'] = str(my_dic[job]['job_info']) + '\n' + str(line)
-            else:
-                my_dic[job]['job_info'] = line
+                    if job_compile_dic["term_owner_compile"].match(line):
+                        my_match = job_compile_dic["term_owner_compile"].match(line)
+                        my_dic[job]["term_owner"] = my_match.group(1)
+
+                    if job_compile_dic["pids_compile"].findall(line):
+                        my_match = job_compile_dic["pids_compile"].findall(line)
+                        my_string = " ".join(my_match)
+                        my_dic[job]["pids"] = my_string.split()
+                        continue
+
+                    if job_compile_dic["max_mem_compile"].match(line):
+                        my_match = job_compile_dic["max_mem_compile"].match(line)
+                        my_dic[job]["max_mem"] = my_match.group(1)
+                        unit = my_match.group(3)
+
+                        if unit == "Kbytes":
+                            my_dic[job]["max_mem"] = (
+                                float(my_dic[job]["max_mem"]) / 1024
+                            )
+                        elif unit == "Gbytes":
+                            my_dic[job]["max_mem"] = (
+                                float(my_dic[job]["max_mem"]) * 1024
+                            )
+                        elif unit == "Tbytes":
+                            my_dic[job]["max_mem"] = (
+                                float(my_dic[job]["max_mem"]) * 1024 * 1024
+                            )
+
+                        my_dic[job]["avg_mem"] = my_match.group(4)
+                        unit = my_match.group(6)
+
+                        if unit == "Kbytes":
+                            my_dic[job]["avg_mem"] = (
+                                float(my_dic[job]["avg_mem"]) / 1024
+                            )
+                        elif unit == "Gbytes":
+                            my_dic[job]["avg_mem"] = (
+                                float(my_dic[job]["avg_mem"]) * 1024
+                            )
+                        elif unit == "Tbytes":
+                            my_dic[job]["avg_mem"] = (
+                                float(my_dic[job]["avg_mem"]) * 1024 * 1024
+                            )
+
+                        continue
+
+                    if job_compile_dic["run_limit_compile"].match(line):
+                        run_limit_mark = True
+
+                    if job_compile_dic["pending_reasons_compile"].match(line):
+                        pending_mark = True
 
     return my_dic
 
 
-def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
+def get_openlava_bjobs_uf_info(command):
     """
-    Get job info with command "bjobs".
+    Parse job info which are from command 'bjobs -u all -UF'.
     ====
-    Job <305>, User <liyanqing.1987>, Project <default>, Status <RUN>, Queue <normal>, Interactive pseudo-terminal shell mode, Command <sleep 1000>, Job Description <this is a test>
-    Sun Mar 23 10:08:18: Submitted from host <openlava4-test-cmp1>, CWD <$HOME>, 2 Processors Requested, Requested Resources <rusage[mem=123]>;
-    Sun Mar 23 10:08:22: Started on 2 Hosts/Processors <openlava4-test-cmp1> <openlava4-test-cmp1>;
-    Sun Mar 23 10:08:36: Resource usage collected. MEM: 3 Mbytes; SWAP: 247 Mbytes; PGID: 23518; PIDs: 23518 ; PGID: 23523; PIDs: 23523 23524;
+    Job <205>, User <liyanqing>, Project <default>, Status <PEND>, Queue <normal>, Command <sleep 1000>
+    Sun May 13 18:08:26: Submitted from host <lava_host1>, CWD <$HOME>, 2 Processors Requested, Requested Resources <rusage[mem=1234] span[hosts=1]>;
+    PENDING REASONS:
+    New job is waiting for scheduling: 1 host;
 
-     MEMORY USAGE:
-     MAX MEM: N/A MBytes;  AVG MEM: N/A MBytes
+    SCHEDULING PARAMETERS:
+              r15s   r1m  r15m   ut      pg    io   ls    it    tmp    swp    mem
+    load_sched   -     -     -     -       -     -    -     -     -      -      -
+    load_stop    -     -     -     -       -     -    -     -     -      -      -
 
-     SCHEDULING PARAMETERS:
-               r15s   r1m  r15m   ut      pg    io   ls    it    tmp    swp    mem
-     loadSched   -    3.5    -     -    18.0     -   15     -     -      -      -
-     loadStop    -    5.0    -     -       -     -    -     -     -      -      -
-
-     RESOURCE REQUIREMENT DETAILS:
-     Combined: rusage[mem=123]
-     Effective: rusage[mem=123]
+    RESOURCE REQUIREMENT DETAILS:
+    Combined: rusage[mem=1234] span[hosts=1]
+    Effective: rusage[mem=1234] span[hosts=1]
     ====
     """
-    job_compile_dic = {'job_compile': re.compile(r'.*Job <([0-9]+(\[[0-9]+\])?)>.*'),
-                       'job_name_compile': re.compile(r'.*Job Name <([^>]+)>.*'),
-                       'user_compile': re.compile(r'.*User <([^>]+)>.*'),
-                       'project_compile': re.compile(r'.*Project <([^>]+)>.*'),
-                       'status_compile': re.compile(r'.*Status <([A-Z]+)>*'),
-                       'queue_compile': re.compile(r'.*Queue <([^>]+)>.*'),
-                       'interactive_mode_compile': re.compile(r'.*Interactive pseudo-terminal shell mode.*'),
-                       'command_compile': re.compile(r'.*Command <(.+?\S)>.*$'),
-                       'job_description_compile': re.compile(r'.*Job Description <([^>]+)>.*'),
-                       'submitted_from_compile': re.compile(r'(.*): Submitted from host <([^>]+)>.*'),
-                       'cwd_compile': re.compile(r'.*CWD <([^>]+)>.*'),
-                       'processors_requested_compile': re.compile(r'.* ([1-9][0-9]*) Processors Requested.*'),
-                       'requested_resources_compile': re.compile(r'.*Requested Resources <(.+)>;.*'),
-                       'span_hosts_compile': re.compile(r'.*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*'),
-                       'rusage_mem_compile': re.compile(r'.*Requested Resources <.*rusage\[.*mem=([1-9][0-9]*).*>.*'),
-                       'started_on_compile': re.compile(r'(.*): ([sS]tarted|[dD]ispatched) on ([0-9]+ Hosts/Processors )?([^;,]+).*'),
-                       'resource_usage_collected_compile': re.compile(r'.*Resource usage collected.*'),
-                       'mem_compile': re.compile(r'.*[\.\;]\s+MEM:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
-                       'swap_compile': re.compile(r'.*SWAP:\s*(\d+(\.\d+)?)\s*([KMGT]bytes).*'),
-                       'pids_compile': re.compile(r'PIDs:\s+(.+?);'),
-                       'finished_time_compile': re.compile(r'(.*): (Done successfully|Exited|Termination request issued).*'),
-                       'exit_code_compile': re.compile(r'.*Exited with exit code (\d+)\..*'),
-                       'term_signal_compile': re.compile(r'.*TERM_OWNER: (.+?\.).*'),
-                       'max_mem_compile': re.compile(r'\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*'),
-                       'pending_reasons_compile': re.compile(r'\s*PENDING REASONS:\s*')}
+    job_compile_dic = {
+        "job_compile": re.compile(r".*Job <([0-9]+(\[[0-9]+\])?)>.*"),
+        "job_name_compile": re.compile(r".*Job Name <([^>]+)>.*"),
+        "user_compile": re.compile(r".*User <([^>]+)>.*"),
+        "project_compile": re.compile(r".*Project <([^>]+)>.*"),
+        "status_compile": re.compile(r".*Status <([A-Z]+)>*"),
+        "queue_compile": re.compile(r".*Queue <([^>]+)>.*"),
+        "command_compile": re.compile(r".*Command <(.+?\S)>\s*$"),
+        "submitted_from_compile": re.compile(r".*Submitted from host <([^>]+)>.*"),
+        "submitted_time_compile": re.compile(r"(.*): Submitted from host.*"),
+        "cwd_compile": re.compile(r".*CWD <([^>]+)>.*"),
+        "processors_requested_compile": re.compile(
+            r".* ([1-9][0-9]*) Processors Requested.*"
+        ),
+        "requested_resources_compile": re.compile(r".*Requested Resources <(.+)>;.*"),
+        "span_hosts_compile": re.compile(
+            r".*Requested Resources <.*span\[hosts=([1-9][0-9]*).*>.*"
+        ),
+        "rusage_mem_compile": re.compile(
+            r".*Requested Resources <.*rusage\[mem=([1-9][0-9]*).*>.*"
+        ),
+        "started_on_compile": re.compile(
+            r".*[sS]tarted on ([0-9]+ Hosts/Processors )?([^;,]+).*"
+        ),
+        "started_time_compile": re.compile(r"(.*): (\[\d+\])?\s*[sS]tarted on.*"),
+        "finished_time_compile": re.compile(r"(.*): (Done successfully|Exited with).*"),
+        "exit_code_compile": re.compile(r".*Exited with exit code (\d+)\..*"),
+        "lsf_signal_compile": re.compile(r".*Exited by LSF signal (\S+?)\..*"),
+        "term_owner_compile": re.compile(r".*TERM_OWNER: (.+?\.).*"),
+        "cpu_time_compile": re.compile(
+            r".*The CPU time used is ([1-9][0-9]*) seconds.*"
+        ),
+        "mem_compile": re.compile(r".*MEM: ([1-9][0-9]*) Mbytes.*"),
+    }
 
-    my_dic = {}
-    job = ''
-    pending_mark = False
-    lsf_unit_for_limits = 'MB'
+    my_dic = collections.OrderedDict()
+    job = ""
+
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
-        if line:
-            if job_compile_dic['job_compile'].match(line):
-                if re.match(r'Job <' + str(job) + '> is not found', line):
-                    continue
-
-                my_match = job_compile_dic['job_compile'].match(line)
+        if re.match(r"Job <" + str(job) + "> is not found", line):
+            continue
+        else:
+            if job_compile_dic["job_compile"].match(line):
+                my_match = job_compile_dic["job_compile"].match(line)
                 job = my_match.group(1)
 
                 # Initialization for my_dic[job].
-                my_dic[job] = {'job_info': '',
-                               'job_id': job,
-                               'job_name': '',
-                               'job_description': '',
-                               'user': '',
-                               'project': '',
-                               'status': '',
-                               'interactive_mode': 'False',
-                               'queue': '',
-                               'command': '',
-                               'submitted_from': '',
-                               'submitted_time': '',
-                               'cwd': '',
-                               'processors_requested': '1',
-                               'requested_resources': '',
-                               'span_hosts': '',
-                               'rusage_mem': '',
-                               'started_on': '',
-                               'started_time': '',
-                               'finished_time': '',
-                               'exit_code': '',
-                               'term_signal': '',
-                               'cpu_time': '',
-                               'mem': '',
-                               'swap': '',
-                               'run_limit': [],
-                               'pids': [],
-                               'max_mem': '',
-                               'avg_mem': '',
-                               'pending_reasons': []}
+                my_dic[job] = collections.OrderedDict()
+                my_dic[job]["job_info"] = ""
+                my_dic[job]["job_id"] = job
+                my_dic[job]["job_name"] = ""
+                my_dic[job]["user"] = ""
+                my_dic[job]["project"] = ""
+                my_dic[job]["status"] = ""
+                my_dic[job]["queue"] = ""
+                my_dic[job]["command"] = ""
+                my_dic[job]["submitted_from"] = ""
+                my_dic[job]["submitted_time"] = ""
+                my_dic[job]["cwd"] = ""
+                my_dic[job]["processors_requested"] = "1"
+                my_dic[job]["requested_resources"] = ""
+                my_dic[job]["span_hosts"] = ""
+                my_dic[job]["rusage_mem"] = ""
+                my_dic[job]["started_on"] = ""
+                my_dic[job]["started_time"] = ""
+                my_dic[job]["finished_time"] = ""
+                my_dic[job]["exit_code"] = ""
+                my_dic[job]["lsf_signal"] = ""
+                my_dic[job]["term_owner"] = ""
+                my_dic[job]["cpu_time"] = ""
+                my_dic[job]["mem"] = ""
+                my_dic[job]["swap"] = ""
+                my_dic[job]["run_limit"] = ""
+                my_dic[job]["pids"] = []
+                my_dic[job]["max_mem"] = ""
+                my_dic[job]["avg_mem"] = ""
+                my_dic[job]["pending_reasons"] = []
 
-                if job_compile_dic['job_name_compile'].match(line):
-                    my_match = job_compile_dic['job_name_compile'].match(line)
-                    my_dic[job]['job_name'] = my_match.group(1)
+            if job != "":
+                if my_dic[job]["job_info"]:
+                    my_dic[job]["job_info"] = (
+                        str(my_dic[job]["job_info"]) + "\n" + str(line)
+                    )
+                else:
+                    my_dic[job]["job_info"] = line
 
-                if job_compile_dic['job_description_compile'].match(line):
-                    my_match = job_compile_dic['job_description_compile'].match(line)
-                    my_dic[job]['job_description'] = my_match.group(1)
+                if job_compile_dic["job_name_compile"].match(line):
+                    my_match = job_compile_dic["job_name_compile"].match(line)
+                    my_dic[job]["job_name"] = my_match.group(1)
 
-                if job_compile_dic['user_compile'].match(line):
-                    my_match = job_compile_dic['user_compile'].match(line)
-                    my_dic[job]['user'] = my_match.group(1)
+                if job_compile_dic["user_compile"].match(line):
+                    my_match = job_compile_dic["user_compile"].match(line)
+                    my_dic[job]["user"] = my_match.group(1)
 
-                if job_compile_dic['project_compile'].match(line):
-                    my_match = job_compile_dic['project_compile'].match(line)
-                    my_dic[job]['project'] = my_match.group(1)
+                if job_compile_dic["project_compile"].match(line):
+                    my_match = job_compile_dic["project_compile"].match(line)
+                    my_dic[job]["project"] = my_match.group(1)
 
-                if job_compile_dic['status_compile'].match(line):
-                    my_match = job_compile_dic['status_compile'].match(line)
-                    my_dic[job]['status'] = my_match.group(1)
+                if job_compile_dic["status_compile"].match(line):
+                    my_match = job_compile_dic["status_compile"].match(line)
+                    my_dic[job]["status"] = my_match.group(1)
 
-                if job_compile_dic['queue_compile'].match(line):
-                    my_match = job_compile_dic['queue_compile'].match(line)
-                    my_dic[job]['queue'] = my_match.group(1)
+                if job_compile_dic["queue_compile"].match(line):
+                    my_match = job_compile_dic["queue_compile"].match(line)
+                    my_dic[job]["queue"] = my_match.group(1)
 
-                if job_compile_dic['interactive_mode_compile'].match(line):
-                    my_dic[job]['interactive_mode'] = 'True'
+                if job_compile_dic["command_compile"].match(line):
+                    my_match = job_compile_dic["command_compile"].match(line)
+                    my_dic[job]["command"] = my_match.group(1)
 
-                if job_compile_dic['command_compile'].match(line):
-                    my_match = job_compile_dic['command_compile'].match(line)
-                    my_dic[job]['command'] = my_match.group(1)
-            elif job_compile_dic['submitted_from_compile'].match(line):
-                my_match = job_compile_dic['submitted_from_compile'].match(line)
-                my_dic[job]['submitted_time'] = my_match.group(1)
-                my_dic[job]['submitted_from'] = my_match.group(2)
+                if job_compile_dic["submitted_from_compile"].match(line):
+                    my_match = job_compile_dic["submitted_from_compile"].match(line)
+                    my_dic[job]["submitted_from"] = my_match.group(1)
 
-                if job_compile_dic['cwd_compile'].match(line):
-                    my_match = job_compile_dic['cwd_compile'].match(line)
-                    my_dic[job]['cwd'] = my_match.group(1)
+                if job_compile_dic["submitted_time_compile"].match(line):
+                    my_match = job_compile_dic["submitted_time_compile"].match(line)
+                    my_dic[job]["submitted_time"] = my_match.group(1)
 
-                if job_compile_dic['processors_requested_compile'].match(line):
-                    my_match = job_compile_dic['processors_requested_compile'].match(line)
-                    my_dic[job]['processors_requested'] = my_match.group(1)
+                if job_compile_dic["cwd_compile"].match(line):
+                    my_match = job_compile_dic["cwd_compile"].match(line)
+                    my_dic[job]["cwd"] = my_match.group(1)
 
-                if job_compile_dic['requested_resources_compile'].match(line):
-                    my_match = job_compile_dic['requested_resources_compile'].match(line)
-                    my_dic[job]['requested_resources'] = my_match.group(1)
+                if job_compile_dic["processors_requested_compile"].match(line):
+                    my_match = job_compile_dic["processors_requested_compile"].match(
+                        line
+                    )
+                    my_dic[job]["processors_requested"] = my_match.group(1)
 
-                if job_compile_dic['span_hosts_compile'].match(line):
-                    my_match = job_compile_dic['span_hosts_compile'].match(line)
-                    my_dic[job]['span_hosts'] = my_match.group(1)
+                if job_compile_dic["requested_resources_compile"].match(line):
+                    my_match = job_compile_dic["requested_resources_compile"].match(
+                        line
+                    )
+                    my_dic[job]["requested_resources"] = my_match.group(1)
 
-                if job_compile_dic['rusage_mem_compile'].match(line):
-                    my_match = job_compile_dic['rusage_mem_compile'].match(line)
-                    my_dic[job]['rusage_mem'] = my_match.group(1)
+                if job_compile_dic["span_hosts_compile"].match(line):
+                    my_match = job_compile_dic["span_hosts_compile"].match(line)
+                    my_dic[job]["span_hosts"] = my_match.group(1)
 
-                    # Switch rusage_mem unit into "MB".
-                    if lsf_unit_for_limits == 'KB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])/1024, 1)
-                    elif lsf_unit_for_limits == 'MB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']), 1)
-                    elif lsf_unit_for_limits == 'GB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024, 1)
-                    elif lsf_unit_for_limits == 'TB':
-                        my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024*1024, 1)
-            elif job_compile_dic['started_on_compile'].match(line):
-                my_match = job_compile_dic['started_on_compile'].match(line)
-                my_dic[job]['started_time'] = my_match.group(1)
-                started_host = my_match.group(4)
-                started_host = re.sub(r'<', '', started_host)
-                started_host = re.sub(r'>', '', started_host)
-                started_host = re.sub(r'\d+\*', '', started_host)
-                my_dic[job]['started_on'] = started_host
-            elif job_compile_dic['resource_usage_collected_compile'].match(line):
-                if job_compile_dic['mem_compile'].match(line) and (not my_dic[job]['mem']):
-                    my_match = job_compile_dic['mem_compile'].match(line)
-                    my_dic[job]['mem'] = my_match.group(1)
-                    unit = my_match.group(3)
+                if job_compile_dic["rusage_mem_compile"].match(line):
+                    my_match = job_compile_dic["rusage_mem_compile"].match(line)
+                    my_dic[job]["rusage_mem"] = my_match.group(1)
 
-                    # Switch mem unit into "MB".
-                    if unit == 'Kbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])/1024, 1)
-                    elif unit == 'Mbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem']), 1)
-                    elif unit == 'Gbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024, 1)
-                    elif unit == 'Tbytes':
-                        my_dic[job]['mem'] = round(float(my_dic[job]['mem'])*1024*1024, 1)
+                if job_compile_dic["started_on_compile"].match(line):
+                    my_match = job_compile_dic["started_on_compile"].match(line)
+                    started_host = my_match.group(2)
+                    started_host = re.sub(r"<", "", started_host)
+                    started_host = re.sub(r">", "", started_host)
+                    my_dic[job]["started_on"] = started_host
 
-                if job_compile_dic['swap_compile'].match(line):
-                    my_match = job_compile_dic['swap_compile'].match(line)
-                    my_dic[job]['swap'] = my_match.group(1)
-                    unit = my_match.group(3)
+                if job_compile_dic["started_time_compile"].match(line):
+                    my_match = job_compile_dic["started_time_compile"].match(line)
+                    my_dic[job]["started_time"] = my_match.group(1)
 
-                    # Switch swap unit into "MB".
-                    if unit == 'Kbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])/1024, 1)
-                    elif unit == 'Mbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap']), 1)
-                    elif unit == 'Gbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024, 1)
-                    elif unit == 'Tbytes':
-                        my_dic[job]['swap'] = round(float(my_dic[job]['swap'])*1024*1024, 1)
+                if job_compile_dic["finished_time_compile"].match(line):
+                    my_match = job_compile_dic["finished_time_compile"].match(line)
+                    my_dic[job]["finished_time"] = my_match.group(1)
 
-                if job_compile_dic['pids_compile'].findall(line):
-                    my_match = job_compile_dic['pids_compile'].findall(line)
-                    my_string = ' '.join(my_match)
-                    my_dic[job]['pids'] = my_string.split()
-            elif job_compile_dic['finished_time_compile'].match(line):
-                my_match = job_compile_dic['finished_time_compile'].match(line)
-                my_dic[job]['finished_time'] = my_match.group(1)
+                if job_compile_dic["exit_code_compile"].match(line):
+                    my_match = job_compile_dic["exit_code_compile"].match(line)
+                    my_dic[job]["exit_code"] = my_match.group(1)
 
-                if job_compile_dic['exit_code_compile'].match(line):
-                    my_match = job_compile_dic['exit_code_compile'].match(line)
-                    my_dic[job]['exit_code'] = my_match.group(1)
-            elif job_compile_dic['term_signal_compile'].match(line):
-                my_match = job_compile_dic['term_signal_compile'].match(line)
-                my_dic[job]['term_signal'] = my_match.group(1)
-            elif job_compile_dic['max_mem_compile'].match(line):
-                my_match = job_compile_dic['max_mem_compile'].match(line)
-                my_dic[job]['max_mem'] = my_match.group(1)
-                unit = my_match.group(3)
+                if job_compile_dic["lsf_signal_compile"].match(line):
+                    my_match = job_compile_dic["lsf_signal_compile"].match(line)
+                    my_dic[job]["lsf_signal"] = my_match.group(1)
 
-                # Switch max_mem unit into "MB".
-                if unit == 'Kbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])/1024, 1)
-                elif unit == 'Mbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem']), 1)
-                elif unit == 'Gbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024, 1)
-                elif unit == 'Tbytes':
-                    my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem'])*1024*1024, 1)
+                if job_compile_dic["term_owner_compile"].match(line):
+                    my_match = job_compile_dic["term_owner_compile"].match(line)
+                    my_dic[job]["term_owner"] = my_match.group(1)
 
-                my_dic[job]['avg_mem'] = my_match.group(4)
-                unit = my_match.group(6)
+                if job_compile_dic["cpu_time_compile"].match(line):
+                    my_match = job_compile_dic["cpu_time_compile"].match(line)
+                    my_dic[job]["cpu_time"] = my_match.group(1)
 
-                # Switch avg_mem unit into "MB".
-                if unit == 'Kbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])/1024, 1)
-                elif unit == 'Mbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem']), 1)
-                elif unit == 'Gbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024, 1)
-                elif unit == 'Tbytes':
-                    my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024*1024, 1)
-            else:
-                if pending_mark:
-                    my_dic[job]['pending_reasons'].append(line.strip())
-                    pending_mark = False
-
-                if job_compile_dic['pending_reasons_compile'].match(line):
-                    pending_mark = True
-
-        if job:
-            if my_dic[job]['job_info']:
-                my_dic[job]['job_info'] = str(my_dic[job]['job_info']) + '\n' + str(line)
-            else:
-                my_dic[job]['job_info'] = line
+                if job_compile_dic["mem_compile"].match(line):
+                    my_match = job_compile_dic["mem_compile"].match(line)
+                    my_dic[job]["mem"] = my_match.group(1)
 
     return my_dic
 
 
-def get_host_list(command='bhosts -w'):
+def get_host_list():
     """
-    Get host list with command "bhosts".
+    Get all of the hosts.
     """
-    host_list = []
-    bhosts_dic = get_bhosts_info(command)
-
-    if 'HOST_NAME' in bhosts_dic:
-        host_list = bhosts_dic['HOST_NAME']
-
+    bhosts_dic = get_bhosts_info()
+    host_list = bhosts_dic["HOST_NAME"]
     return host_list
 
 
-def get_queue_list(command='bqueues -w'):
+def get_queue_list():
     """
-    Get queue list with command "bqueues".
+    Get all of the queues.
     """
-    queue_list = []
-    bqueues_dic = get_bqueues_info(command)
-
-    if 'QUEUE_NAME' in bqueues_dic:
-        queue_list = bqueues_dic['QUEUE_NAME']
-
+    bqueues_dic = get_bqueues_info()
+    queue_list = bqueues_dic["QUEUE_NAME"]
     return queue_list
 
 
-def get_bmgroup_info(command='bmgroup -w -r'):
+def get_host_group_members(host_group_name):
     """
-    Get host group members with command "bmgroup".
+    Get host group members with bmgroup or zmgroup based on scheduler type.
     ====
-    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup -w -r
-    GROUP_NAME    HOSTS                     GROUP_ADMIN
-    pd           dm006 dm007 dm010 dm009 dm002 dm003 dm005  ( - )
-    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup -w -r pd
+    [yanqing.li@nxnode03 lsfMonitor]$ bmgroup pd
     GROUP_NAME    HOSTS
     pd           dm006 dm007 dm010 dm009 dm002 dm003 dm005
     ====
     """
-    bmgroup_dic = {}
-    group_name_compile = re.compile(r'^\s*GROUP_NAME\s+HOSTS.*$')
-    line_compile = re.compile(r'\s*(\S+)\s+(.+?)\s*(\(.*\))?\s*$')
-    mark = False
+    host_list = []
+    base_cmd = get_command_name("bmgroup")
+    command = base_cmd + " -w -r " + str(host_group_name)
     (return_code, stdout, stderr) = common.run_command(command)
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
-        if mark and line_compile.match(line):
-            my_match = line_compile.match(line)
-            group_name = my_match.group(1)
-            hosts_string = my_match.group(2).strip()
-            host_list = hosts_string.split()
-            bmgroup_dic[group_name] = host_list
-        elif group_name_compile.match(line):
-            mark = True
+        if re.search(r"No such user/host group", line):
+            break
+        elif re.match(r"^" + str(host_group_name) + " .*$", line):
+            my_list = line.split()
+            host_list = my_list[1:]
 
-    return bmgroup_dic
+    return host_list
 
 
-def get_queue_host_info(command='bqueues -l', get_hosts_list_command='bhosts -w', get_bmgroup_info_command='bmgroup -w -r'):
+def get_user_group_members(user_group_name):
     """
-    Get host info of specified queues with command "bqueues/bmgroup".
+    Get user group members with bugroup or zugroup based on scheduler type.
+    ====
+    [yanqing.li@nxnode03 lsfMonitor]$ bugroup pd
+    GROUP_NAME    USERS
+    pd           yanqing.li san.zhang si.li
+    ====
+    """
+    user_list = []
+    base_cmd = get_command_name("bugroup")
+    command = base_cmd + " -r " + str(user_group_name)
+    (return_code, stdout, stderr) = common.run_command(command)
+
+    for line in str(stdout, "utf-8").split("\n"):
+        line = line.strip()
+
+        if re.match(r"^" + str(user_group_name) + " .*$", line):
+            my_list = line.split()
+            user_list = my_list[1:]
+
+    return user_list
+
+
+def get_queue_host_info():
+    """
+    Get hosts on (specified) queues.
     """
     queue_host_dic = {}
-    queue_compile = re.compile(r'^QUEUE:\s*(\S+)\s*$')
-    hosts_compile = re.compile(r'^HOSTS:\s*(.*?)\s*$')
-    hosts_all_compile = re.compile(r'\ball\b')
-    queue = ''
-    (return_code, stdout, stderr) = common.run_command(command)
-    bmgroup_dic = get_bmgroup_info(get_bmgroup_info_command)
+    queue_compile = re.compile(r"^QUEUE:\s*(\S+)\s*$")
+    hosts_compile = re.compile(r"^HOSTS:\s*(.*?)\s*$")
+    queue = ""
 
-    for line in str(stdout, 'utf-8').split('\n'):
+    base_cmd = get_command_name("bqueues")
+    command = base_cmd + " -l"
+    (return_code, stdout, stderr) = common.run_command(command)
+
+    for line in str(stdout, "utf-8").split("\n"):
         line = line.strip()
 
         if queue_compile.match(line):
@@ -877,39 +902,46 @@ def get_queue_host_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
             my_match = hosts_compile.match(line)
             hosts_string = my_match.group(1)
 
-            if hosts_all_compile.search(hosts_string):
-                common.bprint('Queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.', level='Warning')
-                queue_host_dic[queue] = get_host_list(get_hosts_list_command)
+            if hosts_string == "all":
+                common.print_warning(
+                    '*Warning* (get_queue_host_info) : queue "'
+                    + str(queue)
+                    + '" is not well configured, all of the hosts are on the same queue.'
+                )
+                queue_host_dic[queue] = get_host_list()
             else:
                 queue_host_dic.setdefault(queue, [])
                 hosts_list = hosts_string.split()
 
                 for hosts in hosts_list:
-                    if re.match(r'\S+/', hosts):
-                        host_group_name = re.sub(r'/$', '', hosts)
-                        host_list = []
-
-                        if host_group_name in bmgroup_dic.keys():
-                            host_list = bmgroup_dic[host_group_name]
+                    if re.match(r".+/", hosts):
+                        host_group_name = re.sub(r"/$", "", hosts)
+                        host_list = get_host_group_members(host_group_name)
 
                         if len(host_list) > 0:
                             queue_host_dic[queue].extend(host_list)
-                    elif re.match(r'^(\S+)\+\d+$', hosts):
-                        my_match = re.match(r'^(\S+)\+\d+$', hosts)
-                        host = my_match.group(1)
-                        queue_host_dic[queue].append(host)
+                    elif re.match(r"^(.+)\+\d+$", hosts):
+                        my_match = re.match(r"^(.+)\+\d+$", hosts)
+                        host_group_name = my_match.group(1)
+                        host_list = get_host_group_members(host_group_name)
+
+                        if len(host_list) == 0:
+                            queue_host_dic[queue].append(hosts)
+                        else:
+                            queue_host_dic[queue].extend(host_list)
                     else:
                         queue_host_dic[queue].append(hosts)
 
     return queue_host_dic
 
 
-def get_host_queue_info(command='bqueues -l', get_hosts_list_command='bhosts -w', get_bmgroup_info_command='bmgroup -w -r'):
+def get_host_queue_info():
     """
-    Get queue info of specified hosts with command "bqueues/bmgroup".
+    Get queues which (specified) host belongs to.
     """
     host_queue_dic = {}
-    queue_host_dic = get_queue_host_info(command, get_hosts_list_command, get_bmgroup_info_command)
+
+    queue_host_dic = get_queue_host_info()
     queue_list = list(queue_host_dic.keys())
 
     for queue in queue_list:
@@ -919,58 +951,8 @@ def get_host_queue_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
             if host in host_queue_dic.keys():
                 host_queue_dic[host].append(queue)
             else:
-                host_queue_dic[host] = [queue, ]
+                host_queue_dic[host] = [
+                    queue,
+                ]
 
     return host_queue_dic
-
-
-def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
-    """
-    Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
-    """
-    lsf_unit_for_limits = 'MB'
-    (return_code, stdout, stderr) = common.run_command(command)
-
-    for line in str(stdout, 'utf-8').split('\n'):
-        line = line.strip()
-
-        if re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line):
-            my_match = re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line)
-            lsf_unit_for_limits = my_match.group(1)
-            break
-
-    return lsf_unit_for_limits
-
-
-def switch_bjobs_uf_time(bjobs_uf_time, format=''):
-    """
-    Switch bjobs_uf_time from "%Y %b %d %H:%M:%S" into specified format.
-    """
-    new_bjobs_uf_time = bjobs_uf_time
-
-    if bjobs_uf_time and (bjobs_uf_time != 'N/A'):
-        # Switch bjobs_uf_time to start_seconds.
-        current_year = datetime.date.today().year
-        bjobs_uf_time_list = bjobs_uf_time.split()
-
-        current_seconds = time.time()
-        bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
-
-        try:
-            start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
-        except Exception:
-            return new_bjobs_uf_time
-
-        if int(start_seconds) > int(current_seconds):
-            current_year = int(datetime.date.today().year) - 1
-            bjobs_uf_time_with_year = str(current_year) + ' ' + str(bjobs_uf_time_list[1]) + ' ' + str(bjobs_uf_time_list[2]) + ' ' + str(bjobs_uf_time_list[3])
-
-            try:
-                start_seconds = time.mktime(time.strptime(bjobs_uf_time_with_year, '%Y %b %d %H:%M:%S'))
-            except Exception:
-                return new_bjobs_uf_time
-
-        # Switch start_seconds to expected time format.
-        new_bjobs_uf_time = time.strftime(format, time.localtime(start_seconds))
-
-    return new_bjobs_uf_time
