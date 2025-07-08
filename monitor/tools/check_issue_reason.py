@@ -2,6 +2,7 @@
 import os
 import re
 import sys
+import yaml
 import argparse
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QLabel, QLineEdit, QComboBox, QPushButton, QTextEdit
@@ -30,7 +31,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    return (args.job, args.issue)
+    return args.job, args.issue
 
 
 class MainWindow(QMainWindow):
@@ -41,9 +42,37 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.job = job
         self.issue = issue
+        self.exit_code_dic = self.get_exit_code_info()
+        self.term_signal_dic = self.get_term_signal_info()
 
         self.init_ui()
         self.process_args()
+
+    def get_exit_code_info(self):
+        """
+        Get exit_code&exit_reason from config/exit_code.yaml.
+        """
+        exit_code_dic = {}
+        exit_code_file = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/conf/exit_code.yaml'
+
+        if os.path.exists(exit_code_file):
+            with open(exit_code_file, 'r') as ECF:
+                exit_code_dic = yaml.load(ECF, Loader=yaml.FullLoader)
+
+        return exit_code_dic
+
+    def get_term_signal_info(self):
+        """
+        Get term_signal&term_reason from config/term_signal.yaml.
+        """
+        term_signal_dic = {}
+        term_signal_file = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/conf/term_signal.yaml'
+
+        if os.path.exists(term_signal_file):
+            with open(term_signal_file, 'r') as TSF:
+                term_signal_dic = yaml.load(TSF, Loader=yaml.FullLoader)
+
+        return term_signal_dic
 
     def init_ui(self):
         """
@@ -79,7 +108,7 @@ class MainWindow(QMainWindow):
 
         # Show main window
         self.setWindowTitle('Check Issue Reason')
-        self.resize(600, 300)
+        common_pyqt5.auto_resize(self, 600, 300)
         common_pyqt5.center_window(self)
 
     def process_args(self):
@@ -236,23 +265,23 @@ class MainWindow(QMainWindow):
 
     def check_fail_issue(self, job, job_dic):
         self.info_text.clear()
-        self.info_text.append('Status : ' + str(job_dic[job]['status']))
+        self.info_text.append('Status: ' + str(job_dic[job]['status']))
 
         if job_dic[job]['status'] == 'DONE':
             self.info_text.append('Job done sucessfully.')
             self.info_text.append('The issue should be from your command, please check your command log.')
         elif job_dic[job]['status'] == 'EXIT':
             if job_dic[job]['exit_code']:
-                self.info_text.append('Job exit code is "' + str(job_dic[job]['exit_code']) + '".')
-
-                if int(job_dic[job]['exit_code']) <= 127:
-                    self.info_text.append('The issue should be from your command, please check your command log.')
+                if job_dic[job]['exit_code'] in self.exit_code_dic:
+                    self.info_text.append('Exit Code: ' + str(job_dic[job]['exit_code']) + '  (' + str(self.exit_code_dic[job_dic[job]['exit_code']]) + ')')
                 else:
-                    self.info_text.append('The job should be kill by system or LSF, please contact LSF administrator for further debug.')
-            if job_dic[job]['term_owner']:
-                self.info_text.append('Job TERM_OWNER info just like below:')
-                self.info_text.append('    "' + str(job_dic[job]['term_owner']) + '"')
-                self.info_text.append('Please contact LSF administrator for further debug.')
+                    self.info_text.append('Exit Code: ' + str(job_dic[job]['exit_code']))
+
+            if job_dic[job]['term_signal']:
+                if job_dic[job]['term_signal'] in self.term_signal_dic:
+                    self.info_text.append('Term Signal: ' + str(job_dic[job]['term_signal']) + '  (' + str(self.term_signal_dic[job_dic[job]['term_signal']]) + ')')
+                else:
+                    self.info_text.append('Term Signal: ' + str(job_dic[job]['term_signal']))
         else:
             self.info_text.append('<font color="#FF0000">*Error*: Job is not finished!</font>')
 

@@ -8,6 +8,9 @@ from common import common
 
 
 def connect_db_file(db_file, mode='read'):
+    """
+    Connect specified db_file with read/write mode.
+    """
     result = 'passed'
     conn = ''
 
@@ -15,25 +18,29 @@ def connect_db_file(db_file, mode='read'):
         journal_db_file = str(db_file) + '-journal'
 
         if os.path.exists(journal_db_file) and (mode == 'write'):
-            common.print_warning('*Warning*: database file "' + str(db_file) + '" is on another connection, will not connect it.')
+            common.bprint('Database file "' + str(db_file) + '" is on another connection, will not connect it.', level='Warning')
             result = 'locked'
-            return (result, conn)
+            return result, conn
     elif mode == 'read':
         if not os.path.exists(db_file):
-            common.print_error('*Error*: "' + str(db_file) + '" No such database file.')
+            common.bprint('"' + str(db_file) + '" No such database file.', level='Error')
             result = 'failed'
-            return (result, conn)
+            return result, conn
 
     try:
         conn = sqlite3.connect(db_file)
     except Exception as error:
-        common.print_error('*Error*: Failed on connecting database file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on connecting database file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
         result = 'failed'
 
-    return (result, conn)
+    return result, conn
 
 
 def connect_preprocess(db_file, orig_conn, mode='read'):
+    """
+    Extension for connect_db_file(), can use orig_conn instead of repeated connection.
+    """
     if orig_conn == '':
         (result, conn) = connect_db_file(db_file, mode)
     else:
@@ -42,7 +49,7 @@ def connect_preprocess(db_file, orig_conn, mode='read'):
 
     curs = conn.cursor()
 
-    return (result, conn, curs)
+    return result, conn, curs
 
 
 def get_sql_table_list(db_file, orig_conn):
@@ -69,7 +76,8 @@ def get_sql_table_list(db_file, orig_conn):
         if orig_conn == '':
             conn.close()
     except Exception as error:
-        common.print_error('*Error* (get_sql_table_list) : Failed on getting table list on db_file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on getting table list on db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
     return table_list
 
@@ -96,14 +104,15 @@ def get_sql_table_count(db_file, orig_conn, table_name):
         if orig_conn == '':
             conn.close()
     except Exception as error:
-        common.print_error('*Error* (get_sql_table_count) : Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on getting table count fro table "' + str(table_name) + '" on db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
     return count
 
 
-def get_sql_table_key_list(db_file, orig_conn, table_name):
+def get_sql_table_key_list(db_file, orig_conn, table_name, key):
     """
-    Get all of the tables from the specified db file.
+    Get key list from the specified table on specified db file.
     """
     key_list = []
 
@@ -113,15 +122,16 @@ def get_sql_table_key_list(db_file, orig_conn, table_name):
         return key_list
 
     try:
-        command = "SELECT * FROM '" + str(table_name) + "'"
+        command = "SELECT " + str(key) + " FROM '" + str(table_name) + "'"
         curs.execute(command)
-        key_list = [tuple[0] for tuple in curs.description]
+        key_list = [tuple[0] for tuple in curs.fetchall()]
         curs.close()
 
         if orig_conn == '':
             conn.close()
     except Exception as error:
-        common.print_error('*Error* (get_sql_table_key_list) : Failed on getting table key list on db_file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on getting table key list on db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
     return key_list
 
@@ -155,7 +165,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condi
         else:
             for key in key_list:
                 if key not in table_key_list:
-                    common.print_error('*Error* (get_sql_table_data) : "' + str(key) + '": invalid key on specified key list.')
+                    common.bprint('"' + str(key) + '": invalid key on specified key list.', level='Error')
                     return data_dic
 
         for item in all_items:
@@ -172,7 +182,8 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condi
                     else:
                         data_dic[key] = [value, ]
     except Exception as error:
-        common.print_error('*Error* (get_sql_table_data) : Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on getting table info from table "' + str(table_name) + '" of db_file "' + str(db_file) + '".', level='Warning')
+        common.bprint(error, color='yellow', display_method=1, indent=11)
 
     return data_dic
 
@@ -197,7 +208,32 @@ def delete_sql_table_rows(db_file, orig_conn, table_name, row_id, begin_line, en
             if orig_conn == '':
                 conn.close()
     except Exception as error:
-        common.print_error('*Error* (drop_sql_table) : Failed on deleting table "' + str(table_name) + '" lines ' + str(begin_line) + '-' + str(end_line) + ': ' + str(error))
+        common.bprint('Failed on deleting table "' + str(table_name) + '" lines ' + str(begin_line) + '-' + str(end_line) + '.', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
+
+
+def cleanup_sql_table(db_file, orig_conn, table_name, commit=True):
+    """
+    Cleanup table if it exists.
+    """
+    (result, conn, curs) = connect_preprocess(db_file, orig_conn, mode='write')
+
+    if (result == 'failed') or (result == 'locked'):
+        return
+
+    try:
+        command = "DELETE FROM '" + str(table_name) + "'"
+        curs.execute(command)
+        curs.close()
+
+        if commit:
+            conn.commit()
+
+            if orig_conn == '':
+                conn.close()
+    except Exception as error:
+        common.bprint('Failed on cleaning up table "' + str(table_name) + '" from db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
 
 def drop_sql_table(db_file, orig_conn, table_name, commit=True):
@@ -220,7 +256,8 @@ def drop_sql_table(db_file, orig_conn, table_name, commit=True):
             if orig_conn == '':
                 conn.close()
     except Exception as error:
-        common.print_error('*Error* (drop_sql_table) : Failed on drop table "' + str(table_name) + '" from db_file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on drop table "' + str(table_name) + '" from db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
 
 def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
@@ -243,7 +280,8 @@ def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
             if orig_conn == '':
                 conn.close()
     except Exception as error:
-        common.print_error('*Error* (create_sql_table) : Failed on creating table "' + str(table_name) + '" on db file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on creating table "' + str(table_name) + '" on db file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
 
 def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=True):
@@ -256,7 +294,7 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
         return
 
     try:
-        command = "INSERT INTO '" + str(table_name) + "' VALUES " + str(value_string)
+        command = "INSERT OR IGNORE INTO '" + str(table_name) + "' VALUES " + str(value_string)
         curs.execute(command)
         curs.close()
 
@@ -266,10 +304,36 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
             if orig_conn == '':
                 conn.close()
     except Exception as error:
-        common.print_error('*Error* (insert_into_sql_table) : Failed on inserting specified values into table "' + str(table_name) + '" on db file "' + str(db_file) + '": ' + str(error))
+        common.bprint('Failed on inserting specified values into table "' + str(table_name) + '" on db file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
 
 
-def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
+def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', where_condition='', commit=True):
+    """
+    Update sql table with set_condition on where_condition.
+    """
+    if set_condition and where_condition:
+        (result, conn, curs) = connect_preprocess(db_file, orig_conn, mode='write')
+
+        if (result == 'failed') or (result == 'locked'):
+            return
+
+        try:
+            command = "UPDATE '" + str(table_name) + "' " + str(set_condition) + " " + str(where_condition)
+            curs.execute(command)
+            curs.close()
+
+            if commit:
+                conn.commit()
+
+                if orig_conn == '':
+                    conn.close()
+        except Exception as error:
+            common.bprint('Failed on updating table "' + str(table_name) + '" on db file "' + str(db_file) + '".', level='Error')
+            common.bprint(error, color='red', display_method=1, indent=9)
+
+
+def gen_sql_table_key_string(key_list, key_type_list=[]):
     """
     Switch the input key_list into the sqlite table key string.
     """
@@ -284,10 +348,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
             key_type = 'TEXT'
 
         if i == 0:
-            if auto_increment:
-                key_string = str(key_string) + "id INTEGER PRIMARY KEY AUTOINCREMENT, '" + str(key) + "' " + str(key_type) + ","
-            else:
-                key_string = str(key_string) + "'" + str(key) + "' " + str(key_type) + " PRIMARY KEY,"
+            key_string = str(key_string) + "'" + str(key) + "' " + str(key_type) + ","
         elif i == len(key_list)-1:
             key_string = str(key_string) + " '" + str(key) + "' " + str(key_type) + ");"
         else:
@@ -296,7 +357,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[], auto_increment=False):
     return key_string
 
 
-def gen_sql_table_value_string(value_list, auto_increment=False):
+def gen_sql_table_value_string(value_list, autoincrement=False):
     """
     Switch the input value_list into the sqlite table value string.
     """
@@ -309,13 +370,19 @@ def gen_sql_table_value_string(value_list, auto_increment=False):
             value = str(value).replace("'", "''")
 
         if i == 0:
-            if auto_increment:
-                value_string = str(value_string) + "NULL, '" + str(value) + "',"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + 'NULL,'
             else:
                 value_string = str(value_string) + "'" + str(value) + "',"
         elif i == len(value_list)-1:
-            value_string = str(value_string) + " '" + str(value) + "');"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + ' NULL);'
+            else:
+                value_string = str(value_string) + " '" + str(value) + "');"
         else:
-            value_string = str(value_string) + " '" + str(value) + "',"
+            if autoincrement and (value == 'NULL'):
+                value_string = str(value_string) + ' NULL,'
+            else:
+                value_string = str(value_string) + " '" + str(value) + "',"
 
     return value_string

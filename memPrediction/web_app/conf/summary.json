@@ -1,0 +1,47 @@
+{
+    "index_patterns" : [
+        "summary_*"
+    ],
+    "template" : {
+        "settings" : {
+           "number_of_shards": 1,
+           "number_of_replicas": 2
+        },
+        "mappings" : {
+            "properties" : {
+                "user": {
+                    "type": "keyword"
+                },
+                "date": {
+                    "type": "date",
+                    "format": "yyyy-MM-dd"
+                },
+                "excess_mem_quantity" : {
+                    "type": "integer"
+                },
+                "insufficient_mem_quantity": {
+                    "type": "integer"
+                },
+                "job_num": {
+                    "type": "integer"
+                },
+                "job_duration_sum": {
+                    "type": "integer"
+                },
+                "max_mem_sum": {
+                    "type": "integer"
+                },
+                "rusage_mem_sum": {
+                    "type": "integer"
+                },
+                "95_quantile_mem": {
+                    "type": "integer"
+                },
+                "excess_cpu_quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "aliases" : { }
+    }
+}
