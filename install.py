@@ -93,6 +93,9 @@ lmstat_path = "''' + str(lmstat_path) + '''"
 
 # Specify lmstat bsub command, example "bsub -q normal -Is".
 lmstat_bsub_command = ""
+
+# Excluded license servers, format is "27020@lic_server 5280@lic_server".
+excluded_license_servers = ""
 ''')
 
             os.chmod(config_file, 0o777)
