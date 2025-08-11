@@ -68,11 +68,25 @@ class DataCollector:
             return False
 
         ori_df = self.read_file(data_file=data_file)
+        ori_df.drop(columns=['job_info', 'requested_resources'], inplace=True)
         year = self.extract_file_year(file_name=os.path.basename(data_file))
         summary_date = self.extract_file_date(os.path.basename(data_file))
         df = self.extract_job_data(year=year, df=ori_df, summary_date=summary_date)
-        name = f'job_{self.extract_file_date(os.path.basename(data_file))}'
-        ret = self.es_db.save_data(name, df)
+        base_name = f'job_{self.extract_file_date(os.path.basename(data_file))}'
+
+        chunk_size = 100000
+        total = len(df)
+        ret = True
+
+        for i in range(0, total, chunk_size):
+            df_chunk = df.iloc[i:i + chunk_size]
+            chunk_id = i // chunk_size + 1
+            index_name = f"{base_name}_{chunk_id:03d}"
+            success = self.es_db.save_data(index_name, df_chunk)
+            if not success:
+                logger.warning(f"Failed to save chunk {chunk_id} to {index_name}")
+                ret = False
+
         return ret
 
     def save_summary(self, data_file: str) -> bool:

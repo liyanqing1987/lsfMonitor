@@ -30,62 +30,69 @@ def after_request(response):
 class DataProcessor:
     def __init__(self):
         self.es_db = ESDB()
+        self.es_db.create_es_client()
+        self.cache = {}
 
     def get_job_data(self, start_date: str, end_date: str, user: str) -> pd.DataFrame:
-        if self.es_db.es_client is None:
-            self.es_db.create_es_client()
+        key = f'start_{start_date}_end_{end_date}_user_{user}'
+        if key in self.cache:
+            return self.cache.get(key)
 
         s = Search(using=self.es_db.es_client, index='job_*')
         s = s.query("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
         s = s.query("term", user={"value": user})
+
         s = s.extra(size=1000)
-        res = s.execute()
-        data = [hit.to_dict() for hit in res]
+        s = s.sort('-date')
+
+        response = s.execute()
+
+        data = []
+        for hit in response.hits:
+            hit_dict = hit.to_dict()
+            data.append(hit_dict)
+
         df = pd.DataFrame(data)
+        if not df.empty:
+            df.fillna(0, inplace=True)
+
+        self.cache[key] = df
         return df
 
     def get_job(self, start_date: str, end_date: str, job_id: str, user: str) -> pd.DataFrame:
-        if self.es_db.es_client is None:
-            self.es_db.create_es_client()
-
         try:
             job_id = int(job_id)
             s = Search(using=self.es_db.es_client, index='job_*')
-            s = s.query("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
-            s = s.query("term", job_id={"value": job_id})
+            s = s.filter("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
+            s = s.filter("term", job_id={"value": job_id})
             res = s.execute()
             data = [hit.to_dict() for hit in res]
             df = pd.DataFrame(data)
+            serialized_df = df.applymap(self.custom_serializer)
+            serialized_df.dropna(inplace=True)
+            return serialized_df
         except Exception:
-            s = Search(using=self.es_db.es_client, index='job_*')
-            s = s.query("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
-            s = s.query("term", user={"value": user})
-            s = s.extra(size=1000)
-            res = s.execute()
-            data = [hit.to_dict() for hit in res]
-            df = pd.DataFrame(data)
-
-        serialized_df = df.applymap(self.custom_serializer)
-
-        return serialized_df
+            return self.get_job_data(start_date=start_date, end_date=end_date, user=user)
 
     @staticmethod
     def custom_serializer(obj):
         if isinstance(obj, datetime.datetime):
-            return obj.isoformat()  # 处理datetime类型
+            return obj.isoformat()
         elif isinstance(obj, pd.Timestamp):
-            return obj.isoformat()  # 处理Pandas Timestamp类型
+            return obj.isoformat()
         elif isinstance(obj, (dict, list, tuple)):
-            return json.dumps(obj)  # 处理嵌套的字典、列表或元组
+            return json.dumps(obj)
         else:
             return obj
 
     def get_summary_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        if self.es_db.es_client is None:
-            self.es_db.create_es_client()
+        key = f'start_{start_date}_end_{end_date}_summary'
+
+        if key in self.cache:
+            return self.cache.get(key)
 
         s = Search(using=self.es_db.es_client, index='summary_*')
-        s = s.query("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
+        s = s.filter("range", date={"gte": start_date, "lte": end_date, "format": "yyyy-MM-dd"})
         a = A('terms', field='user', size=1000)
         a.metric('insufficient_mem_quantity', 'sum', field='insufficient_mem_quantity')
         a.metric('excess_mem_quantity', 'sum', field='excess_mem_quantity')
@@ -96,7 +103,7 @@ class DataProcessor:
         a.metric('rusage_mem_sum', 'sum', field='rusage_mem_sum')
         a.metric('job_duration_sum', 'sum', field='job_duration_sum')
         s.aggs.bucket('user_aggregation', a)
-        s = s.extra(size=1000)
+        s = s.extra(size=0)
         res = s.execute()
 
         data = []
@@ -121,6 +128,7 @@ class DataProcessor:
         df['max_mem_average'] = df['max_mem_average'].round(3)
         df['rusage_mem_average'] = df['rusage_mem_average'].round(3)
         df = df.sort_values(by='excess_mem_quantity', ascending=False)
+        self.cache[key] = df
 
         return df
 
@@ -189,6 +197,6 @@ def run_flask(host: str, port: int):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=12345)
+    app.run(debug=True, port=11112, host='0.0.0.0')
 
 

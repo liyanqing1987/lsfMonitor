@@ -3,10 +3,10 @@
 TEMPLATES="job
 summary
 "
-ESURL="{ESURL}"
-USER="{USER}"
-PASS="{PASS}"
-CERT="{CERT}"
+ESURL=""
+USER=""
+PASS=""
+CERT=""
 
 function del_template() {
     for template in $TEMPLATES
@@ -20,7 +20,7 @@ function add_template() {
     for template in $TEMPLATES
     do
         echo "add template $template"
-        curl -u $USER:$PASS --cacert $CERT  -XPUT $ESURL/_index_template/$template -H 'Content-Type: application/json'  --data-binary @${template}.json
+        curl -u $USER:$PASS --cacert $CERT -XPUT "${ESURL}_index_template/$template" -H 'Content-Type: application/json' --data-binary "@${template}.json"
     done
 }
 
