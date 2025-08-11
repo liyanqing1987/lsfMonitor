@@ -16,14 +16,23 @@ class GetLicenseInfo():
     Get license information with tool "lmstat".
     Save it into a dictory and return.
     """
-    def __init__(self, specified_server='', specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
-        self.specified_server = specified_server
+    def __init__(self, specified_servers=[], excluded_servers=[], specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
         self.specified_feature = specified_feature
         self.lmstat_path = lmstat_path
         self.bsub_command = bsub_command
 
-        if self.specified_server:
-            os.environ['LM_LICENSE_FILE'] = self.specified_server
+        if specified_servers or excluded_servers:
+            server_list = os.environ['LM_LICENSE_FILE'].split(':')
+
+            for specified_server in specified_servers:
+                if specified_server not in server_list:
+                    server_list.append(specified_server)
+
+            for excluded_server in excluded_servers:
+                if excluded_server in server_list:
+                    server_list.remove(excluded_server)
+
+            os.environ['LM_LICENSE_FILE'] = ':'.join(server_list)
 
     def get_lmstat_command(self, specified_server=''):
         """

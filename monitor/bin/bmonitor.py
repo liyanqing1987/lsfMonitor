@@ -1,20 +1,30 @@
 # -*- coding: utf-8 -*-
 
+# Standard library imports
+import argparse
+import copy
+import datetime
+import getpass
 import os
 import re
 import sys
-import copy
 import time
-import getpass
-import datetime
-import argparse
+from pathlib import Path
+
+# Third-party imports
 import qdarkstyle
+from PyQt5.QtCore import QDate, Qt, QThread
+from PyQt5.QtGui import QBrush, QFont, QIcon
+from PyQt5.QtWidgets import (
+    QAction, QApplication, QComboBox, QDateEdit, QFileDialog, QFrame,
+    QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu,
+    QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
+    QTextEdit, QWidget, qApp
+)
 
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QAction, qApp, QTextEdit, QTabWidget, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QMessageBox, QLineEdit, QComboBox, QHeaderView, QDateEdit, QFileDialog, QMenu
-from PyQt5.QtGui import QIcon, QBrush, QFont
-from PyQt5.QtCore import Qt, QThread, QDate
-
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+# Local imports
+LSFMONITOR_INSTALL_PATH = Path(os.environ['LSFMONITOR_INSTALL_PATH'])
+sys.path.append(str(LSFMONITOR_INSTALL_PATH / 'monitor'))
 from common import common
 from common import common_lsf
 from common import common_license
@@ -31,19 +41,21 @@ if os.path.exists(local_config):
 else:
     from conf import config
 
-os.environ['LSB_NTRIES'] = '3'
-os.environ['PYTHONUNBUFFERED'] = '1'
+# Constants
 VERSION = 'V1.7'
-VERSION_DATE = '2025.04.14'
+VERSION_DATE = '2025.06.08'
+DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
 
-# Solve some unexpected warning message.
-if 'XDG_RUNTIME_DIR' not in os.environ:
-    user = getpass.getuser()
-    os.environ['XDG_RUNTIME_DIR'] = '/tmp/runtime-' + str(user)
+# Environment configuration
+os.environ.update({
+    'LSB_NTRIES': '3',
+    'PYTHONUNBUFFERED': '1',
+    'XDG_RUNTIME_DIR': os.environ.get('XDG_RUNTIME_DIR', str(DEFAULT_RUNTIME_DIR))
+})
 
-    if not os.path.exists(os.environ['XDG_RUNTIME_DIR']):
-        os.makedirs(os.environ['XDG_RUNTIME_DIR'])
-        os.chmod(os.environ['XDG_RUNTIME_DIR'], 0o777)
+# Ensure runtime directory exists
+DEFAULT_RUNTIME_DIR.mkdir(exist_ok=True)
+DEFAULT_RUNTIME_DIR.chmod(0o777)
 
 
 def read_args():
@@ -81,17 +93,14 @@ def read_args():
         if not args.tab:
             args.tab = 'JOB'
 
-    # Set default tab for args.user.
-    if args.user and (not args.tab):
-        args.tab = 'JOBS'
+    # Determine default tab
+    tab_priority = [
+        (args.jobid, 'JOB'),
+        (args.user, 'JOBS'),
+        (args.feature, 'LICENSE')
+    ]
 
-    # Set default tab for args.feature.
-    if args.feature and (not args.tab):
-        args.tab = 'LICENSE'
-
-    # Set default tab.
-    if not args.tab:
-        args.tab = 'JOBS'
+    args.tab = next((tab for condition, tab in tab_priority if condition), 'JOBS')
 
     return args.jobid, args.user, args.feature, args.tab, args.disable_license, args.dark_mode
 
@@ -229,10 +238,15 @@ class MainWindow(QMainWindow):
 
         # Get self.license_dic.
         if ('LM_LICENSE_FILE' in os.environ) and os.environ['LM_LICENSE_FILE']:
+            excluded_license_server_list = []
+
+            if config.excluded_license_servers:
+                excluded_license_server_list = config.excluded_license_servers.split()
+
             if config.lmstat_path:
-                my_get_license_info = common_license.GetLicenseInfo(lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
+                my_get_license_info = common_license.GetLicenseInfo(excluded_servers=excluded_license_server_list, lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
             else:
-                my_get_license_info = common_license.GetLicenseInfo(bsub_command=config.lmstat_bsub_command)
+                my_get_license_info = common_license.GetLicenseInfo(excluded_servers=excluded_license_server_list, bsub_command=config.lmstat_bsub_command)
 
             self.license_dic = my_get_license_info.get_license_info()
 
@@ -3907,7 +3921,7 @@ Please contact with liyanqing1987@163.com with any question."""
         license_server_list.insert(0, 'ALL')
 
         for license_server in license_server_list:
-            self.license_tab_server_combo.addCheckBoxItem(license_server)
+            self.license_tab_server_combo.addCheckBoxItem(license_server, update_width=True)
 
         # Set to checked status for checked_server_list.
         for (i, qBox) in enumerate(self.license_tab_server_combo.checkBoxList):

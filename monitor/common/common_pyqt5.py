@@ -172,7 +172,7 @@ class QComboCheckBox(QComboBox):
         for text in text_list:
             self.addCheckBoxItem(text)
 
-    def addCheckBoxItem(self, text):
+    def addCheckBoxItem(self, text, update_width=False):
         """
         Add QCheckBox format item into QListWidget(QComboCheckBox).
         """
@@ -181,6 +181,9 @@ class QComboCheckBox(QComboBox):
         qBox.stateChanged.connect(self.qBoxStateChanged)
         self.checkBoxList.append(qBox)
         self.qListWidget.setItemWidget(qItem, qBox)
+
+        if update_width:
+            self.updateDropDownBoxWidth(text, qBox)
 
     def qBoxStateChanged(self, checkState):
         """
