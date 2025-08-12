@@ -1635,10 +1635,11 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Ut" item.
             j = j+1
+            ut = 0
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
                 ut = self.bhosts_load_dic[host]['Total']['ut']
-            else:
+            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 ut = self.lsload_dic['ut'][index]
 
