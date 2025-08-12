@@ -1635,7 +1635,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Ut" item.
             j = j+1
-            ut = 0
+            ut = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
                 ut = self.bhosts_load_dic[host]['Total']['ut']
@@ -1730,10 +1730,11 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Swp" item with unit "GB".
             j = j+1
+            swp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
                 swp = self.bhosts_load_dic[host]['Total']['swp']
-            else:
+            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 swp = self.lsload_dic['swp'][index]
 
@@ -1748,10 +1749,11 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Tmp" item with unit "GB".
             j = j+1
+            tmp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
                 tmp = self.bhosts_load_dic[host]['Total']['tmp']
-            else:
+            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
                 index = self.lsload_dic['HOST_NAME'].index(host)
                 tmp = self.lsload_dic['tmp'][index]
 
