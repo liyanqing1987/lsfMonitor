@@ -16,7 +16,7 @@ import qdarkstyle
 from PyQt5.QtCore import QDate, Qt, QThread
 from PyQt5.QtGui import QBrush, QFont, QIcon
 from PyQt5.QtWidgets import (
-    QAction, QApplication, QComboBox, QDateEdit, QFileDialog, QFrame,
+    QAction, QApplication, QDateEdit, QFileDialog, QFrame,
     QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
     QTextEdit, QWidget, qApp
@@ -43,7 +43,7 @@ else:
 
 # Constants
 VERSION = 'V1.7'
-VERSION_DATE = '2025.06.08'
+VERSION_DATE = '2025.09.30'
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
 
 # Environment configuration
@@ -676,8 +676,8 @@ Please contact with liyanqing1987@163.com with any question."""
         job_started_on = self.job_tab_started_on_line.text().strip()
 
         if job_started_on:
-            # Re-set self.load_tab_host_combo.
-            self.set_load_tab_host_combo(checked_host=job_started_on)
+            # Re-set self.load_tab_host_line.
+            self.load_tab_host_line.setText(job_started_on)
 
             # Re-set self.load_tab_begin_date_edit.
             job_start_time = self.job_tab_started_time_line.text().strip()
@@ -1081,7 +1081,7 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_queue_label.setStyleSheet("font-weight: bold;")
         jobs_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.jobs_tab_queue_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
+        self.jobs_tab_queue_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0, enableFilter=True)
         self.set_jobs_tab_queue_combo()
 
         # "Host" item.
@@ -1089,7 +1089,7 @@ Please contact with liyanqing1987@163.com with any question."""
         jobs_tab_started_on_label.setStyleSheet("font-weight: bold;")
         jobs_tab_started_on_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.jobs_tab_host_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
+        self.jobs_tab_host_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0, enableFilter=True)
         self.set_jobs_tab_host_combo()
 
         # "User" item.
@@ -1453,7 +1453,7 @@ Please contact with liyanqing1987@163.com with any question."""
         hosts_tab_queue_label.setStyleSheet("font-weight: bold;")
         hosts_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.hosts_tab_queue_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0)
+        self.hosts_tab_queue_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0, enableFilter=True)
         self.set_hosts_tab_queue_combo()
 
         # "MAX" item.
@@ -1932,7 +1932,7 @@ Please contact with liyanqing1987@163.com with any question."""
             njobs_num = self.hosts_tab_table.item(current_row, 4).text().strip()
 
             if item.column() == 0:
-                self.set_load_tab_host_combo(checked_host=host)
+                self.load_tab_host_line.setText(host)
                 self.update_load_tab_load_info()
                 self.main_tab.setCurrentWidget(self.load_tab)
             elif item.column() == 4:
@@ -2098,9 +2098,11 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_host_label.setStyleSheet("font-weight: bold;")
         load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.load_tab_host_combo = QComboBox(self.load_tab_frame0)
-        self.set_load_tab_host_combo()
-        self.load_tab_host_combo.activated.connect(self.update_load_tab_load_info)
+        self.load_tab_host_line = QLineEdit()
+        self.load_tab_host_line.returnPressed.connect(self.update_load_tab_load_info)
+
+        load_tab_host_line_completer = common_pyqt5.get_completer(self.bhosts_dic['HOST_NAME'])
+        self.load_tab_host_line.setCompleter(load_tab_host_line_completer)
 
         # "Begin_Date" item.
         load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
@@ -2133,7 +2135,7 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_frame0_grid = QGridLayout()
 
         load_tab_frame0_grid.addWidget(load_tab_host_label, 0, 0)
-        load_tab_frame0_grid.addWidget(self.load_tab_host_combo, 0, 1)
+        load_tab_frame0_grid.addWidget(self.load_tab_host_line, 0, 1)
         load_tab_frame0_grid.addWidget(load_tab_begin_date_label, 0, 2)
         load_tab_frame0_grid.addWidget(self.load_tab_begin_date_edit, 0, 3)
         load_tab_frame0_grid.addWidget(load_tab_end_date_label, 0, 4)
@@ -2180,29 +2182,11 @@ Please contact with liyanqing1987@163.com with any question."""
         load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
         self.load_tab_frame2.setLayout(load_tab_frame2_grid)
 
-    def set_load_tab_host_combo(self, checked_host=''):
-        """
-        Set (initialize) self.load_tab_host_combo.
-        """
-        self.load_tab_host_combo.clear()
-
-        self.fresh_lsf_info('bhosts')
-        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-        host_list.insert(0, '')
-
-        for host in host_list:
-            self.load_tab_host_combo.addItem(host)
-
-        # Set to checked status for checked_host.
-        for i in range(self.load_tab_host_combo.count()):
-            if self.load_tab_host_combo.itemText(i) == checked_host:
-                self.load_tab_host_combo.setCurrentIndex(i)
-
     def update_load_tab_load_info(self):
         """
         Update self.load_tab_frame1 (ut information) and self.load_tab_frame2 (memory information).
         """
-        specified_host = self.load_tab_host_combo.currentText().strip()
+        specified_host = self.load_tab_host_line.text().strip()
 
         if not specified_host:
             warning_message = 'No host is specified on LOAD tab.'
@@ -3160,7 +3144,7 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_queue_label.setStyleSheet("font-weight: bold;")
         utilization_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
+        self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_queue_combo()
         self.utilization_tab_queue_combo.currentTextChanged.connect(self.set_utilization_tab_host_combo)
 
@@ -3169,7 +3153,7 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_host_label.setStyleSheet("font-weight: bold;")
         utilization_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
-        self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
+        self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_host_combo()
 
         # "Resource" item.
@@ -3269,24 +3253,29 @@ Please contact with liyanqing1987@163.com with any question."""
         host_list = []
         selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
 
-        if 'ALL' in selected_queue_dic.values():
-            self.fresh_lsf_info('bhosts')
-            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
-        else:
-            self.fresh_lsf_info('queue_host')
+        self.fresh_lsf_info('bhosts')
+        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        selected_host_list = []
 
-            for selected_queue in selected_queue_dic.values():
-                selected_queue_host_list = self.queue_host_dic[selected_queue]
+        if selected_queue_dic:
+            if 'ALL' in selected_queue_dic.values():
+                selected_host_list = copy.deepcopy(host_list)
+            else:
+                self.fresh_lsf_info('queue_host')
 
-                for host in selected_queue_host_list:
-                    if host not in host_list:
-                        host_list.append(host)
+                for selected_queue in selected_queue_dic.values():
+                    selected_host_list += self.queue_host_dic[selected_queue]
+
+                    for host in selected_host_list:
+                        if host not in host_list:
+                            host_list.append(host)
 
         for host in host_list:
             self.utilization_tab_host_combo.addCheckBoxItem(host)
 
         # Set all hosts as checked.
-        self.utilization_tab_host_combo.selectAllItems()
+        selected_host_list = list(set(selected_host_list))
+        self.utilization_tab_host_combo.setItemsChecked(selected_host_list)
 
         time.sleep(0.01)
         my_show_message.terminate()

@@ -1,12 +1,14 @@
 import re
 import math
 import datetime
+from typing import Optional, Callable
+
 import screeninfo
 
-from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QCompleter
+from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QCompleter, QListView
 from PyQt5.QtGui import QTextCursor, QFont
 from PyQt5.Qt import QFontMetrics
-from PyQt5.QtCore import Qt, QEvent, QObject
+from PyQt5.QtCore import Qt, QEvent, QObject, QModelIndex, QTimer
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5 import NavigationToolbar2QT
@@ -123,35 +125,74 @@ class ComboBoxEventFilter(QObject):
         return super().eventFilter(obj, event)
 
 
+class CheckListView(QListView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setSelectionBehavior(QListView.SelectRows)
+        self.setEditTriggers(QListView.NoEditTriggers)
+        self._on_toggle_request: Optional[Callable[[QModelIndex], None]] = None
+
+    def setToggleHandler(self, fn: Callable[[QModelIndex], None]):
+        self._on_toggle_request = fn
+
+    def mousePressEvent(self, event):
+        idx = self.indexAt(event.pos())
+
+        if idx.isValid() and self._on_toggle_request:
+            self._on_toggle_request(idx)
+
+        self.setCurrentIndex(idx)
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Space, Qt.Key_Return, Qt.Key_Enter):
+            idx = self.currentIndex()
+
+            if idx.isValid() and self._on_toggle_request:
+                self._on_toggle_request(idx)
+
+            return
+        elif e.key() == Qt.Key_Escape:
+            self.parent().hide()
+            return
+
+        super().keyPressEvent(e)
+
+
 class QComboCheckBox(QComboBox):
     """
     QComboCheckBox is a QComboBox with checkbox.
     """
-    def __init__(self, parent):
+    def __init__(self, parent=None, enableFilter=False):
         super(QComboCheckBox, self).__init__(parent)
 
-        # self.qLineWidget is used to load QCheckBox items.
+        self.enableFilter = bool(enableFilter)
+        self._hasFilterItem = False
+        self._filterLineEdit = None
+        self._filterTextCache = ""
+
         self.qListWidget = QListWidget()
         self.setModel(self.qListWidget.model())
         self.setView(self.qListWidget)
 
-        # self.qLineEdit is used to show selected items on QLineEdit.
         self.qLineEdit = QLineEdit()
         self.qLineEdit.textChanged.connect(self.validQLineEditValue)
         self.qLineEdit.setReadOnly(True)
         self.setLineEdit(self.qLineEdit)
 
-        # self.checkBoxList is used to save QCheckBox items.
         self.checkBoxList = []
 
-        # Adjust width for new item.
         self.dropDownBoxWidthPixel = self.width()
 
         self.eventFilter = ComboBoxEventFilter(self)
         self.view().viewport().installEventFilter(self.eventFilter)
 
+        self.updateDropDownBoxHeight()
+
+        if self.enableFilter:
+            self._ensureFilterItem()
+
     def hidePopup(self):
-        if self.eventFilter.droppedDown:
+        if getattr(self.eventFilter, "droppedDown", False):
             return
         else:
             return super().hidePopup()
@@ -176,14 +217,21 @@ class QComboCheckBox(QComboBox):
         """
         Add QCheckBox format item into QListWidget(QComboCheckBox).
         """
+        if self.enableFilter:
+            self._ensureFilterItem()
+
         qItem = QListWidgetItem(self.qListWidget)
         qBox = MyCheckBox(text)
         qBox.stateChanged.connect(self.qBoxStateChanged)
         self.checkBoxList.append(qBox)
         self.qListWidget.setItemWidget(qItem, qBox)
+        qItem.setSizeHint(qBox.sizeHint())
 
         if update_width:
             self.updateDropDownBoxWidth(text, qBox)
+
+        if self.enableFilter:
+            self._applyFilter(self._filterTextCache)
 
     def qBoxStateChanged(self, checkState):
         """
@@ -230,8 +278,13 @@ class QComboCheckBox(QComboBox):
         Update self.dropDownBoxWidthPixel.
         """
         fm = QFontMetrics(QFont())
-        textPixel = fm.width(text)
-        indicatorPixel = int(qBox.iconSize().width() * 1.4)
+
+        try:
+            textPixel = fm.horizontalAdvance(text)
+        except Exception:
+            textPixel = fm.width(text)
+
+        indicatorPixel = int(qBox.iconSize().width() * 1.4) or 24
 
         if textPixel > self.dropDownBoxWidthPixel:
             self.dropDownBoxWidthPixel = textPixel
@@ -281,7 +334,112 @@ class QComboCheckBox(QComboBox):
         Clear all items.
         """
         super().clear()
-        self.checkBoxList = []
+
+        self.qListWidget.clear()
+        self.checkBoxList.clear()
+
+        self._hasFilterItem = False
+        self._filterLineEdit = None
+        self._filterTextCache = ""
+
+        if getattr(self, "enableFilter", False):
+            self._ensureFilterItem()
+
+        self.updateLineEdit()
+
+    def setEnableFilter(self, enabled: bool):
+        enabled = bool(enabled)
+
+        if enabled == self.enableFilter:
+            return
+
+        self.enableFilter = enabled
+
+        if self.enableFilter:
+            self._ensureFilterItem()
+            self._applyFilter(self._filterTextCache)
+        else:
+            if self._hasFilterItem and self.qListWidget.count() > 0:
+                firstItem = self.qListWidget.item(0)
+                w = self.qListWidget.itemWidget(firstItem)
+
+                if isinstance(w, QLineEdit):
+                    self.qListWidget.takeItem(0)
+
+            self._hasFilterItem = False
+            self._filterLineEdit = None
+            self._filterTextCache = ""
+
+            for row in range(self.qListWidget.count()):
+                item = self.qListWidget.item(row)
+                item.setHidden(False)
+
+    def _ensureFilterItem(self):
+        if self._hasFilterItem:
+            return
+
+        filterItem = QListWidgetItem(self.qListWidget)
+        self.qListWidget.insertItem(0, filterItem)
+        self._filterLineEdit = QLineEdit()
+        self._filterLineEdit.setPlaceholderText("Filter…")
+        self._filterLineEdit.installEventFilter(self.eventFilter)
+        self._filterLineEdit.textChanged.connect(self._applyFilter)
+        self.qListWidget.setItemWidget(filterItem, self._filterLineEdit)
+        filterItem.setSizeHint(self._filterLineEdit.sizeHint())
+        self._hasFilterItem = True
+
+        if self._filterTextCache:
+            self._filterLineEdit.setText(self._filterTextCache)
+
+    def _applyFilter(self, text: str):
+        self._filterTextCache = text or ""
+        patt = self._filterTextCache.lower().strip()
+
+        for i, qBox in enumerate(self.checkBoxList):
+            row = i + 1 if self.enableFilter else i
+            item = self.qListWidget.item(row)
+
+            if not patt:
+                item.setHidden(False)
+            else:
+                item.setHidden(patt not in qBox.text().lower())
+
+    def showPopup(self):
+        if getattr(self, "enableFilter", False) and getattr(self, "_filterLineEdit", None):
+            self._filterLineEdit.blockSignals(True)
+            self._filterLineEdit.clear()
+            self._filterLineEdit.blockSignals(False)
+            self._filterTextCache = ""
+            start_row = 1 if self.enableFilter and getattr(self, "_hasFilterItem", False) else 0
+
+            for row in range(start_row, self.qListWidget.count()):
+                it = self.qListWidget.item(row)
+
+                if it is not None and it.isHidden():
+                    it.setHidden(False)
+
+            m = self.qListWidget.model()
+
+            if hasattr(m, "layoutChanged"):
+                m.layoutChanged.emit()
+
+            self.qListWidget.updateGeometry()
+            self.qListWidget.viewport().update()
+
+        super().showPopup()
+
+        if getattr(self, "enableFilter", False) and getattr(self, "_filterLineEdit", None):
+            QTimer.singleShot(0, self._filterLineEdit.setFocus)
+
+    def setItemsChecked(self, items, checked=True):
+        if isinstance(items, str):
+            items = [items]
+
+        for qBox in self.checkBoxList:
+            if qBox.text() in items:
+                qBox.setChecked(bool(checked))
+
+        self.updateLineEdit()
 
 
 class FigureCanvasQTAgg(FigureCanvasQTAgg):
