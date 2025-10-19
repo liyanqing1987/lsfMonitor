@@ -42,9 +42,10 @@ else:
     from conf import config
 
 # Constants
-VERSION = 'V1.7'
-VERSION_DATE = '2025.09.30'
+VERSION = 'V1.8'
+VERSION_DATE = '2025.10.17'
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
+USER = getpass.getuser()
 
 # Environment configuration
 os.environ.update({
@@ -117,13 +118,19 @@ class MainWindow(QMainWindow):
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         # Check cluster info.
-        cluster = self.check_cluster_info()
+        (self.tool, self.cluster) = self.check_cluster_info()
 
         # Set db_path.
         self.db_path = str(config.db_path) + '/monitor'
 
-        if cluster and os.path.exists(str(config.db_path) + '/' + str(cluster)):
-            self.db_path = str(config.db_path) + '/' + str(cluster)
+        if self.cluster and os.path.exists(str(config.db_path) + '/' + str(self.cluster)):
+            self.db_path = str(config.db_path) + '/' + str(self.cluster)
+
+        # Get license administrators list.
+        self.license_administrator_list = []
+
+        if config.license_administrators:
+            self.license_administrator_list = config.license_administrators.split()
 
         # Init variables.
         self.specified_job = specified_job
@@ -190,7 +197,7 @@ class MainWindow(QMainWindow):
         common.bprint('My master name is "' + str(master) + '"', date_format='%Y-%m-%d %H:%M:%S')
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
-        return cluster
+        return tool, cluster
 
     def fresh_lsf_info(self, lsf_info):
         """
@@ -213,6 +220,9 @@ class MainWindow(QMainWindow):
 
     def get_license_dic(self):
         if self.disable_license:
+            return
+
+        if ('all' not in self.license_administrator_list) and ('ALL' not in self.license_administrator_list) and (USER not in self.license_administrator_list):
             return
 
         # Setup default license update waiting time.
@@ -285,7 +295,9 @@ class MainWindow(QMainWindow):
         self.main_tab.addTab(self.users_tab, 'USERS')
         self.main_tab.addTab(self.queues_tab, 'QUEUES')
         self.main_tab.addTab(self.utilization_tab, 'UTILIZATION')
-        self.main_tab.addTab(self.license_tab, 'LICENSE')
+
+        if ('all' in self.license_administrator_list) or ('ALL' in self.license_administrator_list) or (USER in self.license_administrator_list):
+            self.main_tab.addTab(self.license_tab, 'LICENSE')
 
         # Generate the sub-tabs
         self.gen_job_tab()
@@ -301,7 +313,7 @@ class MainWindow(QMainWindow):
 
         # Show main window
         common_pyqt5.auto_resize(self, 1300, 610)
-        self.setWindowTitle('lsfMonitor ' + str(VERSION))
+        self.setWindowTitle('lsfMonitor ' + str(VERSION) + '    (' + str(self.tool) + ' - ' + str(self.cluster) + ')')
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
         common_pyqt5.center_window(self)
 
@@ -2840,6 +2852,14 @@ Please contact with liyanqing1987@163.com with any question."""
             self.queues_tab_table.setItem(i, j, item)
 
     def gen_queues_tab_frame0(self):
+        # "Queue" item.
+        queues_tab_queue_label = QLabel('Queue', self.queues_tab_frame0)
+        queues_tab_queue_label.setStyleSheet("font-weight: bold;")
+        queues_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.queues_tab_queue_combo = common_pyqt5.QComboCheckBox(self.queues_tab_frame0, enableFilter=True)
+        self.set_queues_tab_queue_combo()
+
         # "Begin_Date" item.
         queues_tab_begin_date_label = QLabel('Begin_Date', self.queues_tab_frame0)
         queues_tab_begin_date_label.setStyleSheet("font-weight: bold;")
@@ -2862,44 +2882,50 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_end_date_edit.setCalendarPopup(True)
         self.queues_tab_end_date_edit.setDate(QDate.currentDate())
 
+        # "Check" button.
+        queues_tab_check_button = QPushButton('Check', self.queues_tab_frame0)
+        queues_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
+        queues_tab_check_button.clicked.connect(self.update_queues_tab_info)
+
         # self.queues_tab_frame0 - Grid
         queues_tab_frame0_grid = QGridLayout()
 
-        queues_tab_frame0_grid.addWidget(queues_tab_begin_date_label, 0, 0)
-        queues_tab_frame0_grid.addWidget(self.queues_tab_begin_date_edit, 0, 1)
-        queues_tab_frame0_grid.addWidget(queues_tab_end_date_label, 0, 2)
-        queues_tab_frame0_grid.addWidget(self.queues_tab_end_date_edit, 0, 3)
+        queues_tab_frame0_grid.addWidget(queues_tab_queue_label, 0, 0)
+        queues_tab_frame0_grid.addWidget(self.queues_tab_queue_combo, 0, 1)
+        queues_tab_frame0_grid.addWidget(queues_tab_begin_date_label, 0, 2)
+        queues_tab_frame0_grid.addWidget(self.queues_tab_begin_date_edit, 0, 3)
+        queues_tab_frame0_grid.addWidget(queues_tab_end_date_label, 0, 4)
+        queues_tab_frame0_grid.addWidget(self.queues_tab_end_date_edit, 0, 5)
+        queues_tab_frame0_grid.addWidget(queues_tab_check_button, 0, 6)
 
         queues_tab_frame0_grid.setColumnStretch(0, 1)
         queues_tab_frame0_grid.setColumnStretch(1, 1)
         queues_tab_frame0_grid.setColumnStretch(2, 1)
         queues_tab_frame0_grid.setColumnStretch(3, 1)
+        queues_tab_frame0_grid.setColumnStretch(4, 1)
+        queues_tab_frame0_grid.setColumnStretch(5, 1)
+        queues_tab_frame0_grid.setColumnStretch(6, 1)
 
         self.queues_tab_frame0.setLayout(queues_tab_frame0_grid)
 
-    def gen_queues_tab_frame1(self):
-        # self.queues_tab_frame1
-        self.queues_tab_num_canvas = common_pyqt5.FigureCanvasQTAgg()
-        self.queues_tab_num_toolbar = common_pyqt5.NavigationToolbar2QT(self.queues_tab_num_canvas, self)
+    def set_queues_tab_queue_combo(self, checked_queue_list=['ALL',]):
+        """
+        Set (initialize) self.queues_tab_queue_combo.
+        """
+        self.queues_tab_queue_combo.clear()
+        self.fresh_lsf_info('bqueues')
 
-        if self.dark_mode:
-            fig = self.queues_tab_num_canvas.figure
-            fig.set_facecolor('#19232d')
+        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+        queue_list.sort()
+        queue_list.insert(0, 'ALL')
 
-        # self.queues_tab_frame1 - Grid
-        queues_tab_frame1_grid = QGridLayout()
-        queues_tab_frame1_grid.addWidget(self.queues_tab_num_toolbar, 0, 0)
-        queues_tab_frame1_grid.addWidget(self.queues_tab_num_canvas, 1, 0)
-        self.queues_tab_frame1.setLayout(queues_tab_frame1_grid)
+        for queue in queue_list:
+            self.queues_tab_queue_combo.addCheckBoxItem(queue)
 
-    def gen_queues_tab_frame2(self):
-        # self.queues_tab_frame2
-        self.queues_tab_text = QTextEdit(self.queues_tab_frame2)
-
-        # self.queues_tab_frame2 - Grid
-        queues_tab_frame2_grid = QGridLayout()
-        queues_tab_frame2_grid.addWidget(self.queues_tab_text, 0, 0)
-        self.queues_tab_frame2.setLayout(queues_tab_frame2_grid)
+        # Set to checked status for checked_queue_list.
+        for (i, qBox) in enumerate(self.queues_tab_queue_combo.checkBoxList):
+            if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
+                self.queues_tab_queue_combo.checkBoxList[i].setChecked(True)
 
     def queues_tab_check_click(self, item=None):
         """
@@ -2916,8 +2942,8 @@ Please contact with liyanqing1987@163.com with any question."""
             if item.column() == 0:
                 common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
 
-                self.update_queues_tab_frame1(queue)
-                self.update_queues_tab_frame2(queue)
+                self.set_queues_tab_queue_combo(checked_queue_list=[queue])
+                self.update_queues_tab_info()
             elif item.column() == 2:
                 if (pend_num != '') and (int(pend_num) > 0):
                     self.set_jobs_tab_status_combo(checked_status_list=['PEND',])
@@ -2938,7 +2964,22 @@ Please contact with liyanqing1987@163.com with any question."""
             # Update queue information first.
             self.gen_queues_tab_table()
 
-    def update_queues_tab_frame1(self, queue):
+    def gen_queues_tab_frame1(self):
+        # self.queues_tab_frame1
+        self.queues_tab_num_canvas = common_pyqt5.FigureCanvasQTAgg()
+        self.queues_tab_num_toolbar = common_pyqt5.NavigationToolbar2QT(self.queues_tab_num_canvas, self)
+
+        if self.dark_mode:
+            fig = self.queues_tab_num_canvas.figure
+            fig.set_facecolor('#19232d')
+
+        # self.queues_tab_frame1 - Grid
+        queues_tab_frame1_grid = QGridLayout()
+        queues_tab_frame1_grid.addWidget(self.queues_tab_num_toolbar, 0, 0)
+        queues_tab_frame1_grid.addWidget(self.queues_tab_num_canvas, 1, 0)
+        self.queues_tab_frame1.setLayout(queues_tab_frame1_grid)
+
+    def update_queues_tab_frame1(self):
         """
         Draw queue (PEND/RUN) job number current job on self.queues_tab_frame1.
         """
@@ -2946,112 +2987,144 @@ Please contact with liyanqing1987@163.com with any question."""
         fig.clear()
         self.queues_tab_num_canvas.draw()
 
-        (date_list, total_list, pend_list, run_list) = self.get_queue_job_num_list(queue)
+        queue_list = list(self.queues_tab_queue_combo.selectedItems().values())
+        queue_date_dic = self.get_queue_job_num_list(queue_list)
 
-        if date_list and pend_list and run_list:
-            for i in range(len(date_list)):
-                if self.enable_queue_detail:
-                    date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d_%H%M%S')
-                else:
-                    date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d')
+        # Get sorted date list.
+        date_list = list(queue_date_dic.keys())
+        date_list.sort()
 
-            self.draw_queues_tab_num_curve(fig, queue, date_list, total_list, pend_list, run_list)
+        # Get total_list, pend_list, run_list.
+        total_list = []
+        pend_list = []
+        run_list = []
 
-    def update_queues_tab_frame2(self, queue):
+        for i, date in enumerate(date_list):
+            # Switch date format.
+            if self.enable_queue_detail:
+                date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d_%H%M%S')
+            else:
+                date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d')
+
+            total_num = sum(queue_date_dic[date][queue]['total'] for queue in queue_date_dic[date])
+            total_list.append(total_num)
+            pend_num = sum(queue_date_dic[date][queue]['pend'] for queue in queue_date_dic[date])
+            pend_list.append(pend_num)
+            run_num = sum(queue_date_dic[date][queue]['run'] for queue in queue_date_dic[date])
+            run_list.append(run_num)
+
+        self.draw_queues_tab_num_curve(fig, queue_list, date_list, total_list, pend_list, run_list)
+
+    def gen_queues_tab_frame2(self):
+        # self.queues_tab_frame2
+        self.queues_tab_text = QTextEdit(self.queues_tab_frame2)
+
+        # self.queues_tab_frame2 - Grid
+        queues_tab_frame2_grid = QGridLayout()
+        queues_tab_frame2_grid.addWidget(self.queues_tab_text, 0, 0)
+        self.queues_tab_frame2.setLayout(queues_tab_frame2_grid)
+
+    def update_queues_tab_frame2(self):
         """
         Show queue detailed informations on self.queues_tab_text.
         """
         self.queues_tab_text.clear()
+        selected_queue_dic = self.queues_tab_queue_combo.selectedItems()
 
-        command = 'bqueues -l ' + str(queue)
-        (return_code, stdout, stderr) = common.run_command(command)
+        if selected_queue_dic:
+            selected_queues = ' '.join(selected_queue_dic.values())
+            command = 'bqueues -l ' + str(selected_queues)
+            (return_code, stdout, stderr) = common.run_command(command)
 
-        for (i, line) in enumerate(str(stdout, 'utf-8').split('\n')):
-            line = line.strip()
+            for (i, line) in enumerate(str(stdout, 'utf-8').split('\n')):
+                line = line.strip()
 
-            if (not line) and (i == 0):
-                continue
+                if (not line) and (i == 0):
+                    continue
 
-            self.queues_tab_text.insertPlainText(str(line) + '\n')
+                self.queues_tab_text.insertPlainText(str(line) + '\n')
 
-        common_pyqt5.text_edit_visible_position(self.queues_tab_text, 'Start')
+            common_pyqt5.text_edit_visible_position(self.queues_tab_text, 'Start')
 
-    def get_queue_job_num_list(self, queue):
+    def update_queues_tab_info(self):
+        """
+        Update self.queues_tab_frame1 and self.queues_tab_frame2.
+        """
+        self.update_queues_tab_frame1()
+        self.update_queues_tab_frame2()
+
+    def get_queue_job_num_list(self, queue_list):
         """
         Draw (PEND/RUN) job number curve for specified queueu.
         """
-        date_list = []
-        total_list = []
-        pend_list = []
-        run_list = []
+        queue_date_dic = {}
         queue_db_file = str(self.db_path) + '/queue.db'
 
         if not os.path.exists(queue_db_file):
-            common.bprint('Queue pend/run job number information is missing for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint('Queue database file "' + str(queue_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (queue_db_file_connect_result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file)
 
             if queue_db_file_connect_result == 'failed':
                 common.bprint('Failed on connecting queue database file "' + str(self.queue_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
-                table_name = 'queue_' + str(queue)
-                begin_date = self.queues_tab_begin_date_edit.date().toString(Qt.ISODate)
-                begin_time = str(begin_date) + ' 00:00:00'
-                begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
-                end_date = self.queues_tab_end_date_edit.date().toString(Qt.ISODate)
-                end_time = str(end_date) + ' 23:59:59'
-                end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
-                select_condition = 'WHERE sample_second>=' + str(begin_second) + ' AND sample_second<=' + str(end_second)
-                data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'TOTAL', 'PEND', 'RUN'], select_condition)
+                for queue in queue_list:
+                    table_name = 'queue_' + str(queue)
+                    begin_date = self.queues_tab_begin_date_edit.date().toString(Qt.ISODate)
+                    begin_time = str(begin_date) + ' 00:00:00'
+                    begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
+                    end_date = self.queues_tab_end_date_edit.date().toString(Qt.ISODate)
+                    end_time = str(end_date) + ' 23:59:59'
+                    end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
+                    select_condition = 'WHERE sample_second>=' + str(begin_second) + ' AND sample_second<=' + str(end_second)
+                    data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'TOTAL', 'PEND', 'RUN'], select_condition)
 
-                if not data_dic:
-                    common.bprint('Queue pend/run job number information is empty for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-                else:
-                    if self.enable_queue_detail:
-                        date_list = data_dic['sample_time']
-                        total_list = [int(i) for i in data_dic['TOTAL']]
-                        pend_list = [int(i) for i in data_dic['PEND']]
-                        run_list = [int(i) for i in data_dic['RUN']]
+                    if not data_dic:
+                        common.bprint('Queue pend/run job number information is empty for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                     else:
-                        tmp_total_list = []
-                        tmp_pend_list = []
-                        tmp_run_list = []
+                        if self.enable_queue_detail:
+                            for i, sample_time in enumerate(data_dic['sample_time']):
+                                queue_date_dic.setdefault(sample_time, {})
+                                queue_date_dic[sample_time].setdefault(queue, {'total': [], 'pend': [], 'run': []})
+                                queue_date_dic[sample_time][queue]['total'].append(int(data_dic['TOTAL'][i]))
+                                queue_date_dic[sample_time][queue]['pend'].append(int(data_dic['PEND'][i]))
+                                queue_date_dic[sample_time][queue]['run'].append(int(data_dic['RUN'][i]))
+                        else:
+                            tmp_date_dic = {}
 
-                        for i in range(len(data_dic['sample_time'])):
-                            sample_time = data_dic['sample_time'][i]
-                            date = re.sub(r'_.*', '', sample_time)
-                            total_num = data_dic['TOTAL'][i]
-                            pend_num = data_dic['PEND'][i]
-                            run_num = data_dic['RUN'][i]
+                            for i in range(len(data_dic['sample_time'])):
+                                sample_time = data_dic['sample_time'][i]
+                                date = re.sub(r'_.*', '', sample_time)
+                                tmp_date_dic.setdefault(date, {'total': [], 'pend': [], 'run': []})
+                                tmp_date_dic[date]['total'].append(int(data_dic['TOTAL'][i]))
+                                tmp_date_dic[date]['pend'].append(int(data_dic['PEND'][i]))
+                                tmp_date_dic[date]['run'].append(int(data_dic['RUN'][i]))
 
-                            if (i != 0) and ((i == len(data_dic['sample_time'])-1) or (date not in date_list)):
-                                total_avg = int(sum(tmp_total_list)/len(tmp_total_list))
-                                total_list.append(total_avg)
-                                pend_avg = int(sum(tmp_pend_list)/len(tmp_pend_list))
-                                pend_list.append(pend_avg)
-                                run_avg = int(sum(tmp_run_list)/len(tmp_run_list))
-                                run_list.append(run_avg)
+                            for date in tmp_date_dic.keys():
+                                queue_date_dic.setdefault(date, {})
+                                queue_date_dic[date].setdefault(queue, {'total': [], 'pend': [], 'run': []})
+                                queue_date_dic[date][queue]['total'] = int(sum(tmp_date_dic[date]['total'])/len(tmp_date_dic[date]['total']))
+                                queue_date_dic[date][queue]['pend'] = int(sum(tmp_date_dic[date]['pend'])/len(tmp_date_dic[date]['pend']))
+                                queue_date_dic[date][queue]['run'] = int(sum(tmp_date_dic[date]['run'])/len(tmp_date_dic[date]['run']))
 
-                            if date not in date_list:
-                                date_list.append(date)
-                                tmp_total_list = []
-                                tmp_pend_list = []
-                                tmp_run_list = []
+                queue_db_conn.close()
 
-                            tmp_total_list.append(int(total_num))
-                            tmp_pend_list.append(int(pend_num))
-                            tmp_run_list.append(int(run_num))
+        return queue_date_dic
 
-                    queue_db_conn.close()
-
-        return date_list, total_list, pend_list, run_list
-
-    def draw_queues_tab_num_curve(self, fig, queue, date_list, total_list, pend_list, run_list):
+    def draw_queues_tab_num_curve(self, fig, queue_list, date_list, total_list, pend_list, run_list):
         """
-        Draw RUN/PEND job num curve for specified queue.
+        Draw RUN/PEND job num curve for specified queue(s).
         """
         fig.subplots_adjust(bottom=0.25)
         axes = fig.add_subplot(111)
+
+        # Get queue string.
+        if len(queue_list) == 0:
+            queue_string = ''
+        elif len(queue_list) == 1:
+            queue_string = queue_list[0]
+        else:
+            queue_string = str(queue_list[0]) + '...'
 
         if self.dark_mode:
             axes.set_facecolor('#19232d')
@@ -3060,7 +3133,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 spine.set_color('white')
 
             axes.tick_params(axis='both', colors='white')
-            axes.set_title('Trends of RUN/PEND number for queue "' + str(queue) + '"', color='white')
+            axes.set_title('Trends of RUN/PEND number for queues "' + str(queue_string) + '"', color='white')
 
             if self.enable_queue_detail:
                 axes.set_xlabel('Sample Time', color='white')
@@ -3069,7 +3142,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             axes.set_ylabel('Num', color='white')
         else:
-            axes.set_title('Trends of RUN/PEND number for queue "' + str(queue) + '"')
+            axes.set_title('Trends of RUN/PEND number for queues "' + str(queue_string) + '"')
 
             if self.enable_queue_detail:
                 axes.set_xlabel('Sample Time')

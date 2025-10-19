@@ -88,6 +88,9 @@ def gen_config_file():
                 CF.write('''# Specify the database directory.
 db_path = "''' + str(db_path) + '''"
 
+# Specify EDA license administrators.
+license_administrators = "all"
+
 # Specify lmstat path, example "/eda/synopsys/scl/2021.03/linux64/bin/lmstat".
 lmstat_path = "''' + str(lmstat_path) + '''"
 
