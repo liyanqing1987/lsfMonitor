@@ -3082,30 +3082,25 @@ Please contact with liyanqing1987@163.com with any question."""
                     if not data_dic:
                         common.bprint('Queue pend/run job number information is empty for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                     else:
-                        if self.enable_queue_detail:
-                            for i, sample_time in enumerate(data_dic['sample_time']):
-                                queue_date_dic.setdefault(sample_time, {})
-                                queue_date_dic[sample_time].setdefault(queue, {'total': [], 'pend': [], 'run': []})
-                                queue_date_dic[sample_time][queue]['total'].append(int(data_dic['TOTAL'][i]))
-                                queue_date_dic[sample_time][queue]['pend'].append(int(data_dic['PEND'][i]))
-                                queue_date_dic[sample_time][queue]['run'].append(int(data_dic['RUN'][i]))
-                        else:
-                            tmp_date_dic = {}
+                        tmp_date_dic = {}
 
-                            for i in range(len(data_dic['sample_time'])):
-                                sample_time = data_dic['sample_time'][i]
+                        for i, sample_time in enumerate(data_dic['sample_time']):
+                            if self.enable_queue_detail:
+                                date = sample_time
+                            else:
                                 date = re.sub(r'_.*', '', sample_time)
-                                tmp_date_dic.setdefault(date, {'total': [], 'pend': [], 'run': []})
-                                tmp_date_dic[date]['total'].append(int(data_dic['TOTAL'][i]))
-                                tmp_date_dic[date]['pend'].append(int(data_dic['PEND'][i]))
-                                tmp_date_dic[date]['run'].append(int(data_dic['RUN'][i]))
 
-                            for date in tmp_date_dic.keys():
-                                queue_date_dic.setdefault(date, {})
-                                queue_date_dic[date].setdefault(queue, {'total': [], 'pend': [], 'run': []})
-                                queue_date_dic[date][queue]['total'] = int(sum(tmp_date_dic[date]['total'])/len(tmp_date_dic[date]['total']))
-                                queue_date_dic[date][queue]['pend'] = int(sum(tmp_date_dic[date]['pend'])/len(tmp_date_dic[date]['pend']))
-                                queue_date_dic[date][queue]['run'] = int(sum(tmp_date_dic[date]['run'])/len(tmp_date_dic[date]['run']))
+                            tmp_date_dic.setdefault(date, {'total': [], 'pend': [], 'run': []})
+                            tmp_date_dic[date]['total'].append(int(data_dic['TOTAL'][i]))
+                            tmp_date_dic[date]['pend'].append(int(data_dic['PEND'][i]))
+                            tmp_date_dic[date]['run'].append(int(data_dic['RUN'][i]))
+
+                        for date in tmp_date_dic.keys():
+                            queue_date_dic.setdefault(date, {})
+                            queue_date_dic[date].setdefault(queue, {'total': [], 'pend': [], 'run': []})
+                            queue_date_dic[date][queue]['total'] = int(sum(tmp_date_dic[date]['total'])/len(tmp_date_dic[date]['total']))
+                            queue_date_dic[date][queue]['pend'] = int(sum(tmp_date_dic[date]['pend'])/len(tmp_date_dic[date]['pend']))
+                            queue_date_dic[date][queue]['run'] = int(sum(tmp_date_dic[date]['run'])/len(tmp_date_dic[date]['run']))
 
                 queue_db_conn.close()
 
