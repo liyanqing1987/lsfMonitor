@@ -43,7 +43,7 @@ else:
 
 # Constants
 VERSION = 'V1.8'
-VERSION_DATE = '2025.10.17'
+VERSION_DATE = '2025.11.04'
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
 USER = getpass.getuser()
 
