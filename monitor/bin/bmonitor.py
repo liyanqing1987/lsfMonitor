@@ -15,12 +15,7 @@ from pathlib import Path
 import qdarkstyle
 from PyQt5.QtCore import QDate, Qt, QThread
 from PyQt5.QtGui import QBrush, QFont, QIcon
-from PyQt5.QtWidgets import (
-    QAction, QApplication, QDateEdit, QFileDialog, QFrame,
-    QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu,
-    QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem,
-    QTextEdit, QWidget, qApp
-)
+from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QWidget, qApp
 
 # Local imports
 LSFMONITOR_INSTALL_PATH = Path(os.environ['LSFMONITOR_INSTALL_PATH'])
@@ -43,7 +38,7 @@ else:
 
 # Constants
 VERSION = 'V1.8'
-VERSION_DATE = '2025.11.04'
+VERSION_DATE = '2026.01.12'
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
 USER = getpass.getuser()
 
@@ -186,7 +181,10 @@ class MainWindow(QMainWindow):
         """
         Make sure LSF or Openlava environment exists.
         """
-        (tool, tool_version, cluster, master) = common_lsf.get_lsid_info()
+        if ('LSFMONITOR_FAKE_RUN' in os.environ) and (os.environ['LSFMONITOR_FAKE_RUN'] == 'True'):
+            (tool, tool_version, cluster, master) = ('LSF', '10.1.0.12', 'FAKE_CLUSTER', 'fake-lsf-main-m1')
+        else:
+            (tool, tool_version, cluster, master) = common_lsf.get_lsid_info()
 
         if tool == '':
             common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
@@ -1113,7 +1111,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_user_line.returnPressed.connect(self.gen_jobs_tab_table)
 
         self.fresh_lsf_info('busers')
-        jobs_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+
+        if 'USER/GROUP' in self.busers_dic:
+            jobs_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+        else:
+            jobs_tab_user_line_completer = common_pyqt5.get_completer([])
+
         self.jobs_tab_user_line.setCompleter(jobs_tab_user_line_completer)
 
         # "Check" button.
@@ -1389,8 +1392,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-        queue_list.sort()
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+            queue_list.sort()
+        else:
+            queue_list = []
+
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -1406,9 +1413,13 @@ Please contact with liyanqing1987@163.com with any question."""
         Set (initialize) self.jobs_tab_host_combo.
         """
         self.jobs_tab_host_combo.clear()
-
         self.fresh_lsf_info('bhosts')
-        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+
+        if 'HOST_NAME' in self.bhosts_dic:
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        else:
+            host_list = []
+
         host_list.insert(0, 'ALL')
 
         for host in host_list:
@@ -1492,7 +1503,11 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_host_line = QLineEdit()
         self.hosts_tab_host_line.returnPressed.connect(self.gen_hosts_tab_table)
 
-        hosts_tab_host_line_completer = common_pyqt5.get_completer(self.bhosts_dic['HOST_NAME'])
+        if 'HOST_NAME' in self.bhosts_dic:
+            hosts_tab_host_line_completer = common_pyqt5.get_completer(self.bhosts_dic['HOST_NAME'])
+        else:
+            hosts_tab_host_line_completer = common_pyqt5.get_completer([])
+
         self.hosts_tab_host_line.setCompleter(hosts_tab_host_line_completer)
 
         # "Check" button.
@@ -1859,77 +1874,78 @@ Please contact with liyanqing1987@163.com with any question."""
         self.fresh_lsf_info('lshosts')
         self.fresh_lsf_info('host_queue')
 
-        for host in self.bhosts_dic['HOST_NAME']:
-            # Filter with specified_status_list.
-            index = self.bhosts_dic['HOST_NAME'].index(host)
-            status = self.bhosts_dic['STATUS'][index]
+        if 'HOST_NAME' in self.bhosts_dic:
+            for host in self.bhosts_dic['HOST_NAME']:
+                # Filter with specified_status_list.
+                index = self.bhosts_dic['HOST_NAME'].index(host)
+                status = self.bhosts_dic['STATUS'][index]
 
-            if 'ALL' not in specified_status_list:
-                continue_mark = True
+                if 'ALL' not in specified_status_list:
+                    continue_mark = True
 
-                for specified_status in specified_status_list:
-                    if specified_status == status:
-                        continue_mark = False
-                        break
+                    for specified_status in specified_status_list:
+                        if specified_status == status:
+                            continue_mark = False
+                            break
 
-                if continue_mark:
+                    if continue_mark:
+                        continue
+
+                # Filter with specified_queue_list.
+                if 'ALL' not in specified_queue_list:
+                    continue_mark = True
+
+                    for specified_queue in specified_queue_list:
+                        if (host in self.host_queue_dic) and (specified_queue in self.host_queue_dic[host]):
+                            continue_mark = False
+                            break
+
+                    if continue_mark:
+                        continue
+
+                # Filter with specified_max_list.
+                index = self.bhosts_dic['HOST_NAME'].index(host)
+                max = self.bhosts_dic['MAX'][index]
+
+                if not re.match(r'^[0-9]+$', max):
+                    max = 0
+
+                if 'ALL' not in specified_max_list:
+                    continue_mark = True
+
+                    for specified_max in specified_max_list:
+                        if specified_max == str(max):
+                            continue_mark = False
+                            break
+
+                    if continue_mark:
+                        continue
+
+                # Filter with specified_maxmem_list.
+                if host not in self.lshosts_dic['HOST_NAME']:
+                    maxmem = 0
+                else:
+                    index = self.lshosts_dic['HOST_NAME'].index(host)
+                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
+
+                if 'ALL' not in specified_maxmem_list:
+                    continue_mark = True
+
+                    for specified_maxmem in specified_maxmem_list:
+                        specified_maxmem = re.sub(r'G', '', specified_maxmem)
+
+                        if specified_maxmem == str(maxmem):
+                            continue_mark = False
+                            break
+
+                    if continue_mark:
+                        continue
+
+                # Filter with specified_host.
+                if specified_host and (not re.search(specified_host, host)):
                     continue
 
-            # Filter with specified_queue_list.
-            if 'ALL' not in specified_queue_list:
-                continue_mark = True
-
-                for specified_queue in specified_queue_list:
-                    if (host in self.host_queue_dic) and (specified_queue in self.host_queue_dic[host]):
-                        continue_mark = False
-                        break
-
-                if continue_mark:
-                    continue
-
-            # Filter with specified_max_list.
-            index = self.bhosts_dic['HOST_NAME'].index(host)
-            max = self.bhosts_dic['MAX'][index]
-
-            if not re.match(r'^[0-9]+$', max):
-                max = 0
-
-            if 'ALL' not in specified_max_list:
-                continue_mark = True
-
-                for specified_max in specified_max_list:
-                    if specified_max == str(max):
-                        continue_mark = False
-                        break
-
-                if continue_mark:
-                    continue
-
-            # Filter with specified_maxmem_list.
-            if host not in self.lshosts_dic['HOST_NAME']:
-                maxmem = 0
-            else:
-                index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
-
-            if 'ALL' not in specified_maxmem_list:
-                continue_mark = True
-
-                for specified_maxmem in specified_maxmem_list:
-                    specified_maxmem = re.sub(r'G', '', specified_maxmem)
-
-                    if specified_maxmem == str(maxmem):
-                        continue_mark = False
-                        break
-
-                if continue_mark:
-                    continue
-
-            # Filter with specified_host.
-            if specified_host and (not re.search(specified_host, host)):
-                continue
-
-            hosts_tab_specified_host_list.append(host)
+                hosts_tab_specified_host_list.append(host)
 
         return hosts_tab_specified_host_list
 
@@ -1965,12 +1981,13 @@ Please contact with liyanqing1987@163.com with any question."""
 
         status_list = ['ALL', ]
 
-        for host in self.bhosts_dic['HOST_NAME']:
-            index = self.bhosts_dic['HOST_NAME'].index(host)
-            status = self.bhosts_dic['STATUS'][index]
+        if 'HOST_NAME' in self.bhosts_dic:
+            for host in self.bhosts_dic['HOST_NAME']:
+                index = self.bhosts_dic['HOST_NAME'].index(host)
+                status = self.bhosts_dic['STATUS'][index]
 
-            if status not in status_list:
-                status_list.append(status)
+                if status not in status_list:
+                    status_list.append(status)
 
         for status in status_list:
             self.hosts_tab_status_combo.addCheckBoxItem(status)
@@ -1987,8 +2004,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-        queue_list.sort()
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+            queue_list.sort()
+        else:
+            queue_list = []
+
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -2008,15 +2029,16 @@ Please contact with liyanqing1987@163.com with any question."""
 
         max_list = []
 
-        for host in self.bhosts_dic['HOST_NAME']:
-            index = self.bhosts_dic['HOST_NAME'].index(host)
-            max = self.bhosts_dic['MAX'][index]
+        if 'HOST_NAME' in self.bhosts_dic:
+            for host in self.bhosts_dic['HOST_NAME']:
+                index = self.bhosts_dic['HOST_NAME'].index(host)
+                max = self.bhosts_dic['MAX'][index]
 
-            if not re.match(r'^[0-9]+$', max):
-                max = 0
+                if not re.match(r'^[0-9]+$', max):
+                    max = 0
 
-            if int(max) not in max_list:
-                max_list.append(int(max))
+                if int(max) not in max_list:
+                    max_list.append(int(max))
 
         max_list.sort()
         max_list.insert(0, 'ALL')
@@ -2039,15 +2061,16 @@ Please contact with liyanqing1987@163.com with any question."""
 
         maxmem_list = []
 
-        for host in self.bhosts_dic['HOST_NAME']:
-            if host not in self.lshosts_dic['HOST_NAME']:
-                maxmem = 0
-            else:
-                index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
+        if 'HOST_NAME' in self.bhosts_dic:
+            for host in self.bhosts_dic['HOST_NAME']:
+                if host not in self.lshosts_dic['HOST_NAME']:
+                    maxmem = 0
+                else:
+                    index = self.lshosts_dic['HOST_NAME'].index(host)
+                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
 
-            if maxmem not in maxmem_list:
-                maxmem_list.append(maxmem)
+                if maxmem not in maxmem_list:
+                    maxmem_list.append(maxmem)
 
         maxmem_list.sort()
 
@@ -2113,7 +2136,11 @@ Please contact with liyanqing1987@163.com with any question."""
         self.load_tab_host_line = QLineEdit()
         self.load_tab_host_line.returnPressed.connect(self.update_load_tab_load_info)
 
-        load_tab_host_line_completer = common_pyqt5.get_completer(self.bhosts_dic['HOST_NAME'])
+        if 'HOST_NAME' in self.bhosts_dic:
+            load_tab_host_line_completer = common_pyqt5.get_completer(self.bhosts_dic['HOST_NAME'])
+        else:
+            load_tab_host_line_completer = common_pyqt5.get_completer([])
+
         self.load_tab_host_line.setCompleter(load_tab_host_line_completer)
 
         # "Begin_Date" item.
@@ -2402,7 +2429,12 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.users_tab_queue_line = QLineEdit()
         self.users_tab_queue_line.returnPressed.connect(self.gen_users_tab_table)
-        users_tab_queue_line_completer = common_pyqt5.get_completer(self.bqueues_dic['QUEUE_NAME'])
+
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            users_tab_queue_line_completer = common_pyqt5.get_completer(self.bqueues_dic['QUEUE_NAME'])
+        else:
+            users_tab_queue_line_completer = common_pyqt5.get_completer([])
+
         self.users_tab_queue_line.setCompleter(users_tab_queue_line_completer)
 
         # "Project" item.
@@ -2420,7 +2452,12 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.users_tab_user_line = QLineEdit()
         self.users_tab_user_line.returnPressed.connect(self.gen_users_tab_table)
-        users_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+
+        if 'USER/GROUP' in self.busers_dic:
+            users_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+        else:
+            users_tab_user_line_completer = common_pyqt5.get_completer([])
+
         self.users_tab_user_line.setCompleter(users_tab_user_line_completer)
 
         # "Begin_Date" item.
@@ -2773,9 +2810,14 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Fill self.queues_tab_table items.
         self.queues_tab_table.setRowCount(0)
-        self.queues_tab_table.setRowCount(len(self.bqueues_dic['QUEUE_NAME'])+1)
 
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            self.queues_tab_table.setRowCount(len(self.bqueues_dic['QUEUE_NAME'])+1)
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+        else:
+            self.queues_tab_table.setRowCount(1)
+            queue_list = []
+
         queue_list.sort()
         queue_list.append('ALL')
 
@@ -2800,9 +2842,10 @@ Please contact with liyanqing1987@163.com with any question."""
             total = 0
 
             if queue == 'ALL':
-                for max in self.bhosts_dic['MAX']:
-                    if re.match(r'^\d+$', max):
-                        total += int(max)
+                if 'MAX' in self.bhosts_dic:
+                    for max in self.bhosts_dic['MAX']:
+                        if re.match(r'^\d+$', max):
+                            total += int(max)
             elif queue == 'lost_and_found':
                 total = 'N/A'
             else:
@@ -2915,8 +2958,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-        queue_list.sort()
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+            queue_list.sort()
+        else:
+            queue_list = []
+
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -3295,8 +3342,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-        queue_list.sort()
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+            queue_list.sort()
+        else:
+            queue_list = []
+
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
@@ -3322,7 +3373,12 @@ Please contact with liyanqing1987@163.com with any question."""
         selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
 
         self.fresh_lsf_info('bhosts')
-        host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+
+        if 'HOST_NAME' in self.bhosts_dic:
+            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        else:
+            host_list = []
+
         selected_host_list = []
 
         if selected_queue_dic:
@@ -3434,8 +3490,13 @@ Please contact with liyanqing1987@163.com with any question."""
         # Organize utilization info, get average utlization for every queue.
         queue_utilization_dic = {}
         self.fresh_lsf_info('bqueues')
-        queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-        queue_list.sort()
+
+        if 'QUEUE_NAME' in self.bqueues_dic:
+            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
+            queue_list.sort()
+        else:
+            queue_list = []
+
         queue_list.append('ALL')
 
         # Init queue_utilization_dic.
@@ -3591,19 +3652,21 @@ Please contact with liyanqing1987@163.com with any question."""
                 total = 0
 
                 if queue == 'ALL':
-                    for max in self.bhosts_dic['MAX']:
-                        if re.match(r'^\d+$', max):
-                            total += int(max)
+                    if 'MAX' in self.bhosts_dic:
+                        for max in self.bhosts_dic['MAX']:
+                            if re.match(r'^\d+$', max):
+                                total += int(max)
                 elif queue == 'lost_and_found':
                     total = 'N/A'
                 else:
                     for queue_host in self.queue_host_dic[queue]:
-                        if queue_host in self.bhosts_dic['HOST_NAME']:
-                            host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
-                            host_max = self.bhosts_dic['MAX'][host_index]
+                        if 'HOST_NAME' in self.bhosts_dic:
+                            if queue_host in self.bhosts_dic['HOST_NAME']:
+                                host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                                host_max = self.bhosts_dic['MAX'][host_index]
 
-                            if re.match(r'^\d+$', host_max):
-                                total += int(host_max)
+                                if re.match(r'^\d+$', host_max):
+                                    total += int(host_max)
 
                 item = QTableWidgetItem(str(total))
 
@@ -3909,7 +3972,11 @@ Please contact with liyanqing1987@163.com with any question."""
         self.license_tab_user_line = QLineEdit()
         self.license_tab_user_line.returnPressed.connect(self.update_license_info)
 
-        license_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+        if 'USER/GROUP' in self.busers_dic:
+            license_tab_user_line_completer = common_pyqt5.get_completer(self.busers_dic['USER/GROUP'])
+        else:
+            license_tab_user_line_completer = common_pyqt5.get_completer([])
+
         self.license_tab_user_line.setCompleter(license_tab_user_line_completer)
 
         # "Filter" button.
