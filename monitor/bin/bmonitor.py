@@ -179,7 +179,7 @@ class MainWindow(QMainWindow):
 
     def check_cluster_info(self):
         """
-        Make sure LSF or Openlava environment exists.
+        Make sure LSF/Volclava/Openlava environment exists.
         """
         if ('LSFMONITOR_FAKE_RUN' in os.environ) and (os.environ['LSFMONITOR_FAKE_RUN'] == 'True'):
             (tool, tool_version, cluster, master) = ('LSF', '10.1.0.12', 'FAKE_CLUSTER', 'fake-lsf-main-m1')
@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
             (tool, tool_version, cluster, master) = common_lsf.get_lsid_info()
 
         if tool == '':
-            common.bprint('Not find any LSF or Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
+            common.bprint('Not find any LSF/Volclava/Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
             sys.exit(1)
 
         common.bprint(str(tool) + ' (' + str(tool_version) + ')', date_format='%Y-%m-%d %H:%M:%S')
