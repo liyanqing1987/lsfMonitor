@@ -192,11 +192,3 @@ def get_summary():
     return jsonify(job_data.to_dict(orient='records'))
 
 
-def run_flask(host: str, port: int):
-    app.run(host=host, port=port, threaded=True)
-
-
-if __name__ == '__main__':
-    app.run(debug=True, port=11112, host='0.0.0.0')
-
-

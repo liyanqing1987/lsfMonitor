@@ -103,5 +103,5 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 | V1.8    | (2025.10) | Add scheduler - cluster info on GUI Titel Bar.               |
 |         |           | On LOAD tab, update the Host dropdown radio box to a text box that supports fuzzy matching. |
 |         |           | On QUEUES tab, add "Queue" checkbox to aggregate historical usage information of SLOTS/PEND/RUN accross multiple queues. |
-|         |           | On QUEUES/UTILIZATION tabs, adding fuzzy matching feature for checkboxes. |
+|         |           | Add fuzzy matching feature for checkboxes. |
 |         |           | Add parameter "license_administrators" on conf/config.py, allowing only specified administrators to view the LICENSE tab. |

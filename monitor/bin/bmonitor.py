@@ -794,9 +794,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
                                 break
 
-        time.sleep(0.01)
-        my_show_message.terminate()
-
         if not self.job_tab_current_job_dic:
             warning_message = 'Not find job information for job "' + str(current_job) + '" on JOB tab.'
             self.gui_warning(warning_message)
@@ -806,6 +803,9 @@ Please contact with liyanqing1987@163.com with any question."""
         self.update_job_tab_frame1()
         self.update_job_tab_frame2()
         self.update_job_tab_frame3()
+
+        time.sleep(0.01)
+        my_show_message.terminate()
 
     def kill_job_on_job_tab(self):
         """
@@ -2242,12 +2242,12 @@ Please contact with liyanqing1987@163.com with any question."""
 
         (sample_time_list, ut_list, mem_list) = self.get_load_info(specified_host)
 
-        time.sleep(0.01)
-        my_show_message.terminate()
-
         if sample_time_list:
             self.update_load_tab_frame1(specified_host, sample_time_list, ut_list)
             self.update_load_tab_frame2(specified_host, sample_time_list, mem_list)
+
+        time.sleep(0.01)
+        my_show_message.terminate()
 
     def get_load_info(self, specified_host):
         """
