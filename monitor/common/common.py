@@ -1,5 +1,11 @@
+import os
 import re
+import sys
+import json
+import uuid
 import pandas
+import socket
+import getpass
 import datetime
 import subprocess
 
@@ -76,8 +82,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
     if color:
         if (color not in color_dic.keys()) and (color not in color_dic.values()):
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(color) + '": Invalid color setting, it must follow below rules.', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{color}": Invalid color setting, it must follow below rules.', date_format='', color=33, display_method=1)
             bprint('''
                     ----------------------------------
                     字体色   |   Color    |   颜色描述
@@ -107,8 +113,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
     if background_color:
         if (background_color not in background_color_dic.keys()) and (background_color not in background_color_dic.values()):
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(background_color) + '": Invalid background_color setting, it must follow below rules.', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{background_color}": Invalid background_color setting, it must follow below rules.', date_format='', color=33, display_method=1)
             bprint('''
                     ----------------------------------
                     背景色   |   Color    |   颜色描述
@@ -131,8 +137,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
         if display_method not in valid_display_method_list:
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(display_method) + '": Invalid display_method setting, it must be integer between 0,1,4,5,7,8.', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{display_method}": Invalid display_method setting, it must be integer between 0,1,4,5,7,8.', date_format='', color=33, display_method=1)
             bprint('''
                     ----------------------------
                     显示方式   |    效果
@@ -153,8 +159,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
         if level not in valid_level_list:
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(level) + '": Invalid level setting, it must be Debug/Info/Warning/Error/Fatal.', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{level}": Invalid level setting, it must be Debug/Info/Warning/Error/Fatal.', date_format='', color=33, display_method=1)
             bprint('''
                     -------------------------------------------------------------
                     层级      |   说明
@@ -170,8 +176,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
     if not re.match(r'^\d+$', str(indent)):
         bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-        bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-        bprint('*Warning* (bprint): "' + str(indent) + '": Invalid indent setting, it must be a positive integer, will reset to "0".', date_format='', color=33, display_method=1)
+        bprint(f'                    {message}', date_format='', color=33, display_method=1)
+        bprint(f'*Warning* (bprint): "{indent}": Invalid indent setting, it must be a positive integer, will reset to "0".', date_format='', color=33, display_method=1)
 
         indent = 0
 
@@ -180,8 +186,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
         if save_file_method not in valid_save_file_method_list:
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(save_file_method) + '": Invalid save_file_method setting, it must be "a" or "w".', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{save_file_method}": Invalid save_file_method setting, it must be "a" or "w".', date_format='', color=33, display_method=1)
             bprint('''
                     -----------------------------------------------------------
                     模式   |   说明
@@ -258,8 +264,8 @@ def bprint(message, color='', background_color='', display_method='', date_forma
             current_time = datetime.datetime.now().strftime(date_format)
         except Exception:
             bprint('*Warning* (bprint): Meet some setting problem with below message.', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): "' + str(date_format) + '": Invalid date_format setting, suggest to use the default setting.', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): "{date_format}": Invalid date_format setting, suggest to use the default setting.', date_format='', color=33, display_method=1)
             return
 
     # Print message with specified format.
@@ -289,9 +295,9 @@ def bprint(message, color='', background_color='', display_method='', date_forma
             with open(save_file, save_file_method) as SF:
                 SF.write(str(final_message) + '\n')
         except Exception as warning:
-            bprint('*Warning* (bprint): Meet some problem when saveing below message into file "' + str(save_file) + '".', date_format='', color=33, display_method=1)
-            bprint('                    ' + str(message), date_format='', color=33, display_method=1)
-            bprint('*Warning* (bprint): ' + str(warning), date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): Meet some problem when saveing below message into file "{save_file}".', date_format='', color=33, display_method=1)
+            bprint(f'                    {message}', date_format='', color=33, display_method=1)
+            bprint(f'*Warning* (bprint): {warning}', date_format='', color=33, display_method=1)
             return
 
 
@@ -334,3 +340,70 @@ def write_csv(csv_file, content_dic):
     """
     df = pandas.DataFrame(content_dic)
     df.to_csv(csv_file, index=False)
+
+
+def create_file(file_path, permission=0o777):
+    """
+    Create file with specified permission.
+    """
+    if not os.path.exists(file_path):
+        try:
+            dir_path = os.path.dirname(file_path)
+
+            if dir_path and (not os.path.exists(dir_path)):
+                create_dir(dir_path)
+
+            with open(file_path, 'w'):
+                pass
+
+            os.chmod(file_path, permission)
+        except Exception as error:
+            bprint(f'Failed on creating file "{file_path}".', level='Error')
+            bprint(error, color='red', display_method=1, indent=9)
+            sys.exit(1)
+
+
+def create_dir(dir_path, permission=0o1777):
+    """
+    Create dir with specified permission.
+    """
+    if not os.path.exists(dir_path):
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+            os.chmod(dir_path, permission)
+        except Exception as error:
+            bprint(f'Failed on creating directory "{dir_path}".', level='Error')
+            bprint(error, color='red', display_method=1, indent=9)
+            sys.exit(1)
+
+
+class SaveLog():
+    """
+    Save lsfMonitor event information into event log and user log.
+    """
+    def __init__(self, log_dir, cluster=''):
+        self.log_dir = log_dir
+        self.cluster = cluster
+        self.uuid = str(uuid.uuid4())[:8]
+        self.user = getpass.getuser()
+        self.hostname = socket.gethostname()
+        self.host_ip = socket.gethostbyname(self.hostname)
+        self.event_log_file = str(self.log_dir) + '/event.log'
+        self.user_log_file = str(self.log_dir) + '/' + str(self.user) + '.log'
+
+        create_dir(self.log_dir, 0o1777)
+        create_file(self.event_log_file, 0o777)
+        create_file(self.user_log_file, 0o700)
+
+    def save_log(self, message):
+        """
+        Save specified message into event log and user log.
+        """
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        event_dic = {'time': current_time, 'id': self.uuid, 'user': self.user, 'cluster': self.cluster, 'host': str(self.hostname) + '(' + str(self.host_ip) + ')', 'action': message}
+
+        with open(self.event_log_file, 'a') as ELF:
+            ELF.write(str(json.dumps(event_dic, ensure_ascii=False)) + '\n')
+
+        with open(self.user_log_file, 'a') as ULF:
+            ULF.write(str(json.dumps(event_dic, ensure_ascii=False)) + '\n')

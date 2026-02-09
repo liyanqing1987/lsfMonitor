@@ -52,10 +52,10 @@ def read_args():
             if os.path.exists(database):
                 args.database = database
             else:
-                common.bprint(str(args.database) + ': No such database file.', level='Error')
+                common.bprint(f'{args.database}: No such database file.', level='Error')
                 sys.exit(1)
         else:
-            common.bprint(str(args.database) + ': No such database file.', level='Error')
+            common.bprint(f'{args.database}: No such database file.', level='Error')
             sys.exit(1)
 
     return args.database, args.tables, args.keys, args.number
@@ -77,22 +77,22 @@ def get_length(input_list):
 
 
 def seedb(db_file, table_list, key_list, number):
-    print('DB_FILE : ' + str(db_file))
+    common.bprint(f'DB_FILE : {db_file}')
 
     if len(table_list) == 0:
         table_list = common_sqlite3.get_sql_table_list(db_file, '')
 
-        print('TABLES  :')
-        print('========')
+        common.bprint('TABLES  :')
+        common.bprint('========')
 
         for table in table_list:
-            print(table)
+            common.bprint(table)
 
-        print('========')
+        common.bprint('========')
     else:
         for table in table_list:
-            print('TABLE   : ' + str(table))
-            print('========')
+            common.bprint(f'TABLE   : {table}')
+            common.bprint('========')
 
             select_condition = ''
 
@@ -109,14 +109,14 @@ def seedb(db_file, table_list, key_list, number):
                 format_string = '%-' + str(length+10) + 's'
 
                 for key in key_list:
-                    print(format_string % (key), end='')
+                    common.bprint(format_string % (key), end='')
 
-                print('')
+                common.bprint('')
 
                 for key in key_list:
-                    print(format_string % ('----'), end='')
+                    common.bprint(format_string % ('----'), end='')
 
-                print('')
+                common.bprint('')
 
                 first_key = key_list[0]
                 first_value_list = data_dic[first_key]
@@ -127,11 +127,11 @@ def seedb(db_file, table_list, key_list, number):
                         value_list = data_dic[key]
                         value = value_list[i]
 
-                        print(format_string % (value), end='')
+                        common.bprint(format_string % (value), end='')
 
-                    print('')
+                    common.bprint('')
 
-            print('========')
+            common.bprint('========')
 
 
 ################

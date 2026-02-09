@@ -24,7 +24,7 @@ def get_command_dict(command):
         if line:
             i += 1
 
-            # Some speciall preprocess.
+            # Some special preprocess.
             if re.search(r'lsload', command):
                 line = re.sub(r'\*', ' ', line)
 
@@ -37,7 +37,7 @@ def get_command_dict(command):
                 command_info = line.split()
 
                 if (len(command_info) < len(key_list)) and ('unavail' not in command_info):
-                    common.bprint('For command "' + str(command) + '", below info line is incomplate/unexpected.', level='Warning')
+                    common.bprint(f'For command "{command}", below info line is incomplete/unexpected.', level='Warning')
                     common.bprint(line, color='yellow', display_method=1, indent=11)
 
                 for j in range(len(key_list)):
@@ -878,7 +878,7 @@ def get_queue_host_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
             hosts_string = my_match.group(1)
 
             if hosts_all_compile.search(hosts_string):
-                common.bprint('Queue "' + str(queue) + '" is not well configured, all of the hosts are on the same queue.', level='Warning')
+                common.bprint(f'Queue "{queue}" is not well configured, all of the hosts are on the same queue.', level='Warning')
                 queue_host_dic[queue] = get_host_list(get_hosts_list_command)
             else:
                 queue_host_dic.setdefault(queue, [])
@@ -892,12 +892,19 @@ def get_queue_host_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
                         if host_group_name in bmgroup_dic.keys():
                             host_list = bmgroup_dic[host_group_name]
 
-                        if len(host_list) > 0:
+                        if host_list:
                             queue_host_dic[queue].extend(host_list)
                     elif re.match(r'^(\S+)\+\d+$', hosts):
                         my_match = re.match(r'^(\S+)\+\d+$', hosts)
                         host = my_match.group(1)
-                        queue_host_dic[queue].append(host)
+
+                        if host in bmgroup_dic.keys():
+                            host_list = bmgroup_dic[host]
+
+                            if host_list:
+                                queue_host_dic[queue].extend(host_list)
+                        else:
+                            queue_host_dic[queue].append(host)
                     else:
                         queue_host_dic[queue].append(hosts)
 

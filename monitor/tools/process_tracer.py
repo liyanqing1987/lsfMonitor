@@ -60,11 +60,11 @@ class ProcessTracer(QMainWindow):
         job_dic = common_lsf.get_lsf_bjobs_uf_info(command)
 
         if job_dic[job]['status'] != 'RUN':
-            common.bprint('Job "' + str(job) + '" is not running, cannot get process status.', level='Error')
+            common.bprint(f'Job "{job}" is not running, cannot get process status.', level='Error')
             sys.exit(1)
         else:
             if not job_dic[job]['pids']:
-                common.bprint('Not find PIDs information for job "' + str(job) + '".', level='Error')
+                common.bprint(f'Not find PIDs information for job "{job}".', level='Error')
                 sys.exit(1)
 
         return job_dic, job_dic[job]['pids']
@@ -151,11 +151,11 @@ class ProcessTracer(QMainWindow):
             first_started_on_host = started_on_list[0]
             bhosts_dic = common_lsf.get_bhosts_info('bhosts ' + str(first_started_on_host))
 
-            if first_started_on_host in bhosts_dic['HOST_NAME']:
+            if ('HOST_NAME' in bhosts_dic) and (first_started_on_host in bhosts_dic['HOST_NAME']):
                 host_status = bhosts_dic['STATUS'][0]
 
                 if host_status != 'ok':
-                    common.bprint('Host "' + str(first_started_on_host) + '" is ' + str(host_status) + ' status, cannot submit job on it.', level='Warning')
+                    common.bprint(f'Host "{first_started_on_host}" is {host_status} status, cannot submit job on it.', level='Warning')
                     return ''
 
             bsub_command = str(bsub_command) + ' -m ' + str(first_started_on_host)

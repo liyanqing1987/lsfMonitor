@@ -14,6 +14,7 @@ sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common_pyqt5
 from common import common_license
 from common import common_lsf
+from common import common
 
 # Import local config file if exists.
 local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
@@ -79,7 +80,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
 
     def get_license_feature_usage(self):
         # Get self.license_dic.
-        my_get_license_info = common_license.GetLicenseInfo(specified_servers=[self.server,], specified_feature=self.feature, lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
+        my_get_license_info = common_license.GetLicenseInfo(specified_servers=[self.server, ], specified_feature=self.feature, lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
         license_dic = my_get_license_info.get_license_info()
         license_feature_usage_dic_list = []
 
@@ -138,7 +139,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
             try:
                 start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
             except Exception:
-                print('*Warning*: Variable "submit_time_with_year", value is "' + str(submit_time_with_year) + '", not follow the time format "%Y %b %d %H:%M".')
+                common.bprint(f'*Warning*: Variable "submit_time_with_year", value is "{submit_time_with_year}", not follow the time format "%Y %b %d %H:%M".')
 
             if not compare_second:
                 compare_second = time.time()

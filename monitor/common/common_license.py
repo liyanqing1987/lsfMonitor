@@ -517,7 +517,7 @@ def switch_start_time(start_time, compare_second='', format=''):
         try:
             start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
         except Exception:
-            common.bprint('Value of variable "start_time_with_year" is "' + str(start_time_with_year) + '", not follow the time format "%Y %a %m/%d %H:%M".', level='Error')
+            common.bprint(f'Value of variable "start_time_with_year" is "{start_time_with_year}", not follow the time format "%Y %a %m/%d %H:%M".', level='Error')
 
         if not compare_second:
             compare_second = time.time()
@@ -594,7 +594,7 @@ def check_expire_date(expire_date, second_threshold=1209600):
         try:
             expire_seconds = int(time.mktime(time.strptime(expire_date, '%d-%b-%Y')))
         except Exception as warning:
-            common.bprint('Failed to parse expire_data "' + str(expire_date) + '": ' + str(warning), level='Warning')
+            common.bprint(f'Failed to parse expire_data "{expire_date}": ' + str(warning), level='Warning')
             return 0
 
         expire_seconds = expire_seconds + 86400

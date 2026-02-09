@@ -192,16 +192,27 @@ class MemoryReport:
 
     def time_process(self):
         try:
-            self.df["run_time"] = pd.to_datetime(self.df["finished_time"], format="%a %b %d %H:%M:%S", errors='coerce') - pd.to_datetime(self.df["started_time"], format="%a %b %d %H:%M:%S", errors='coerce')
-            self.df["run_time"] = pd.to_timedelta(self.df["run_time"])
+            # Parse datetime without year, pandas will use 1900 as default year
+            start_times = pd.to_datetime(self.df["started_time"], format="%a %b %d %H:%M:%S", errors='coerce')
+            finish_times = pd.to_datetime(self.df["finished_time"], format="%a %b %d %H:%M:%S", errors='coerce')
+
+            # Calculate time difference
+            time_diff = finish_times - start_times
+
+            mask = time_diff < pd.Timedelta(0)
+            if mask.any():
+                # Add one year (365 days) to negative differences
+                time_diff.loc[mask] = time_diff.loc[mask] + pd.Timedelta(days=365)
+
+            self.df["run_time"] = time_diff
             self.df["total_hours"] = self.df["run_time"].dt.total_seconds() / 3600
+
         except ValueError:
-            self.df["run_time"] = 0
+            self.df["run_time"] = pd.Timedelta(0)
             self.df["total_hours"] = 1 / 3600
 
         self.df['run_time'].fillna(pd.Timedelta(0), inplace=True)
         self.df['total_hours'].fillna(1 / 3600, inplace=True)
-
         logger.debug("df runtime: \n %s \n df total_hours \n  %s" % (str(self.df["run_time"]), str(self.df["total_hours"])))
 
     def data_process(self):

@@ -67,7 +67,7 @@ class AutoKill():
         Get jobid list based on start_jobid ~ end_jobid.
         """
         if start_jobid >= end_jobid:
-            common.bprint('Start jobid "' + str(start_jobid) + '" must be smaller than end jobid "' + str(end_jobid) + '".', level='Error')
+            common.bprint(f'Start jobid "{start_jobid}" must be smaller than end jobid "{end_jobid}".', level='Error')
             sys.exit(1)
         else:
             jobid_list = []
@@ -83,7 +83,7 @@ class AutoKill():
 
         for jobid in orig_jobid_list:
             if jobid == '0':
-                self.jobid_list = ['0',]
+                self.jobid_list = ['0', ]
                 break
             elif re.match(r'^\d+$', jobid):
                 self.jobid_list.append(jobid)
@@ -96,21 +96,21 @@ class AutoKill():
                 jobid_range_list = self.parse_jobid_range(start_jobid, end_jobid)
                 self.jobid_list.extend(jobid_range_list)
             else:
-                common.bprint('"' + str(jobid) + '": Invalid jobid format.', level='Error')
+                common.bprint(f'"{jobid}": Invalid jobid format.', level='Error')
                 sys.exit(1)
 
     def run_command(self, command):
-        print('* ' + str(command))
+        common.bprint('* ' + str(command))
 
         (return_code, stdout, stderr) = common.run_command(command)
 
         for line in str(stdout, 'utf-8').split('\n'):
             if line:
-                print('  ' + str(line))
+                common.bprint('  ' + str(line))
 
         for line in str(stderr, 'utf-8').split('\n'):
             if line:
-                print('  ' + str(line))
+                common.bprint('  ' + str(line))
 
     def kill_base_jobid(self, jobs_dic):
         self.get_real_jobid_list()

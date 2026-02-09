@@ -72,7 +72,7 @@ def read_args():
 
     args = parser.parse_args()
 
-    if (not args.cleanup) and (not args.job) and (not args.job_mem) and (not args.queue) and (not args.host) and (not args.load) and (not args.user) and (not args.utilization) and (not args.utilization_day):
+    if not any([args.cleanup, args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization, args.utilization_day]):
         common.bprint('At least one argument of "cleanup/job/job_mem/queue/host/load/user/utilization/utilization_day" must be selected.', level='Error')
         sys.exit(1)
 
@@ -96,7 +96,12 @@ class Sampling:
         self.utilization_day_sampling = utilization_day_sampling
 
         # Limitation on the number of sqlite database entries.
-        self.db_entries_limit_dic = {'queue': 100000, 'host': 100000, 'load': 100000, 'utilization': 100000}
+        self.db_entries_limit_dic = {
+            'queue': 100000,
+            'host': 100000,
+            'load': 100000,
+            'utilization': 100000
+        }
 
         # Get sample time.
         self.sample_second = int(time.time())
@@ -115,9 +120,9 @@ class Sampling:
         self.job_mem_db_path = str(self.db_path) + '/job_mem'
         self.user_db_path = str(self.db_path) + '/user'
 
-        self.create_dir(self.job_db_path)
-        self.create_dir(self.job_mem_db_path)
-        self.create_dir(self.user_db_path)
+        common.create_dir(self.job_db_path, 0o1777)
+        common.create_dir(self.job_mem_db_path, 0o1777)
+        common.create_dir(self.user_db_path, 0o1777)
 
     def check_cluster_info(self):
         """
@@ -131,19 +136,6 @@ class Sampling:
 
         return tool, cluster
 
-    def create_dir(self, dir_path):
-        """
-        Create dir_path with access permission 777.
-        """
-        if not os.path.exists(dir_path):
-            try:
-                os.makedirs(dir_path)
-                os.chmod(dir_path, 0o777)
-            except Exception as error:
-                common.bprint('Failed on creating directory "' + str(dir_path) + '".', level='Error')
-                common.bprint(error, color='red', display_method=1, indent=9)
-                sys.exit(1)
-
     def cleanup_db(self):
         """
         Clean up sqlite3 database with self.db_entries_limit_dic limitation.
@@ -155,7 +147,7 @@ class Sampling:
 
             if os.path.exists(item_db_file):
                 item_entries_limitation = self.db_entries_limit_dic[item]
-                common.bprint('>>> Clean up "' + str(item_db_file) + '" with entries limitation ' + str(item_entries_limitation) + '...', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'>>> Clean up "{item_db_file}" with entries limitation {item_entries_limitation} ...', date_format='%Y-%m-%d %H:%M:%S')
                 (result, item_db_conn) = common_sqlite3.connect_db_file(item_db_file, mode='write')
 
                 if result == 'passed':
@@ -169,7 +161,7 @@ class Sampling:
                                 begin_line = 0
                                 end_line = int(item_table_count) - item_entries_limitation
 
-                                common.bprint('Deleting database "' + str(item_db_file) + '" table "' + str(item_table_name) + '" ' + str(begin_line) + '-' + str(end_line) + ' lines to only keep ' + str(item_entries_limitation) + ' items.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                                common.bprint(f'Deleting database "{item_db_file}" table "{item_table_name}" {begin_line}-{end_line} lines to only keep {item_entries_limitation} items.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                                 common_sqlite3.delete_sql_table_rows(item_db_file, item_db_conn, item_table_name, 'sample_time', begin_line, end_line)
 
     def sample_job_info(self):
@@ -199,7 +191,7 @@ class Sampling:
 
         for finished_date in date_bjobs_dic.keys():
             finished_date_db_file = str(self.job_db_path) + '/' + str(finished_date) + '.db'
-            common.bprint('Writing ' + str(finished_date_db_file) + ' ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
+            common.bprint(f'Writing {finished_date_db_file} ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
             (result, finished_date_db_conn) = common_sqlite3.connect_db_file(finished_date_db_file, mode='write')
 
             if result == 'passed':
@@ -214,7 +206,7 @@ class Sampling:
                 finished_date_db_conn.commit()
                 finished_date_db_conn.close()
 
-        common.bprint('Done (' + str(len(bjobs_dic.keys())) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_job_mem_info(self):
         """
@@ -249,7 +241,7 @@ class Sampling:
                                 last_sample_second = int(data_dic['sample_second'][-1])
 
                                 if self.sample_second - last_sample_second > 3600:
-                                    common.bprint('Table "' + str(job_table_name) + '" already existed even one hour ago, will cleanup it.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                                    common.bprint(f'Table "{job_table_name}" already existed even one hour ago, will cleanup it.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                                     common_sqlite3.cleanup_sql_table(job_mem_db_file, job_mem_db_conn, job_table_name, commit=False)
                                     job_table_list.remove(job_table_name)
 
@@ -265,7 +257,7 @@ class Sampling:
                 job_mem_db_conn.commit()
                 job_mem_db_conn.close()
 
-        common.bprint('Done (' + str(len(job_list)) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        common.bprint(f'Done ({len(job_list)} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_queue_info(self):
         """
@@ -436,7 +428,7 @@ class Sampling:
 
         for finished_date in date_bjobs_dic.keys():
             finished_date_db_file = str(self.user_db_path) + '/' + str(finished_date) + '.db'
-            common.bprint('Writing ' + str(finished_date_db_file) + ' ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
+            common.bprint(f'Writing {finished_date_db_file} ...', date_format='%Y-%m-%d %H:%M:%S', indent=6)
             (result, finished_date_db_conn) = common_sqlite3.connect_db_file(finished_date_db_file, mode='write')
 
             if result == 'passed':
@@ -458,7 +450,7 @@ class Sampling:
                 finished_date_db_conn.commit()
                 finished_date_db_conn.close()
 
-        common.bprint('Done (' + str(len(bjobs_dic.keys())) + ' jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_utilization_info(self):
         """
@@ -501,7 +493,7 @@ class Sampling:
                         slot_utilization = round(int(bhosts_dic['NJOBS'][j])/int(bhosts_dic['MAX'][j])*100, 1)
 
                         if int(slot_utilization) > 100:
-                            common.bprint('For host "' + str(host) + '", invalid slot utilization "' + str(slot_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                            common.bprint(f'For host "{host}", invalid slot utilization "{slot_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
 
                             if bhosts_dic['STATUS'][j] == 'unavail':
                                 slot_utilization = 0.0
@@ -544,7 +536,7 @@ class Sampling:
                         mem_utilization = round((maxmem-mem)*100/maxmem, 1)
 
                         if int(mem_utilization) > 100:
-                            common.bprint('For host "' + str(host) + '", invalid mem utilization "' + str(mem_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                            common.bprint(f'For host "{host}", invalid mem utilization "{mem_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                             mem_utilization = 100.0
 
                         break
@@ -560,14 +552,14 @@ class Sampling:
     def get_utilization_day_info(self):
         """
         Get current day slot/cpu/mem utilizaiton info from sqlite3 database.
-        Reture slot/cpu/mem average utilization info with utilization_day_dic.
+        Return slot/cpu/mem average utilization info with utilization_day_dic.
         """
         utilization_day_dic = {}
-        begin_time = str(self.sample_date) + ' 00:00:00'
+        begin_time = f'{self.sample_date} 00:00:00'
         begin_second = time.mktime(time.strptime(begin_time, '%Y%m%d %H:%M:%S'))
-        end_time = str(self.sample_date) + ' 23:59:59'
+        end_time = f'{self.sample_date} 23:59:59'
         end_second = time.mktime(time.strptime(end_time, '%Y%m%d %H:%M:%S'))
-        select_condition = "WHERE sample_second BETWEEN '" + str(begin_second) + "' AND '" + str(end_second) + "'"
+        select_condition = f"WHERE sample_second BETWEEN '{begin_second}' AND '{end_second}'"
 
         utilization_db_file = str(self.db_path) + '/utilization.db'
         (result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file, mode='write')
@@ -596,15 +588,15 @@ class Sampling:
                     mem_avg_utilization = round(mem_utilization_sum/len(utilization_db_data_dic['slot']), 1)
 
                     if int(slot_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid slot average utilization "' + str(slot_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                        common.bprint(f'For db table "{utilization_table_name}", invalid slot average utilization "{slot_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         slot_avg_utilization = 100.0
 
                     if int(cpu_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid cpu average utilization "' + str(cpu_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                        common.bprint(f'For db table "{utilization_table_name}", invalid cpu average utilization "{cpu_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         cpu_avg_utilization = 100.0
 
                     if int(mem_avg_utilization) > 100:
-                        common.bprint('For db table "' + str(utilization_table_name) + '", invalid mem average utilization "' + str(mem_avg_utilization) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                        common.bprint(f'For db table "{utilization_table_name}", invalid mem average utilization "{mem_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
                         mem_avg_utilization = 100.0
 
                     utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}
@@ -630,7 +622,7 @@ class Sampling:
 
             for (utilization_day_table_name, utilization_day_table_dic) in utilization_day_dic.items():
                 host = re.sub('utilization_', '', utilization_day_table_name)
-                common.bprint('Counting utilization (day average) info for host "' + str(host) + '" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+                common.bprint(f'Counting utilization (day average) info for host "{host}" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                 # Generate sql table.
                 if utilization_day_table_name not in utilization_day_table_list:

@@ -1,15 +1,19 @@
 **Author:** liyanqing1987@163.com    
-**Version:** V1.8
+**Version:** V2.0
 
 ## What’s lsfMonitor?
 `lsfMonitor` is an open source software for LSF information data-collection,
 data-analysis and data-display.
 
 ## Python dependency
-Need python3.8.8, Anaconda3-2021.05-Linux-x86_64.sh is better.    
+Need python3.12.12.    
 Install python library dependency with command    
 
     pip install -r requirements.txt
+
+Or
+
+    pip install <library> --only-library=:all:
 
 ## Install
 Copy install package into install directory.    
@@ -103,5 +107,8 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 | V1.8    | (2025.10) | Add scheduler - cluster info on GUI Titel Bar.               |
 |         |           | On LOAD tab, update the Host dropdown radio box to a text box that supports fuzzy matching. |
 |         |           | On QUEUES tab, add "Queue" checkbox to aggregate historical usage information of SLOTS/PEND/RUN accross multiple queues. |
-|         |           | Add fuzzy matching feature for checkboxes. |
+|         |           | Add fuzzy matching feature for checkboxes.                   |
 |         |           | Add parameter "license_administrators" on conf/config.py, allowing only specified administrators to view the LICENSE tab. |
+| V2.0    | (2026.02) | Update python3.8.8 support to python3.12.12.                 |
+|         |           | Add the logging function.                                    |
+|         |           | Optimize with AI suggestion.                                 |

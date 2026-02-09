@@ -3,9 +3,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
-from gensim.models import Word2Vec
-from glove import Glove
-from glove import Corpus
+from gensim.models import Word2Vec, KeyedVectors
 from sklearn.cluster import KMeans
 
 
@@ -89,68 +87,58 @@ class Word2VecModel:
 
 class GloVeModel:
     def __init__(self, sentence_col, emb_size, corpus_path, model_path):
-        (self.sentence_col, self.emb_size, self.corpus_path, self.model_path) = (sentence_col, emb_size, corpus_path, model_path)
+        self.sentence_col = sentence_col
+        self.emb_size = emb_size
+        # 注意：这里的 model_path 传入的应该是那个 .txt 文件的路径
+        self.model_path = f'{model_path}.txt'
         self.feature_name = 'glove'
         self.feature_columns_list = ['{}_{}_{}'.format(self.feature_name, self.sentence_col, i) for i in range(self.emb_size)]
 
     def training_model(self, df):
-        sentences = copy.deepcopy(df[self.sentence_col].values)
+        sentences = [[str(x) for x in s] for s in df[self.sentence_col].values]
+        from gensim.models import Word2Vec
+        model = Word2Vec(
+            sentences,
+            vector_size=self.emb_size,
+            window=10,
+            min_count=1,
+            workers=4,
+            seed=1024,
+            epochs=10
+        )
 
-        for i in range(len(sentences)):
-            sentences[i] = [str(x) for x in sentences[i]]
-
-        corpus_model = Corpus()
-        corpus_model.fit(sentences, window=10)
-        corpus_model.save(self.corpus_path)
-
-        glove_model = Glove(no_components=self.emb_size, learning_rate=0.05, random_state=1024)
-        glove_model.fit(corpus_model.matrix, epochs=10, no_threads=4, verbose=True)
-        glove_model.add_dictionary(corpus_model.dictionary)
-        glove_model.save(self.model_path)
-
-        vocab = list(glove_model.dictionary.keys())
-
-        for i in tqdm(range(len(sentences))):
-            sentences[i] = [glove_model.word_vectors[glove_model.dictionary[x]] for x in sentences[i] if x in vocab]
+        # model.save(self.model_path)
+        model.wv.save_word2vec_format(self.model_path, binary=False)
+        vocab = model.wv.key_to_index
 
         emb_matrix = []
-
         for seq in tqdm(sentences):
-            if len(seq) > 0:
-                emb_matrix.append(np.mean(seq, axis=0))
+            vecs = [model.wv[word] for word in seq if word in vocab]
+            if len(vecs) > 0:
+                emb_matrix.append(np.mean(vecs, axis=0))
             else:
-                emb_matrix.append([0] * self.emb_size)
+                emb_matrix.append(np.zeros(self.emb_size))
 
         emb_matrix = np.array(emb_matrix)
-        emb_series_list = [pd.Series(emb_matrix[:, i]) for i in range(self.emb_size)]
-        emb_df = pd.concat(emb_series_list, axis=1, keys=self.feature_columns_list)
+        emb_df = pd.DataFrame(emb_matrix, columns=self.feature_columns_list)
 
         return emb_df
 
     def generate_glove_feature(self, df):
-        sentences = copy.deepcopy(df[self.sentence_col].values)
-
-        for i in range(len(sentences)):
-            sentences[i] = [str(x) for x in sentences[i]]
-
-        self.glove_model = Glove.load(self.model_path)
-        vocab = list(self.glove_model.dictionary.keys())
-
-        for i in tqdm(range(len(sentences))):
-            sentences[i] = [self.glove_model.word_vectors[self.glove_model.dictionary[x]] for x in sentences[i] if x in vocab]
-
+        sentences = [[str(x) for x in s] for s in df[self.sentence_col].values]
+        wv = KeyedVectors.load_word2vec_format(self.model_path, binary=False)
         emb_matrix = []
 
         for seq in tqdm(sentences):
-            if len(seq) > 0:
-                emb_matrix.append(np.mean(seq, axis=0))
+            vecs = [wv[x] for x in seq if x in wv]
+
+            if len(vecs) > 0:
+                emb_matrix.append(np.mean(vecs, axis=0))
             else:
-                emb_matrix.append([0] * self.emb_size)
+                emb_matrix.append(np.zeros(self.emb_size))
 
         emb_matrix = np.array(emb_matrix)
-        emb_series_list = [pd.Series(emb_matrix[:, i]) for i in range(self.emb_size)]
-        emb_df = pd.concat(emb_series_list, axis=1, keys=self.feature_columns_list)
-
+        emb_df = pd.DataFrame(emb_matrix, columns=self.feature_columns_list)
         return emb_df
 
     def kmeans_cluster(self, emb_df, save_path, n_cluster=8):

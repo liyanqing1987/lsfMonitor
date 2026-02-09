@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
 # Standard library imports
-import argparse
-import copy
-import datetime
-import getpass
 import os
 import re
 import sys
 import time
+import copy
+import getpass
+import argparse
+import datetime
 from pathlib import Path
 
 # Third-party imports
@@ -37,10 +37,10 @@ else:
     from conf import config
 
 # Constants
-VERSION = 'V1.8'
-VERSION_DATE = '2026.01.12'
-DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{getpass.getuser()}'
+VERSION = 'V2.0'
+VERSION_DATE = '2026.02.08'
 USER = getpass.getuser()
+DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
 # Environment configuration
 os.environ.update({
@@ -51,7 +51,7 @@ os.environ.update({
 
 # Ensure runtime directory exists
 DEFAULT_RUNTIME_DIR.mkdir(exist_ok=True)
-DEFAULT_RUNTIME_DIR.chmod(0o777)
+DEFAULT_RUNTIME_DIR.chmod(0o700)
 
 
 def read_args():
@@ -109,17 +109,24 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         # Show version information.
-        common.bprint('lsfMonitor Version: ' + str(VERSION) + ' (' + str(VERSION_DATE) + ')', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'lsfMonitor Version: {VERSION} ({VERSION_DATE})', date_format='%Y-%m-%d %H:%M:%S')
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         # Check cluster info.
         (self.tool, self.cluster) = self.check_cluster_info()
 
         # Set db_path.
-        self.db_path = str(config.db_path) + '/monitor'
+        self.db_path = str(config.db_path) + '/lsfMonitor'
 
-        if self.cluster and os.path.exists(str(config.db_path) + '/' + str(self.cluster)):
+        if self.cluster:
             self.db_path = str(config.db_path) + '/' + str(self.cluster)
+
+        common.create_dir(self.db_path, 0o1777)
+
+        # Save start action.
+        log_dir = str(config.db_path) + '/log'
+        self.my_save_log = common.SaveLog(log_dir, self.cluster)
+        self.my_save_log.save_log('Start lsfMonitor')
 
         # Get license administrators list.
         self.license_administrator_list = []
@@ -190,9 +197,9 @@ class MainWindow(QMainWindow):
             common.bprint('Not find any LSF/Volclava/Openlava environment!', date_format='%Y-%m-%d %H:%M:%S', level='Error')
             sys.exit(1)
 
-        common.bprint(str(tool) + ' (' + str(tool_version) + ')', date_format='%Y-%m-%d %H:%M:%S')
-        common.bprint('My cluster name is "' + str(cluster) + '"', date_format='%Y-%m-%d %H:%M:%S')
-        common.bprint('My master name is "' + str(master) + '"', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'{tool} ({tool_version})', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'My cluster name is "{cluster}"', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'My master  name is "{master}"', date_format='%Y-%m-%d %H:%M:%S')
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         return tool, cluster
@@ -206,8 +213,8 @@ class MainWindow(QMainWindow):
             current_second = int(time.time())
 
             if current_second - self.lsf_info_dic[lsf_info]['update_second'] > 30:
-                common.bprint('Loading LSF ' + str(lsf_info) + ' information ...', date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Info', 'Loading LSF ' + str(lsf_info) + ' information ...')
+                common.bprint(f'Loading LSF {lsf_info} information ...', date_format='%Y-%m-%d %H:%M:%S')
+                my_show_message = ShowMessage('Info', f'Loading LSF {lsf_info} information ...')
                 my_show_message.start()
 
                 exec(self.lsf_info_dic[lsf_info]['exec_cmd'])
@@ -233,7 +240,7 @@ class MainWindow(QMainWindow):
         current_second = int(time.time())
 
         if current_second - self.license_dic_second <= license_update_waiting_time:
-            common.bprint('Will not get license information repeatedly in ' + str(license_update_waiting_time) + ' seconds.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Will not get license information repeatedly in {license_update_waiting_time} seconds.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             return
 
         self.license_dic_second = current_second
@@ -754,12 +761,12 @@ Please contact with liyanqing1987@163.com with any question."""
         my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
         current_job = my_match.group(1)
 
-        common.bprint('Checking job "' + str(current_job) + '".', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'Checking job "{current_job}".', date_format='%Y-%m-%d %H:%M:%S')
 
         # Get job info
-        common.bprint('Getting LSF job information for "' + str(current_job) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
+        common.bprint(f'Getting LSF job information for "{current_job}" ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        my_show_message = ShowMessage('Info', 'Getting LSF job information for "' + str(current_job) + '" ...')
+        my_show_message = ShowMessage('Info', f'Getting LSF job information for "{current_job}" ...')
         my_show_message.start()
 
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
@@ -775,11 +782,11 @@ Please contact with liyanqing1987@163.com with any question."""
                     job_finished_date_db = str(job_db_path) + '/' + str(job_finished_date_db)
 
                     if os.path.exists(job_finished_date_db):
-                        common.bprint('Searching for "' + str(job_finished_date_db) + '" ...', indent=4, date_format='%Y-%m-%d %H:%M:%S')
+                        common.bprint(f'Searching for "{job_finished_date_db}" ...', indent=4, date_format='%Y-%m-%d %H:%M:%S')
                         (job_finished_date_db_connect_result, job_finished_date_db_conn) = common_sqlite3.connect_db_file(job_finished_date_db)
 
                         if job_finished_date_db_connect_result == 'failed':
-                            common.bprint('Failed on connecting job database file "' + str(job_finished_date_db) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                            common.bprint(f'Failed on connecting job database file "{job_finished_date_db}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                         else:
                             finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job', 'job')
 
@@ -822,21 +829,21 @@ Please contact with liyanqing1987@163.com with any question."""
         Kill job with "bkill".
         """
         if jobid:
-            common.bprint('Kill job "' + str(jobid) + '".', date_format='%Y-%m-%d %H:%M:%S')
+            common.bprint(f'Kill job "{jobid}".', date_format='%Y-%m-%d %H:%M:%S')
 
             command = 'bkill ' + str(jobid)
             (return_code, stdout, stderr) = common.run_command(command)
 
             if return_code == 0:
-                common.bprint('Kill ' + str(jobid) + ' successfully!', date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Info', 'Kill ' + str(jobid) + ' successfully!')
+                common.bprint(f'Kill {jobid} successfully!', date_format='%Y-%m-%d %H:%M:%S')
+                my_show_message = ShowMessage('Info', f'Kill {jobid} successfully!')
                 my_show_message.start()
                 time.sleep(5)
                 my_show_message.terminate()
             else:
-                common.bprint('Failed on killing ' + str(jobid) + '.', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'Failed on killing {jobid}.', date_format='%Y-%m-%d %H:%M:%S')
                 common.bprint(str(stderr, 'utf-8').strip(), date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Kill ' + str(jobid) + ' fail', str(str(stderr, 'utf-8')).strip())
+                my_show_message = ShowMessage(f'Kill {jobid} fail', str(str(stderr, 'utf-8')).strip())
                 my_show_message.run()
 
             return return_code
@@ -966,18 +973,18 @@ Please contact with liyanqing1987@163.com with any question."""
         job_mem_db_file = str(self.db_path) + '/job_mem/' + str(job_range) + '.db'
 
         if not os.path.exists(job_mem_db_file):
-            common.bprint('Job memory usage information is missing for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Job memory usage information is missing for "{self.job_tab_current_job}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (job_mem_db_file_connect_result, job_mem_db_conn) = common_sqlite3.connect_db_file(job_mem_db_file)
 
             if job_mem_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting job database file "' + str(job_mem_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting job database file "{job_mem_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 table_name = 'job_' + str(self.job_tab_current_job)
                 data_dic = common_sqlite3.get_sql_table_data(job_mem_db_file, job_mem_db_conn, table_name, ['sample_time', 'mem'])
 
                 if not data_dic:
-                    common.bprint('Job memory usage information is empty for "' + str(self.job_tab_current_job) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                    common.bprint(f'Job memory usage information is empty for "{self.job_tab_current_job}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 else:
                     sample_time_list = data_dic['sample_time']
                     mem_list = data_dic['mem']
@@ -1369,7 +1376,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 elif (job_status == 'DONE') or (job_status == 'EXIT'):
                     self.check_fail_reason(job=job)
 
-    def set_jobs_tab_status_combo(self, checked_status_list=['RUN',]):
+    def set_jobs_tab_status_combo(self, checked_status_list=['RUN', ]):
         """
         Set (initialize) self.jobs_tab_status_combo.
         """
@@ -1385,7 +1392,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
 
-    def set_jobs_tab_queue_combo(self, checked_queue_list=['ALL',]):
+    def set_jobs_tab_queue_combo(self, checked_queue_list=['ALL', ]):
         """
         Set (initialize) self.jobs_tab_queue_combo.
         """
@@ -1408,7 +1415,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
 
-    def set_jobs_tab_host_combo(self, checked_host_list=['ALL',]):
+    def set_jobs_tab_host_combo(self, checked_host_list=['ALL', ]):
         """
         Set (initialize) self.jobs_tab_host_combo.
         """
@@ -1631,7 +1638,7 @@ Please contact with liyanqing1987@163.com with any question."""
             max = self.bhosts_dic['MAX'][index]
 
             if not re.match(r'^[0-9]+$', max):
-                common.bprint('Host(' + str(host) + ') MAX info "' + str(max) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Host({host}) MAX info "{max}": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 max = 0
 
             item = QTableWidgetItem()
@@ -1648,7 +1655,7 @@ Please contact with liyanqing1987@163.com with any question."""
             njobs = self.bhosts_dic['NJOBS'][index]
 
             if not re.match(r'^[0-9]+$', njobs):
-                common.bprint('Host(' + str(host) + ') NJOBS info "' + str(njobs) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Host({host}) NJOBS info "{njobs}": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 njobs = 0
 
             item = QTableWidgetItem()
@@ -1673,7 +1680,7 @@ Please contact with liyanqing1987@163.com with any question."""
             ut = re.sub(r'%', '', ut)
 
             if not re.match(r'^[0-9]+$', ut):
-                common.bprint('Host(' + str(host) + ') ut info "' + str(ut) + '": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Host({host}) ut info "{ut}": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 ut = 0
 
             item = QTableWidgetItem()
@@ -1846,16 +1853,16 @@ Please contact with liyanqing1987@163.com with any question."""
                 (return_code, stdout, stderr) = common.run_command(command)
 
                 if return_code == 0:
-                    common.bprint(str(behavior) + ' ' + str(host_name) + ' successfully!', date_format='%Y-%m-%d %H:%M:%S')
-                    my_show_message = ShowMessage('Info', str(behavior) + ' ' + str(host_name) + ' successfully!')
+                    common.bprint(f'{behavior} {host_name} successfully!', date_format='%Y-%m-%d %H:%M:%S')
+                    my_show_message = ShowMessage('Info', f'{behavior} {host_name} successfully!')
                     my_show_message.start()
                     time.sleep(5)
                     my_show_message.terminate()
                     self.gen_hosts_tab_table()
                 else:
-                    common.bprint('Failed on ' + str(behavior) + 'ing host "' + str(host_name) + '".', date_format='%Y-%m-%d %H:%M:%S')
+                    common.bprint(f'Failed on {behavior}ing host "{host_name}".', date_format='%Y-%m-%d %H:%M:%S')
                     common.bprint(str(stderr, 'utf-8').strip(), date_format='%Y-%m-%d %H:%M:%S')
-                    my_show_message = ShowMessage(str(behavior) + ' ' + str(host_name) + ' fail', str(str(stderr, 'utf-8')).strip())
+                    my_show_message = ShowMessage(f'{behavior} {host_name} fail', str(str(stderr, 'utf-8')).strip())
                     my_show_message.run()
 
     def get_hosts_tab_specified_host_list(self):
@@ -1967,12 +1974,12 @@ Please contact with liyanqing1987@163.com with any question."""
                 if int(njobs_num) > 0:
                     self.set_jobs_tab_status_combo()
                     self.set_jobs_tab_queue_combo()
-                    self.set_jobs_tab_host_combo(checked_host_list=[host,])
+                    self.set_jobs_tab_host_combo(checked_host_list=[host, ])
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
-    def set_hosts_tab_status_combo(self, checked_status_list=['ALL',]):
+    def set_hosts_tab_status_combo(self, checked_status_list=['ALL', ]):
         """
         Set (initialize) self.hosts_tab_status_combo.
         """
@@ -1997,7 +2004,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.hosts_tab_status_combo.checkBoxList[i].setChecked(True)
 
-    def set_hosts_tab_queue_combo(self, checked_queue_list=['ALL',]):
+    def set_hosts_tab_queue_combo(self, checked_queue_list=['ALL', ]):
         """
         Set (initialize) self.hosts_tab_queue_combo.
         """
@@ -2020,7 +2027,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.hosts_tab_queue_combo.checkBoxList[i].setChecked(True)
 
-    def set_hosts_tab_max_combo(self, checked_max_list=['ALL',]):
+    def set_hosts_tab_max_combo(self, checked_max_list=['ALL', ]):
         """
         Set (initialize) self.hosts_tab_max_combo.
         """
@@ -2051,7 +2058,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_max_list) and (qBox.isChecked() is False):
                 self.hosts_tab_max_combo.checkBoxList[i].setChecked(True)
 
-    def set_hosts_tab_maxmem_combo(self, checked_maxmem_list=['ALL',]):
+    def set_hosts_tab_maxmem_combo(self, checked_maxmem_list=['ALL', ]):
         """
         Set (initialize) self.hosts_tab_maxmem_combo.
         """
@@ -2260,12 +2267,12 @@ Please contact with liyanqing1987@163.com with any question."""
         load_db_file = str(self.db_path) + '/load.db'
 
         if not os.path.exists(load_db_file):
-            common.bprint('Load database "' + str(load_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Load database "{load_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (load_db_file_connect_result, load_db_conn) = common_sqlite3.connect_db_file(load_db_file)
 
             if load_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting load database file "' + str(load_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting load database file "{load_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 if specified_host:
                     table_name = 'load_' + str(specified_host)
@@ -2279,7 +2286,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     data_dic = common_sqlite3.get_sql_table_data(load_db_file, load_db_conn, table_name, ['sample_time', 'ut', 'mem'], select_condition)
 
                     if not data_dic:
-                        common.bprint('Load information is empty for "' + str(specified_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                        common.bprint(f'Load information is empty for "{specified_host}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                     else:
                         for (i, sample_time) in enumerate(data_dic['sample_time']):
                             # For sample_time
@@ -2518,7 +2525,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.users_tab_frame0.setLayout(users_tab_frame0_grid)
 
-    def set_users_tab_status_combo(self, checked_status_list=['ALL',]):
+    def set_users_tab_status_combo(self, checked_status_list=['ALL', ]):
         """
         Set (initialize) self.users_tab_status_combo.
         """
@@ -2699,7 +2706,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 (user_db_file_connect_result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file)
 
                 if user_db_file_connect_result == 'failed':
-                    common.bprint('Failed on connecting user database file "' + str(user_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                    common.bprint(f'Failed on connecting user database file "{user_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 else:
                     user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
 
@@ -2951,7 +2958,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.queues_tab_frame0.setLayout(queues_tab_frame0_grid)
 
-    def set_queues_tab_queue_combo(self, checked_queue_list=['ALL',]):
+    def set_queues_tab_queue_combo(self, checked_queue_list=['ALL', ]):
         """
         Set (initialize) self.queues_tab_queue_combo.
         """
@@ -2987,22 +2994,22 @@ Please contact with liyanqing1987@163.com with any question."""
             run_num = self.queues_tab_table.item(current_row, 3).text().strip()
 
             if item.column() == 0:
-                common.bprint('Checking queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'Checking queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
 
                 self.set_queues_tab_queue_combo(checked_queue_list=[queue])
                 self.update_queues_tab_info()
             elif item.column() == 2:
                 if (pend_num != '') and (int(pend_num) > 0):
-                    self.set_jobs_tab_status_combo(checked_status_list=['PEND',])
-                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue,])
+                    self.set_jobs_tab_status_combo(checked_status_list=['PEND', ])
+                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue, ])
                     self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
             elif item.column() == 3:
                 if (run_num != '') and (int(run_num) > 0):
-                    self.set_jobs_tab_status_combo(checked_status_list=['RUN',])
-                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue,])
+                    self.set_jobs_tab_status_combo(checked_status_list=['RUN', ])
+                    self.set_jobs_tab_queue_combo(checked_queue_list=[queue, ])
                     self.set_jobs_tab_host_combo()
                     self.jobs_tab_user_line.setText('')
                     self.gen_jobs_tab_table()
@@ -3108,12 +3115,12 @@ Please contact with liyanqing1987@163.com with any question."""
         queue_db_file = str(self.db_path) + '/queue.db'
 
         if not os.path.exists(queue_db_file):
-            common.bprint('Queue database file "' + str(queue_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Queue database file "{queue_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (queue_db_file_connect_result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file)
 
             if queue_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting queue database file "' + str(self.queue_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting queue database file "{self.queue_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 for queue in queue_list:
                     table_name = 'queue_' + str(queue)
@@ -3127,7 +3134,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     data_dic = common_sqlite3.get_sql_table_data(queue_db_file, queue_db_conn, table_name, ['sample_time', 'TOTAL', 'PEND', 'RUN'], select_condition)
 
                     if not data_dic:
-                        common.bprint('Queue pend/run job number information is empty for "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                        common.bprint(f'Queue pend/run job number information is empty for "{queue}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                     else:
                         tmp_date_dic = {}
 
@@ -3335,7 +3342,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.utilization_tab_frame0.setLayout(utilization_tab_frame0_grid)
 
-    def set_utilization_tab_queue_combo(self, checked_queue_list=['ALL',]):
+    def set_utilization_tab_queue_combo(self, checked_queue_list=['ALL', ]):
         """
         Set (initialize) self.utilization_tab_queue_combo.
         """
@@ -3443,12 +3450,12 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_db_file = str(self.db_path) + '/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
-            common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Utilization database "{utilization_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
 
             if utilization_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting utilization database file "' + str(utilization_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting utilization database file "{utilization_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 self.fresh_lsf_info('bhosts')
                 host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
@@ -3548,12 +3555,12 @@ Please contact with liyanqing1987@163.com with any question."""
             utilization_db_file = str(self.db_path) + '/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
-            common.bprint('Utilization database "' + str(utilization_db_file) + '" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            common.bprint(f'Utilization database "{utilization_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         else:
             (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
 
             if utilization_db_file_connect_result == 'failed':
-                common.bprint('Failed on connecting utilization database file "' + str(utilization_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting utilization database file "{utilization_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 if selected_host_list:
                     for selected_host in selected_host_list:
@@ -3580,7 +3587,7 @@ Please contact with liyanqing1987@163.com with any question."""
                         data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
 
                         if not data_dic:
-                            common.bprint('Utilization information is empty for "' + str(selected_host) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                            common.bprint(f'Utilization information is empty for "{selected_host}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                         else:
                             if self.enable_utilization_detail:
                                 key = 'sample_time'
@@ -3690,9 +3697,9 @@ Please contact with liyanqing1987@163.com with any question."""
             queue = self.utilization_tab_table.item(current_row, 0).text().strip()
 
             if item.column() == 0:
-                common.bprint('Checking utilization for queue "' + str(queue) + '".', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'Checking utilization for queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
 
-                self.set_utilization_tab_queue_combo(checked_queue_list=[queue,])
+                self.set_utilization_tab_queue_combo(checked_queue_list=[queue, ])
                 self.update_utilization_tab_info()
 
     def gen_utilization_tab_frame1(self):
@@ -3798,9 +3805,9 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if self.enable_utilization_detail:
-                common.bprint('Drawing ' + str(selected_resource) + ' curve ...', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'Drawing {selected_resource} curve ...', date_format='%Y-%m-%d %H:%M:%S')
 
-                my_show_message = ShowMessage('Info', 'Drawing ' + str(selected_resource) + ' curve ...')
+                my_show_message = ShowMessage('Info', f'Drawing {selected_resource} curve ...')
                 my_show_message.start()
 
             sample_date_list = []
@@ -4028,7 +4035,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return feature_list
 
-    def set_license_tab_show_combo(self, checked_status_list=['ALL',]):
+    def set_license_tab_show_combo(self, checked_status_list=['ALL', ]):
         self.license_tab_show_combo.clear()
 
         license_status_list = ['ALL', 'IN_USE', 'NOT_USED']
@@ -4041,7 +4048,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.license_tab_show_combo.checkBoxList[i].setChecked(True)
 
-    def set_license_tab_server_combo(self, checked_server_list=['ALL',]):
+    def set_license_tab_server_combo(self, checked_server_list=['ALL', ]):
         self.license_tab_server_combo.clear()
 
         license_server_list = list(self.license_dic.keys())
@@ -4055,7 +4062,7 @@ Please contact with liyanqing1987@163.com with any question."""
             if (qBox.text() in checked_server_list) and (qBox.isChecked() is False):
                 self.license_tab_server_combo.checkBoxList[i].setChecked(True)
 
-    def set_license_tab_vendor_combo(self, checked_vendor_list=['ALL',]):
+    def set_license_tab_vendor_combo(self, checked_vendor_list=['ALL', ]):
         self.license_tab_vendor_combo.clear()
 
         # Get vendor_daemon list.
@@ -4189,7 +4196,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     vendor_daemon = self.license_tab_feature_table.item(current_row, 1).text().strip()
                     license_feature = self.license_tab_feature_table.item(current_row, 2).text().strip()
 
-                    common.bprint('Getting license feature "' + str(license_feature) + '" usage on license server ' + str(license_server) + ' ...', date_format='%Y-%m-%d %H:%M:%S')
+                    common.bprint(f'Getting license feature "{license_feature}" usage on license server ' + str(license_server) + ' ...', date_format='%Y-%m-%d %H:%M:%S')
 
                     self.my_show_license_feature_usage = ShowLicenseFeatureUsage(server=license_server, vendor=vendor_daemon, feature=license_feature)
                     self.my_show_license_feature_usage.start()
@@ -4305,7 +4312,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 content_dic.setdefault(title_list[column], column_list)
 
             # Write csv
-            common.bprint('Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
+            common.bprint(f'Writing {table_type} table into "{output_file}" ...', date_format='%Y-%m-%d %H:%M:%S')
             common.write_csv(csv_file=output_file, content_dic=content_dic)
 # Export table (end) #
 
@@ -4314,6 +4321,7 @@ Please contact with liyanqing1987@163.com with any question."""
         When window close, post-process.
         """
         common.bprint('Bye', date_format='%Y-%m-%d %H:%M:%S')
+        self.my_save_log.save_log('Exit lsfMonitor')
 
 
 class CheckIssueReason(QThread):
@@ -4329,7 +4337,7 @@ class CheckIssueReason(QThread):
         command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/check_issue_reason -i ' + str(self.issue)
 
         if self.job:
-            common.bprint('Getting job ' + str(self.issue.lower()) + ' reason for "' + str(self.job) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
+            common.bprint(f'Getting job {self.issue.lower()} reason for "{self.job}" ...', date_format='%Y-%m-%d %H:%M:%S')
             command = str(command) + ' -j ' + str(self.job)
 
         os.system(command)

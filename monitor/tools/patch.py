@@ -25,7 +25,7 @@ def read_args():
     args = parser.parse_args()
 
     if not os.path.exists(args.patch_path):
-        common.bprint('"' + str(args.path_path) + '": No such patch path.', level='Error')
+        common.bprint(f'"{args.patch_path}": No such patch path.', level='Error')
         sys.exit(1)
 
     return args.patch_path
@@ -35,11 +35,11 @@ class Patch():
     def __init__(self, patch_path):
         self.install_path = os.path.realpath(os.environ['LSFMONITOR_INSTALL_PATH'])
         self.patch_path = os.path.realpath(patch_path)
-        self.ignore_py_list = ['monitor/conf/config.py',]
+        self.ignore_py_list = ['monitor/conf/config.py', ]
 
-        print('Install Path : ' + str(self.install_path))
-        print('Patch   path : ' + str(self.patch_path))
-        print('')
+        common.bprint(f'Install Path : {self.install_path}')
+        common.bprint(f'Patch   path : {self.patch_path}')
+        common.bprint('')
 
         self.check_path_name()
 
@@ -48,14 +48,14 @@ class Patch():
         Make sure install_path and the patch_path have the same directory name.
         """
         if os.path.basename(self.install_path) != os.path.basename(self.patch_path):
-            common.bprint('Current install path name is "' + str(os.path.basename(self.install_path)) + '", but patch path name is "' + str(os.path.basename(self.patch_path)) + '".', level='Warning')
+            common.bprint(f'Current install path name is "{os.path.basename(self.install_path)}", but patch path name is "{os.path.basename(self.patch_path)}".', level='Warning')
 
             choice = input('Do you want to continue? (y|n) ')
 
             if (choice == 'n') or (choice == 'N') or (choice == 'no'):
                 os.sys.exit(0)
             else:
-                print('')
+                common.bprint('')
 
     def get_py_list(self, specified_path):
         """
@@ -93,12 +93,12 @@ class Patch():
                 if (py_file not in install_py_list) or (not filecmp.cmp(abs_install_py, abs_patch_py)):
                     # Remove old python file.
                     if py_file in install_py_list:
-                        print('> Remove old python file "' + str(abs_install_py) + '".')
+                        common.bprint(f'> Remove old python file "{abs_install_py}".')
 
                         try:
                             os.remove(abs_install_py)
                         except Exception as error:
-                            common.bprint('Failed on removing old python file "' + str(abs_install_py) + '".', level='Error')
+                            common.bprint(f'Failed on removing old python file "{abs_install_py}".', level='Error')
                             common.bprint(error, color='red', display_method=1, indent=9)
                             sys.exit(1)
 
@@ -106,22 +106,16 @@ class Patch():
                     abs_install_path = os.path.dirname(abs_install_py)
 
                     if not os.path.exists(abs_install_path):
-                        print('> Create directory "' + str(abs_install_path) + '".')
-
-                        try:
-                            os.makedirs(abs_install_path)
-                        except Exception as error:
-                            common.bprint('Failed on creating directory "' + str(abs_install_path) + '".', level='Error')
-                            common.bprint(error, color='red', display_method=1, indent=9)
-                            sys.exit(1)
+                        common.bprint(f'> Create directory "{abs_install_path}".')
+                        common.create_dir(abs_install_path, 0o755)
 
                     # Copy path python file into install path.
-                    print('> Copy python file "' + str(abs_patch_py) + '" into "' + str(abs_install_py) + '".')
+                    common.bprint(f'> Copy python file "{abs_patch_py}" into "{abs_install_py}".')
 
                     try:
                         shutil.copyfile(abs_patch_py, abs_install_py)
                     except Exception as error:
-                        common.bprint('Failed on copying file "' + str(abs_patch_py) + '" into "' + str(abs_install_py) + '".', level='Error')
+                        common.bprint(f'Failed on copying file "{abs_patch_py}" into "{abs_install_py}".', level='Error')
                         common.bprint(error, color='red', display_method=1, indent=9)
                         sys.exit(1)
 
