@@ -312,7 +312,8 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                        'term_signal_compile': re.compile(r'.*(TERM_.+?): (.+?\.).*'),
                        'run_limit_compile': re.compile(r'\s*RUNLIMIT\s*'),
                        'max_mem_compile': re.compile(r'\s*MAX MEM: (\d+(\.\d+)?) ([KMGT]bytes);\s*AVG MEM: (\d+(\.\d+)?) ([KMGT]bytes)\s*'),
-                       'pending_reasons_compile': re.compile(r'\s*PENDING REASONS:\s*')}
+                       'pending_reasons_compile': re.compile(r'\s*PENDING REASONS:\s*'),
+                       'effective_rusage_mem_compile': re.compile(r'.*Effective:.*rusage\s*\[.*mem=([1-9][0-9]*).*')}
 
     my_dic = {}
     job = ''
@@ -512,6 +513,19 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                     my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024, 1)
                 elif unit == 'Tbytes':
                     my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem'])*1024*1024, 1)
+            elif (not my_dic[job]['rusage_mem']) and job_compile_dic['effective_rusage_mem_compile'].match(line):
+                my_match = job_compile_dic['effective_rusage_mem_compile'].match(line)
+                my_dic[job]['rusage_mem'] = my_match.group(1)
+
+                # Switch rusage_mem unit into "MB".
+                if lsf_unit_for_limits == 'KB':
+                    my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])/1024, 1)
+                elif lsf_unit_for_limits == 'MB':
+                    my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']), 1)
+                elif lsf_unit_for_limits == 'GB':
+                    my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024, 1)
+                elif lsf_unit_for_limits == 'TB':
+                    my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem'])*1024*1024, 1)
             else:
                 if run_limit_mark:
                     my_dic[job]['run_limit'].append(line.strip())
