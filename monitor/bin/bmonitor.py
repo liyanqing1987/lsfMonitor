@@ -38,7 +38,7 @@ else:
 
 # Constants
 VERSION = 'V2.0'
-VERSION_DATE = '2026.02.08'
+VERSION_DATE = '2026.03.03'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -2201,7 +2201,7 @@ Please contact with liyanqing1987@163.com with any question."""
     def gen_load_tab_frame1(self):
         # self.load_tab_frame1
         self.load_tab_ut_canvas = common_pyqt5.FigureCanvasQTAgg()
-        self.host_tab_ut_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_ut_canvas, self)
+        self.load_tab_ut_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_ut_canvas, self)
 
         if self.dark_mode:
             fig = self.load_tab_ut_canvas.figure
@@ -2209,14 +2209,14 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # self.load_tab_frame1 - Grid
         load_tab_frame1_grid = QGridLayout()
-        load_tab_frame1_grid.addWidget(self.host_tab_ut_toolbar, 0, 0)
+        load_tab_frame1_grid.addWidget(self.load_tab_ut_toolbar, 0, 0)
         load_tab_frame1_grid.addWidget(self.load_tab_ut_canvas, 1, 0)
         self.load_tab_frame1.setLayout(load_tab_frame1_grid)
 
     def gen_load_tab_frame2(self):
         # self.load_tab_frame2
         self.load_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
-        self.host_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_mem_canvas, self)
+        self.load_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.load_tab_mem_canvas, self)
 
         if self.dark_mode:
             fig = self.load_tab_mem_canvas.figure
@@ -2224,7 +2224,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # self.load_tab_frame2 - Grid
         load_tab_frame2_grid = QGridLayout()
-        load_tab_frame2_grid.addWidget(self.host_tab_mem_toolbar, 0, 0)
+        load_tab_frame2_grid.addWidget(self.load_tab_mem_toolbar, 0, 0)
         load_tab_frame2_grid.addWidget(self.load_tab_mem_canvas, 1, 0)
         self.load_tab_frame2.setLayout(load_tab_frame2_grid)
 
@@ -2576,8 +2576,8 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Job_Num" item.
             j = j+1
-            item = NumericTableWidgetItem()
-            item.setData(Qt.DisplayRole, str(user_dic[user]['job_num']))
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, int(user_dic[user]['job_num']))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Pass_Rate" item.
@@ -2587,62 +2587,62 @@ Please contact with liyanqing1987@163.com with any question."""
             if user_dic[user]['job_num']:
                 pass_rate = round((100*float(user_dic[user]['done_num'])/float(user_dic[user]['job_num'])), 1)
 
-            item = NumericTableWidgetItem()
-            item.setData(Qt.DisplayRole, str(pass_rate))
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, pass_rate)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Rusage_Mem" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             total_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024, 1)
-            item.setData(Qt.DisplayRole, str(total_rusage_mem))
+            item.setData(Qt.DisplayRole, total_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Rusage_Mem" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             avg_rusage_mem = 0
 
             if user_dic[user]['job_num']:
                 avg_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, str(avg_rusage_mem))
+            item.setData(Qt.DisplayRole, avg_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Max_Mem" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             total_max_mem = round(float(user_dic[user]['max_mem'])/1024, 1)
-            item.setData(Qt.DisplayRole, str(total_max_mem))
+            item.setData(Qt.DisplayRole, total_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Max_Mem" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             avg_max_mem = 0
 
             if user_dic[user]['job_num']:
                 avg_max_mem = round(float(user_dic[user]['max_mem'])/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, str(avg_max_mem))
+            item.setData(Qt.DisplayRole, avg_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Mem_Waste" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             total_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024, 1)
-            item.setData(Qt.DisplayRole, str(total_mem_waste))
+            item.setData(Qt.DisplayRole, total_mem_waste)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Mem_Waste" item.
             j = j+1
-            item = NumericTableWidgetItem()
+            item = QTableWidgetItem()
             avg_mem_waste = 0
 
             if user_dic[user]['job_num']:
                 avg_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024/float(user_dic[user]['job_num']), 1)
 
-            item.setData(Qt.DisplayRole, str(avg_mem_waste))
+            item.setData(Qt.DisplayRole, avg_mem_waste)
             self.users_tab_table.setItem(i, j, item)
 
     def get_user_info(self):
@@ -2800,6 +2800,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def gen_queues_tab_table(self):
         self.queues_tab_table.setShowGrid(True)
+        self.queues_tab_table.setSortingEnabled(True)
         self.queues_tab_table.setColumnCount(0)
         self.queues_tab_table.setColumnCount(4)
         self.queues_tab_table_title_list = ['QUEUE', 'SLOTS', 'PEND', 'RUN']
@@ -2864,10 +2865,15 @@ Please contact with liyanqing1987@163.com with any question."""
                         if re.match(r'^\d+$', host_max):
                             total += int(host_max)
 
-            item = QTableWidgetItem(str(total))
+            item = QTableWidgetItem()
 
             if queue == 'lost_and_found':
                 item.setForeground(QBrush(Qt.red))
+
+            if total == 'N/A':
+                item.setData(Qt.DisplayRole, str(total))
+            else:
+                item.setData(Qt.DisplayRole, int(total))
 
             self.queues_tab_table.setItem(i, j, item)
 
@@ -2880,12 +2886,13 @@ Please contact with liyanqing1987@163.com with any question."""
                 pend = self.bqueues_dic['PEND'][index]
                 pend_sum += int(pend)
 
-            item = QTableWidgetItem(pend)
+            item = QTableWidgetItem()
             item.setFont(QFont('song', 9, QFont.Bold))
 
             if int(pend) > 0:
                 item.setForeground(QBrush(Qt.blue))
 
+            item.setData(Qt.DisplayRole, int(pend))
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "RUN" item.
@@ -2897,8 +2904,9 @@ Please contact with liyanqing1987@163.com with any question."""
                 run = self.bqueues_dic['RUN'][index]
                 run_sum += int(run)
 
-            item = QTableWidgetItem(run)
+            item = QTableWidgetItem()
             item.setFont(QFont('song', 9, QFont.Bold))
+            item.setData(Qt.DisplayRole, int(run))
             self.queues_tab_table.setItem(i, j, item)
 
     def gen_queues_tab_frame0(self):
@@ -3675,10 +3683,15 @@ Please contact with liyanqing1987@163.com with any question."""
                                 if re.match(r'^\d+$', host_max):
                                     total += int(host_max)
 
-                item = QTableWidgetItem(str(total))
+                item = QTableWidgetItem()
 
                 if queue == 'lost_and_found':
                     item.setForeground(QBrush(Qt.red))
+
+                if total == 'N/A':
+                    item.setData(Qt.DisplayRole, str(total))
+                else:
+                    item.setData(Qt.DisplayRole, int(total))
 
                 self.utilization_tab_table.setItem(row, 1, item)
 
@@ -4383,11 +4396,6 @@ class ShowMessage(QThread):
     def run(self):
         command = 'python3 ' + str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/message.py --title "' + str(self.title) + '" --message "' + str(self.message) + '"'
         os.system(command)
-
-
-class NumericTableWidgetItem(QTableWidgetItem):
-    def __lt__(self, other):
-        return float(self.text()) < float(other.text())
 
 
 #################
