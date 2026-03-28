@@ -15,3 +15,4 @@ glove-py==0.1.0
 flask==3.1.2 
 flask_restful==0.3.10
 es_pandas==0.0.23
+numpy==1.26.4

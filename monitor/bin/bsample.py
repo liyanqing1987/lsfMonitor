@@ -49,6 +49,10 @@ def read_args():
                         action="store_true",
                         default=False,
                         help='Sample queue info with command "bqueues".')
+    parser.add_argument("-qH", "--queue_host_mapping",
+                        action="store_true",
+                        default=False,
+                        help='Sample queue-host mapping info with command "bqueues -l".')
     parser.add_argument("-H", "--host",
                         action="store_true",
                         default=False,
@@ -72,11 +76,11 @@ def read_args():
 
     args = parser.parse_args()
 
-    if not any([args.cleanup, args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization, args.utilization_day]):
-        common.bprint('At least one argument of "cleanup/job/job_mem/queue/host/load/user/utilization/utilization_day" must be selected.', level='Error')
+    if not any([args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day]):
+        common.bprint('At least one argument of "cleanup/job/job_mem/queue/queue_host_mapping/host/load/user/utilization/utilization_day" must be selected.', level='Error')
         sys.exit(1)
 
-    return args.cleanup, args.job, args.job_mem, args.queue, args.host, args.load, args.user, args.utilization, args.utilization_day
+    return args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day
 
 
 class Sampling:
@@ -84,11 +88,12 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, cleanup, job_sampling, job_mem_sampling, queue_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_sampling):
+    def __init__(self, cleanup, job_sampling, job_mem_sampling, queue_sampling, queue_host_mapping_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_sampling):
         self.cleanup = cleanup
         self.job_sampling = job_sampling
         self.job_mem_sampling = job_mem_sampling
         self.queue_sampling = queue_sampling
+        self.queue_host_mapping_sampling = queue_host_mapping_sampling
         self.host_sampling = host_sampling
         self.load_sampling = load_sampling
         self.user_sampling = user_sampling
@@ -98,6 +103,7 @@ class Sampling:
         # Limitation on the number of sqlite database entries.
         self.db_entries_limit_dic = {
             'queue': 100000,
+            'queue_host_mapping': 10000,
             'host': 100000,
             'load': 100000,
             'utilization': 100000
@@ -140,7 +146,7 @@ class Sampling:
         """
         Clean up sqlite3 database with self.db_entries_limit_dic limitation.
         """
-        item_list = ['queue', 'host', 'load', 'utilization']
+        item_list = ['queue', 'queue_host_mapping', 'host', 'load', 'utilization']
 
         for item in item_list:
             item_db_file = str(self.db_path) + '/' + str(item) + '.db'
@@ -452,6 +458,70 @@ class Sampling:
 
         common.bprint(f'Done ({len(bjobs_dic.keys())} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
+    def sample_queue_host_mapping_info(self):
+        """
+        Sample queue-host mapping info and save into sqlite db.
+        Each queue has its own table named 'queue_<queue_name>'.
+        Only saves if the mapping is different from the last recorded entry for that queue.
+        """
+        common.bprint('>>> Sampling queue-host mapping info ...', date_format='%Y-%m-%d %H:%M:%S')
+
+        # Get current queue-host mapping info.
+        current_queue_host_dic = common_lsf.get_queue_host_info()
+
+        queue_host_mapping_db_file = str(self.db_path) + '/queue_host_mapping.db'
+        (result, queue_host_mapping_db_conn) = common_sqlite3.connect_db_file(queue_host_mapping_db_file, mode='write')
+
+        if result == 'passed':
+            queue_host_mapping_table_list = common_sqlite3.get_sql_table_list(queue_host_mapping_db_file, queue_host_mapping_db_conn)
+
+            saved_count = 0
+            skipped_count = 0
+
+            for queue, host_list in current_queue_host_dic.items():
+                # Generate table name for this queue
+                table_name = 'queue_' + str(queue)
+                hosts_string = ' '.join(host_list)
+
+                # Generate sql table if not exists.
+                if table_name not in queue_host_mapping_table_list:
+                    key_list = ['sample_second', 'sample_time', 'hosts']
+                    key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
+                    key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                    common_sqlite3.create_sql_table(queue_host_mapping_db_file, queue_host_mapping_db_conn, table_name, key_string, commit=False)
+
+                # Check if current mapping is same as last recorded mapping for this queue
+                skip_save = False
+
+                # Get the last recorded entry for this queue
+                last_data = common_sqlite3.get_sql_table_data(queue_host_mapping_db_file, queue_host_mapping_db_conn, table_name, ['hosts'], 'ORDER BY sample_second DESC LIMIT 1')
+
+                if last_data and 'hosts' in last_data and len(last_data['hosts']) > 0:
+                    last_hosts_string = last_data['hosts'][0]
+                    # Sort hosts for comparison
+                    last_hosts = sorted(last_hosts_string.split())
+                    current_hosts = sorted(host_list)
+
+                    if current_hosts == last_hosts:
+                        skip_save = True
+                        skipped_count += 1
+
+                # Insert sql table value only if mapping changed or no previous data
+                if not skip_save:
+                    value_list = [self.sample_second, self.sample_time, hosts_string]
+                    value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                    common_sqlite3.insert_into_sql_table(queue_host_mapping_db_file, queue_host_mapping_db_conn, table_name, value_string, commit=False)
+                    saved_count += 1
+
+            queue_host_mapping_db_conn.commit()
+
+            if saved_count > 0:
+                common.bprint(f'Saved queue-host mapping for {saved_count} queues ({skipped_count} unchanged).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+            else:
+                common.bprint(f'Queue-host mapping unchanged for all {skipped_count} queues, skipping save.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+
+            queue_host_mapping_db_conn.close()
+
     def sample_utilization_info(self):
         """
         Sample host resource utilization info and save it into sqlite db.
@@ -673,6 +743,11 @@ class Sampling:
             p = Process(target=self.sample_queue_info)
             p.start()
 
+        if self.queue_host_mapping_sampling:
+            sample_mark = True
+            p = Process(target=self.sample_queue_host_mapping_info)
+            p.start()
+
         if self.host_sampling:
             sample_mark = True
             p = Process(target=self.sample_host_info)
@@ -706,8 +781,8 @@ class Sampling:
 # Main Function #
 #################
 def main():
-    (cleanup, job, job_mem, queue, host, load, user, utilization, utilization_day) = read_args()
-    my_sampling = Sampling(cleanup, job, job_mem, queue, host, load, user, utilization, utilization_day)
+    (cleanup, job, job_mem, queue, queue_host_mapping, host, load, user, utilization, utilization_day) = read_args()
+    my_sampling = Sampling(cleanup, job, job_mem, queue, queue_host_mapping, host, load, user, utilization, utilization_day)
     my_sampling.sampling()
 
 

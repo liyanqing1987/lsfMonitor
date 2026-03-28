@@ -1,5 +1,5 @@
 **Author:** liyanqing1987@163.com    
-**Version:** V2.0
+**Version:** V2.1
 
 ## What’s lsfMonitor?
 `lsfMonitor` is an open source software for LSF information data-collection,
@@ -112,3 +112,10 @@ More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_us
 | V2.0    | (2026.02) | Update python3.8.8 support to python3.12.12.                 |
 |         |           | Add the logging function.                                    |
 |         |           | Optimize with AI suggestion.                                 |
+| V2.1    | (2026.03) | Add new parameter "--queue_host_mapping" on bsample          |
+|         |           | Optimize the utilization calculation method.                 |
+|         |           | Increase support for multi cluster utilization computing.    |
+|         |           | Add a lazy loading mechanism, resulting in faster startup speed. |
+|         |           | Add IDLE_FACTOR info on JOB tab.                             |
+|         |           | Add IDLE and MaxMem info on JOBS tab.                        |
+|         |           | Add Modify Rusage Mem function on JOBS tab on Rusage part with owner's job. |

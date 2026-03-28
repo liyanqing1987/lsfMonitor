@@ -10,12 +10,14 @@ import getpass
 import argparse
 import datetime
 from pathlib import Path
+import numpy as np
+import pandas as pd
 
 # Third-party imports
 import qdarkstyle
 from PyQt5.QtCore import QDate, Qt, QThread
 from PyQt5.QtGui import QBrush, QFont, QIcon
-from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QWidget, qApp
+from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QWidget, qApp, QInputDialog
 
 # Local imports
 LSFMONITOR_INSTALL_PATH = Path(os.environ['LSFMONITOR_INSTALL_PATH'])
@@ -37,8 +39,8 @@ else:
     from conf import config
 
 # Constants
-VERSION = 'V2.0'
-VERSION_DATE = '2026.03.03'
+VERSION = 'V2.1'
+VERSION_DATE = '2026.03.27'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -84,19 +86,19 @@ def read_args():
 
     args = parser.parse_args()
 
-    # Make sure specified job exists.
-    if args.jobid:
-        if not args.tab:
-            args.tab = 'JOB'
+    # Make sure specified job exists, only set tab to JOB if user didn't specify tab
+    if args.jobid and not args.tab:
+        args.tab = 'JOB'
 
-    # Determine default tab
-    tab_priority = [
-        (args.jobid, 'JOB'),
-        (args.user, 'JOBS'),
-        (args.feature, 'LICENSE')
-    ]
+    # Determine tab: user specified tab has highest priority
+    if not args.tab:
+        tab_priority = [
+            (args.jobid, 'JOB'),
+            (args.user, 'JOBS'),
+            (args.feature, 'LICENSE')
+        ]
 
-    args.tab = next((tab for condition, tab in tab_priority if condition), 'JOBS')
+        args.tab = next((tab for condition, tab in tab_priority if condition), 'JOBS')
 
     return args.jobid, args.user, args.feature, args.tab, args.disable_license, args.dark_mode
 
@@ -145,6 +147,10 @@ class MainWindow(QMainWindow):
         self.enable_queue_detail = False
         self.enable_utilization_detail = False
 
+        # Utilization query cache (60 minutes cache timeout)
+        self.utilization_cache = {}
+        self.utilization_cache_timeout = 3600
+
         # Init LSF information related variables.
         self.bhosts_dic = {}
         self.busers_dic = {}
@@ -173,10 +179,14 @@ class MainWindow(QMainWindow):
             for item in self.lsf_info_dic.keys():
                 self.lsf_info_dic[item]['update_second'] = current_second
 
-        # Get license information.
+        # Init license information.
         self.license_dic = {}
         self.license_dic_second = 0
-        self.get_license_dic()
+
+        # USERS/UTILIZATION/LICENSE页面懒加载标记
+        self.users_loaded = False
+        self.utilization_loaded = False
+        self.license_loaded = False
 
         # Generate GUI.
         self.init_ui()
@@ -337,6 +347,21 @@ class MainWindow(QMainWindow):
                    'QUEUES': self.queues_tab,
                    'UTILIZATION': self.utilization_tab,
                    'LICENSE': self.license_tab}
+
+        # 切换到USERS页面时，如果还没加载过用户信息，就加载
+        if specified_tab == 'USERS' and not self.users_loaded:
+            self.gen_users_tab_table()
+            self.users_loaded = True
+
+        # 切换到UTILIZATION页面时，如果还没加载过利用率信息，就加载
+        if specified_tab == 'UTILIZATION' and not self.utilization_loaded:
+            self.update_utilization_tab_info()
+            self.utilization_loaded = True
+
+        # 切换到LICENSE页面时，如果还没加载过License信息，就加载
+        if specified_tab == 'LICENSE' and not self.license_loaded:
+            self.get_license_dic()
+            self.license_loaded = True
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
 
@@ -640,6 +665,12 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.job_tab_processors_requested_line = QLineEdit()
 
+        # "IDLE_FACTOR" item.
+        job_tab_idle_factor_label = QLabel('IDLE_FACTOR', self.job_tab_frame1)
+        job_tab_idle_factor_label.setStyleSheet("font-weight: bold;")
+
+        self.job_tab_idle_factor_line = QLineEdit()
+
         # "Rusage" item.
         job_tab_rusage_mem_label = QLabel('Rusage', self.job_tab_frame1)
         job_tab_rusage_mem_label.setStyleSheet("font-weight: bold;")
@@ -677,12 +708,14 @@ Please contact with liyanqing1987@163.com with any question."""
         job_tab_frame1_grid.addWidget(self.job_tab_finished_time_line, 6, 1)
         job_tab_frame1_grid.addWidget(job_tab_processors_requested_label, 7, 0)
         job_tab_frame1_grid.addWidget(self.job_tab_processors_requested_line, 7, 1)
-        job_tab_frame1_grid.addWidget(job_tab_rusage_mem_label, 8, 0)
-        job_tab_frame1_grid.addWidget(self.job_tab_rusage_mem_line, 8, 1)
-        job_tab_frame1_grid.addWidget(job_tab_mem_label, 9, 0)
-        job_tab_frame1_grid.addWidget(self.job_tab_mem_line, 9, 1)
-        job_tab_frame1_grid.addWidget(job_tab_max_mem_label, 10, 0)
-        job_tab_frame1_grid.addWidget(self.job_tab_max_mem_line, 10, 1)
+        job_tab_frame1_grid.addWidget(job_tab_idle_factor_label, 8, 0)
+        job_tab_frame1_grid.addWidget(self.job_tab_idle_factor_line, 8, 1)
+        job_tab_frame1_grid.addWidget(job_tab_rusage_mem_label, 9, 0)
+        job_tab_frame1_grid.addWidget(self.job_tab_rusage_mem_line, 9, 1)
+        job_tab_frame1_grid.addWidget(job_tab_mem_label, 10, 0)
+        job_tab_frame1_grid.addWidget(self.job_tab_mem_line, 10, 1)
+        job_tab_frame1_grid.addWidget(job_tab_max_mem_label, 11, 0)
+        job_tab_frame1_grid.addWidget(self.job_tab_max_mem_line, 11, 1)
 
         self.job_tab_frame1.setLayout(job_tab_frame1_grid)
 
@@ -922,6 +955,18 @@ Please contact with liyanqing1987@163.com with any question."""
             self.job_tab_processors_requested_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['processors_requested'])
             self.job_tab_processors_requested_line.setCursorPosition(0)
 
+        # Fill "IDLE Factor" item.
+        if init:
+            self.job_tab_idle_factor_line.setText('')
+        else:
+            idle_value = ''
+
+            if self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor'] != '':
+                idle_value = str(round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor']), 2))
+
+            self.job_tab_idle_factor_line.setText(idle_value)
+            self.job_tab_idle_factor_line.setCursorPosition(0)
+
         # Fill "Rusage" item.
         if init:
             self.job_tab_rusage_mem_line.setText('')
@@ -1063,6 +1108,8 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.jobs_tab_table = QTableWidget(self.jobs_tab)
         self.jobs_tab_table.itemClicked.connect(self.jobs_tab_check_click)
+        self.jobs_tab_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.jobs_tab_table.customContextMenuRequested.connect(self.gen_jobs_tab_menu)
 
         # self.jobs_tab - Grid
         jobs_tab_grid = QGridLayout()
@@ -1161,8 +1208,8 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_table.setShowGrid(True)
         self.jobs_tab_table.setSortingEnabled(True)
         self.jobs_tab_table.setColumnCount(0)
-        self.jobs_tab_table.setColumnCount(11)
-        self.jobs_tab_table_title_list = ['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'Rusage (G)', 'Mem (G)', 'Command']
+        self.jobs_tab_table.setColumnCount(13)
+        self.jobs_tab_table_title_list = ['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'IDLE', 'Rusage (G)', 'Mem (G)', 'MaxMem (G)', 'Command']
         self.jobs_tab_table.setHorizontalHeaderLabels(self.jobs_tab_table_title_list)
 
         self.jobs_tab_table.setColumnWidth(0, 80)
@@ -1173,9 +1220,11 @@ Please contact with liyanqing1987@163.com with any question."""
         self.jobs_tab_table.setColumnWidth(5, 150)
         self.jobs_tab_table.setColumnWidth(6, 100)
         self.jobs_tab_table.setColumnWidth(7, 40)
-        self.jobs_tab_table.setColumnWidth(8, 80)
-        self.jobs_tab_table.setColumnWidth(9, 70)
-        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
+        self.jobs_tab_table.setColumnWidth(8, 50)
+        self.jobs_tab_table.setColumnWidth(9, 80)
+        self.jobs_tab_table.setColumnWidth(10, 70)
+        self.jobs_tab_table.setColumnWidth(11, 100)
+        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(12, QHeaderView.Stretch)
 
         # Get specified user related jobs.
         command = 'bjobs -UF '
@@ -1320,6 +1369,17 @@ Please contact with liyanqing1987@163.com with any question."""
                 item.setData(Qt.DisplayRole, int(job_dic[job]['processors_requested']))
                 self.jobs_tab_table.setItem(i, j, item)
 
+            # Fill "IDLE" item.
+            j = j+1
+            idle_value = ''
+
+            if str(job_dic[job]['idle_factor']) != '':
+                idle_value = round(float(job_dic[job]['idle_factor']), 2)
+
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, idle_value)
+            self.jobs_tab_table.setItem(i, j, item)
+
             # Fill "Rusage" item.
             j = j+1
 
@@ -1333,10 +1393,7 @@ Please contact with liyanqing1987@163.com with any question."""
             j = j+1
             mem_value = ''
 
-            if (job_dic[job]['status'] == 'DONE') or (job_dic[job]['status'] == 'EXIT'):
-                if str(job_dic[job]['max_mem']) != '':
-                    mem_value = round(float(job_dic[job]['max_mem'])/1024, 1)
-            else:
+            if (job_dic[job]['status'] != 'DONE') and (job_dic[job]['status'] != 'EXIT'):
                 if str(job_dic[job]['mem']) != '':
                     mem_value = round(float(job_dic[job]['mem'])/1024, 1)
 
@@ -1346,6 +1403,17 @@ Please contact with liyanqing1987@163.com with any question."""
 
             if mem_value and (((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value))):
                 item.setBackground(QBrush(Qt.red))
+
+            # Fill "MaxMem" item.
+            j = j+1
+            max_mem_value = ''
+
+            if str(job_dic[job]['max_mem']) != '':
+                max_mem_value = round(float(job_dic[job]['max_mem'])/1024, 1)
+
+            item = QTableWidgetItem()
+            item.setData(Qt.DisplayRole, max_mem_value)
+            self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Command" item.
             j = j+1
@@ -1375,6 +1443,165 @@ Please contact with liyanqing1987@163.com with any question."""
                     self.check_slow_reason(job=job)
                 elif (job_status == 'DONE') or (job_status == 'EXIT'):
                     self.check_fail_reason(job=job)
+
+    def gen_jobs_tab_menu(self, pos):
+        """
+        Generate right click menu on self.jobs_tab_table.
+        """
+        item = self.jobs_tab_table.itemAt(pos)
+
+        if item and (item.column() == 9):  # Rusage (G) column
+            current_row = self.jobs_tab_table.currentRow()
+            job = self.jobs_tab_table.item(current_row, 0).text().strip()
+            job_user = self.jobs_tab_table.item(current_row, 1).text().strip()
+
+            # Only show menu for current user's jobs
+            if job_user == USER:
+                menu = QMenu(self.jobs_tab_table)
+
+                modify_rusage_action = QAction('Modify Rusage Mem', self)
+                modify_rusage_action.triggered.connect(lambda: self.modify_job_rusage(job))
+                menu.addAction(modify_rusage_action)
+
+                menu.exec_(self.jobs_tab_table.mapToGlobal(pos))
+
+    def modify_job_rusage(self, job):
+        """
+        Open dialog to modify job's rusage memory.
+        """
+        # Get current Rusage value from table
+        current_row = -1
+
+        for row in range(self.jobs_tab_table.rowCount()):
+            if self.jobs_tab_table.item(row, 0).text().strip() == job:
+                current_row = row
+                break
+
+        if current_row == -1:
+            return
+
+        rusage_item = self.jobs_tab_table.item(current_row, 9)
+        current_rusage_gb = rusage_item.text().strip() if rusage_item else ''
+        current_rusage_mb = 0
+
+        if current_rusage_gb and re.match(r'^\d+\.?\d*$', current_rusage_gb):
+            current_rusage_mb = int(float(current_rusage_gb) * 1024)
+
+        # Get host information to determine max rusage limit
+        host_item = self.jobs_tab_table.item(current_row, 4)
+        host = host_item.text().strip() if host_item else ''
+
+        # Default max value (int max value = 2^31 - 1 = 2147483647 MB ≈ 2048 TB)
+        max_rusage_mb = 2147483647
+        host_info = ''
+
+        if host:
+            # Fresh bhosts_load info to get latest data
+            self.fresh_lsf_info('bhosts_load')
+
+            # Get saMem (scheduling available memory) from host
+            # saMem is the memory that can be scheduled, i.e., not yet used by jobs
+            if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
+                sa_mem = self.bhosts_load_dic[host]['Total']['mem']
+                # mem_unit_switch returns GB, convert to MB
+                sa_mem_mb = int(self.mem_unit_switch(sa_mem) * 1024)
+
+                # Max rusage for this job = saMem + current_rusage_mb
+                # This allows the job to:
+                # 1. Reduce its rusage (free up memory)
+                # 2. Increase its rusage (but only up to saMem)
+                max_rusage_mb = sa_mem_mb + current_rusage_mb
+                host_info = f'\nHost: {host}\nSchedulable Memory (saMem): {sa_mem_mb} MB\nMax Rusage for this job: {max_rusage_mb} MB'
+
+        # Use QInputDialog to get new value
+        new_rusage_mb, ok = QInputDialog.getInt(
+            self,
+            f'Modify Rusage Mem - Job {job}',
+            f'Current Rusage: {current_rusage_mb} MB\nEnter new Rusage (MB):{host_info}',
+            current_rusage_mb,
+            0,
+            max_rusage_mb,
+            1
+        )
+
+        if ok:
+            self.apply_rusage_modification(job, new_rusage_mb)
+
+    def apply_rusage_modification(self, job, new_rusage_mb):
+        """
+        Apply rusage modification using bmod command.
+        """
+        # Get job info using common_lsf.get_bjobs_uf_info()
+        command = f'bjobs -UF {job}'
+        common.bprint(f'Getting job info: {command}', date_format='%Y-%m-%d %H:%M:%S')
+
+        job_dic = common_lsf.get_bjobs_uf_info(command)
+
+        if job not in job_dic:
+            QMessageBox.warning(self, 'Error', f'Job {job} not found.')
+            return
+
+        # Debug: print job_dic keys
+        common.bprint(f'Job info keys: {list(job_dic[job].keys())}', date_format='%Y-%m-%d %H:%M:%S')
+
+        requested_resource = job_dic[job].get('requested_resources', '')
+
+        if not requested_resource:
+            common.bprint(f'ERROR: requested_resources is empty. Full job info: {job_dic[job]}', date_format='%Y-%m-%d %H:%M:%S', level='Error')
+            QMessageBox.warning(self, 'Error', 'Could not find requested resources in job info.')
+            return
+
+        common.bprint(f'Original requested_resources: {requested_resource}', date_format='%Y-%m-%d %H:%M:%S')
+
+        # Modify rusage[mem=...] value
+        # Use more precise regex to match rusage[mem=...]
+        new_requested_resource = re.sub(
+            r'rusage\s*\[\s*mem\s*=\s*\d+(\.\d+)?\s*\]',
+            f'rusage[mem={new_rusage_mb}]',
+            requested_resource
+        )
+
+        common.bprint(f'Modified requested_resources: {new_requested_resource}', date_format='%Y-%m-%d %H:%M:%S')
+
+        # If rusage[mem=...] not found, add it
+        if new_requested_resource == requested_resource:
+            # Check if rusage exists but without mem
+            if 'rusage[' in requested_resource:
+                QMessageBox.warning(self, 'Error', 'Found rusage but could not find mem parameter. Please check job resources.')
+                return
+            else:
+                # Add rusage[mem=...] to the end
+                new_requested_resource = f'{requested_resource} rusage[mem={new_rusage_mb}]'
+
+        # Apply modification with bmod
+        bmod_command = f'bmod -R "{new_requested_resource}" {job}'
+        common.bprint(f'Executing: {bmod_command}', date_format='%Y-%m-%d %H:%M:%S')
+
+        (return_code, stdout, stderr) = common.run_command(bmod_command)
+
+        if return_code == 0:
+            common.bprint(f'Successfully modified rusage for job {job}', date_format='%Y-%m-%d %H:%M:%S')
+            QMessageBox.information(self, 'Success', f'Successfully modified rusage for job {job}')
+
+            # Wait a moment for LSF to update job info
+            time.sleep(2)
+
+            # Refresh the jobs table
+            self.gen_jobs_tab_table()
+
+            # Also try to update the specific cell directly for immediate feedback
+            # Find the job row and update the Rusage value
+            for row in range(self.jobs_tab_table.rowCount()):
+                if self.jobs_tab_table.item(row, 0).text().strip() == job:
+                    rusage_gb = round(new_rusage_mb / 1024, 1)
+                    item = QTableWidgetItem()
+                    item.setData(Qt.DisplayRole, rusage_gb)
+                    self.jobs_tab_table.setItem(row, 9, item)
+                    break
+        else:
+            error_msg = stderr.decode('utf-8').strip()
+            common.bprint(f'Failed to modify rusage: {error_msg}', date_format='%Y-%m-%d %H:%M:%S', level='Error')
+            QMessageBox.warning(self, 'Error', f'Failed to modify rusage: {error_msg}')
 
     def set_jobs_tab_status_combo(self, checked_status_list=['RUN', ]):
         """
@@ -2417,7 +2644,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Generate sub-fram
         self.gen_users_tab_frame0()
-        self.gen_users_tab_table()
 
     def gen_users_tab_frame0(self):
         # self.users_tab_frame0
@@ -3265,10 +3491,18 @@ Please contact with liyanqing1987@163.com with any question."""
         self.gen_utilization_tab_frame0()
         self.gen_utilization_tab_table()
         self.gen_utilization_tab_frame1()
-        self.update_utilization_tab_info()
 
     def gen_utilization_tab_frame0(self):
         # self.utilization_tab_frame0
+        # "Cluster" item.
+        utilization_tab_cluster_label = QLabel('Cluster', self.utilization_tab_frame0)
+        utilization_tab_cluster_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_cluster_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.utilization_tab_cluster_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
+        self.set_utilization_tab_cluster_combo()
+        self.utilization_tab_cluster_combo.currentTextChanged.connect(self.update_utilization_tab_queue_combo_by_cluster)
+
         # "Queue" item.
         utilization_tab_queue_label = QLabel('Queue', self.utilization_tab_frame0)
         utilization_tab_queue_label.setStyleSheet("font-weight: bold;")
@@ -3276,15 +3510,6 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_queue_combo()
-        self.utilization_tab_queue_combo.currentTextChanged.connect(self.set_utilization_tab_host_combo)
-
-        # "Host" item.
-        utilization_tab_host_label = QLabel('Host', self.utilization_tab_frame0)
-        utilization_tab_host_label.setStyleSheet("font-weight: bold;")
-        utilization_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-
-        self.utilization_tab_host_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
-        self.set_utilization_tab_host_combo()
 
         # "Resource" item.
         utilization_tab_resource_label = QLabel('Resource', self.utilization_tab_frame0)
@@ -3327,10 +3552,10 @@ Please contact with liyanqing1987@163.com with any question."""
         # self.utilization_tab_frame0 - Grid
         utilization_tab_frame0_grid = QGridLayout()
 
-        utilization_tab_frame0_grid.addWidget(utilization_tab_queue_label, 0, 0)
-        utilization_tab_frame0_grid.addWidget(self.utilization_tab_queue_combo, 0, 1)
-        utilization_tab_frame0_grid.addWidget(utilization_tab_host_label, 0, 2)
-        utilization_tab_frame0_grid.addWidget(self.utilization_tab_host_combo, 0, 3)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_cluster_label, 0, 0)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_cluster_combo, 0, 1)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_queue_label, 0, 2)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_queue_combo, 0, 3)
         utilization_tab_frame0_grid.addWidget(utilization_tab_resource_label, 0, 4)
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_resource_combo, 0, 5)
         utilization_tab_frame0_grid.addWidget(utilization_tab_check_button, 0, 6)
@@ -3341,83 +3566,153 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 3)
 
         utilization_tab_frame0_grid.setColumnStretch(0, 1)
-        utilization_tab_frame0_grid.setColumnStretch(1, 1)
+        utilization_tab_frame0_grid.setColumnStretch(1, 2)
         utilization_tab_frame0_grid.setColumnStretch(2, 1)
-        utilization_tab_frame0_grid.setColumnStretch(3, 1)
+        utilization_tab_frame0_grid.setColumnStretch(3, 2)
         utilization_tab_frame0_grid.setColumnStretch(4, 1)
         utilization_tab_frame0_grid.setColumnStretch(5, 1)
         utilization_tab_frame0_grid.setColumnStretch(6, 1)
 
         self.utilization_tab_frame0.setLayout(utilization_tab_frame0_grid)
 
-    def set_utilization_tab_queue_combo(self, checked_queue_list=['ALL', ]):
+    def set_utilization_tab_cluster_combo(self, checked_cluster_list=None):
+        """
+        Set (initialize) self.utilization_tab_cluster_combo.
+        """
+        self.utilization_tab_cluster_combo.clear()
+        db_root_path = Path(config.db_path)
+        cluster_list = []
+
+        if db_root_path.exists() and db_root_path.is_dir():
+            for entry in os.scandir(db_root_path):
+                if entry.is_dir() and entry.name != 'log':
+                    cluster_list.append(entry.name)
+
+        cluster_list.sort()
+        cluster_list.insert(0, 'ALL')
+
+        for cluster in cluster_list:
+            self.utilization_tab_cluster_combo.addCheckBoxItem(cluster)
+
+        # 默认选中当前集群
+        if checked_cluster_list is None:
+            checked_cluster_list = [self.cluster]
+
+        # Set to checked status for checked_cluster_list.
+        for (i, qBox) in enumerate(self.utilization_tab_cluster_combo.checkBoxList):
+            if (qBox.text() in checked_cluster_list) and (qBox.isChecked() is False):
+                self.utilization_tab_cluster_combo.checkBoxList[i].setChecked(True)
+
+    def set_utilization_tab_queue_combo(self, checked_queue_list=None):
         """
         Set (initialize) self.utilization_tab_queue_combo.
         """
         self.utilization_tab_queue_combo.clear()
-        self.fresh_lsf_info('bqueues')
+        db_root_path = Path(config.db_path)
+        queue_list = []
 
-        if 'QUEUE_NAME' in self.bqueues_dic:
-            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-            queue_list.sort()
-        else:
-            queue_list = []
+        # 获取所有集群的所有队列
+        if db_root_path.exists() and db_root_path.is_dir():
+            for entry in os.scandir(db_root_path):
+                if entry.is_dir() and entry.name != 'log':
+                    cluster = entry.name
+                    cluster_db_path = db_root_path / cluster
+                    queue_host_mapping_db = cluster_db_path / 'queue_host_mapping.db'
 
+                    if queue_host_mapping_db.exists():
+                        # 读取当前集群的所有队列
+                        (result, conn) = common_sqlite3.connect_db_file(str(queue_host_mapping_db))
+
+                        if result == 'passed':
+                            table_list = common_sqlite3.get_sql_table_list(str(queue_host_mapping_db), conn)
+                            cluster_queues = [re.sub(r'^queue_', '', table) for table in table_list if table.startswith('queue_')]
+
+                            for queue in cluster_queues:
+                                queue_list.append(f"{cluster}-{queue}")
+
+                            conn.close()
+
+        queue_list.sort()
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
             self.utilization_tab_queue_combo.addCheckBoxItem(queue)
 
+        # 处理默认选中逻辑
+        if checked_queue_list is None:
+            # 默认选中当前集群的所有队列
+            checked_queue_list = []
+
+            for queue in queue_list:
+                if queue == 'ALL':
+                    continue
+
+                if '-' in queue:
+                    q_cluster = queue.split('-', 1)[0]
+
+                    if q_cluster == self.cluster:
+                        checked_queue_list.append(queue)
+
         # Set to checked status for checked_queue_list.
         for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.utilization_tab_queue_combo.checkBoxList[i].setChecked(True)
+            elif (qBox.text() not in checked_queue_list) and (qBox.isChecked() is True):
+                self.utilization_tab_queue_combo.checkBoxList[i].setChecked(False)
 
-    def set_utilization_tab_host_combo(self):
+    def update_utilization_tab_queue_combo_by_cluster(self):
         """
-        Set (initialize) self.utilization_tab_host_combo.
+        Update queue checked state when cluster selection changes.
+        仅调整Queue选中状态，不修改队列列表
         """
-        my_show_message = ShowMessage('Info', 'Updating Host combo on UTILIZATION tab ...')
-        my_show_message.start()
+        # 获取选中的集群
+        selected_cluster_dic = self.utilization_tab_cluster_combo.selectedItems()
+        selected_clusters = sorted(list(selected_cluster_dic.values())) if selected_cluster_dic else []
+        select_all = False
 
-        self.utilization_tab_host_combo.unselectAllItems()
-        self.utilization_tab_host_combo.clear()
+        if 'ALL' in selected_clusters:
+            select_all = True
+            # 选中ALL时获取所有集群
+            selected_clusters = []
+            db_root_path = Path(config.db_path)
 
-        # Get host_list based on selected queue info.
-        host_list = []
-        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+            if db_root_path.exists() and db_root_path.is_dir():
+                for entry in os.scandir(db_root_path):
+                    if entry.is_dir() and entry.name != 'log':
+                        selected_clusters.append(entry.name)
 
-        self.fresh_lsf_info('bhosts')
-
-        if 'HOST_NAME' in self.bhosts_dic:
-            host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        # 调整队列选中状态
+        if not selected_clusters:
+            # 没有选中任何集群时，所有队列都不选中
+            for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
+                qBox.setChecked(False)
+        elif select_all:
+            # 选中Cluster的ALL时，Queue只需要选中ALL即可，不需要选中所有队列
+            for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
+                if qBox.text() == 'ALL':
+                    qBox.setChecked(True)
+                else:
+                    qBox.setChecked(False)
         else:
-            host_list = []
+            for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
+                queue_name = qBox.text()
 
-        selected_host_list = []
+                if queue_name == 'ALL':
+                    # 选中部分集群时ALL保持选中
+                    qBox.setChecked(True)
+                    continue
 
-        if selected_queue_dic:
-            if 'ALL' in selected_queue_dic.values():
-                selected_host_list = copy.deepcopy(host_list)
-            else:
-                self.fresh_lsf_info('queue_host')
+                # 获取队列所属集群
+                if '-' in queue_name:
+                    queue_cluster = queue_name.split('-', 1)[0]
 
-                for selected_queue in selected_queue_dic.values():
-                    selected_host_list += self.queue_host_dic[selected_queue]
-
-                    for host in selected_host_list:
-                        if host not in host_list:
-                            host_list.append(host)
-
-        for host in host_list:
-            self.utilization_tab_host_combo.addCheckBoxItem(host)
-
-        # Set all hosts as checked.
-        selected_host_list = list(set(selected_host_list))
-        self.utilization_tab_host_combo.setItemsChecked(selected_host_list)
-
-        time.sleep(0.01)
-        my_show_message.terminate()
+                    if queue_cluster in selected_clusters:
+                        qBox.setChecked(True)
+                    else:
+                        qBox.setChecked(False)
+                else:
+                    # 特殊队列（如lost_and_found）默认不选中
+                    qBox.setChecked(False)
 
     def set_utilization_tab_resource_combo(self):
         """
@@ -3438,113 +3733,520 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Update self.utilization_tab_table and self.utilization_tab_frame1.
         """
-        queue_utilization_dic = self.get_queue_utilization_info()
+        # 先清空所有旧数据，避免切换Cluster时残留
+        self.utilization_full_time_data = None
+        self.utilization_time_range = None
+        # 清空表格
+        self.utilization_tab_table.setRowCount(0)
+
+        return_data = self.get_queue_utilization_info()
+
+        if not return_data:
+            self.update_utilization_tab_frame1()
+            return
+
+        queue_utilization_dic, full_time_util, begin_second, end_second = return_data
+
+        # 保存到实例变量供图表使用
+        self.utilization_full_time_data = full_time_util
+        self.utilization_time_range = (begin_second, end_second)
 
         if queue_utilization_dic:
             self.gen_utilization_tab_table(queue_utilization_dic)
 
         self.update_utilization_tab_frame1()
 
+    def get_historical_queue_host_mapping(self, db_path, begin_second, end_second):
+        """
+        Get all queue-host mappings in the specified time range.
+        Returns:
+            - queue_list: all queues existed in the time range
+            - mapping_matrix: list of (start_second, end_second, queue_host_dic)
+            - current_queue_list: current existing queues (to mark deleted queues)
+        """
+        queue_host_mapping_db_file = str(db_path) + '/queue_host_mapping.db'
+        mapping_matrix = []
+        all_queues = set()
+        queue_change_points = []
+
+        if not os.path.exists(queue_host_mapping_db_file):
+            common.bprint(f'Queue-host mapping database "{queue_host_mapping_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            # Fallback to current mapping if no historical data
+            self.fresh_lsf_info('queue_host')
+            return list(self.queue_host_dic.keys()), [(begin_second, end_second, self.queue_host_dic)], list(self.queue_host_dic.keys())
+
+        (result, conn) = common_sqlite3.connect_db_file(queue_host_mapping_db_file)
+
+        if result == 'failed':
+            common.bprint('Failed to connect queue-host mapping database.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            self.fresh_lsf_info('queue_host')
+            return list(self.queue_host_dic.keys()), [(begin_second, end_second, self.queue_host_dic)], list(self.queue_host_dic.keys())
+
+        # Get all queue tables
+        table_list = common_sqlite3.get_sql_table_list(queue_host_mapping_db_file, conn)
+        queue_list = [re.sub(r'^queue_', '', table) for table in table_list if table.startswith('queue_')]
+
+        # Collect all change points
+        for queue in queue_list:
+            table_name = f'queue_{queue}'
+            # Get all mapping records in time range
+            data = common_sqlite3.get_sql_table_data(
+                queue_host_mapping_db_file, conn, table_name,
+                ['sample_second', 'hosts'],
+                f"WHERE sample_second BETWEEN {begin_second - 86400} AND {end_second + 86400} ORDER BY sample_second"
+            )
+
+            if data and data['sample_second']:
+                for i, sample_second in enumerate(data['sample_second']):
+                    hosts = data['hosts'][i].split()
+                    queue_change_points.append((int(sample_second), queue, hosts))
+
+                all_queues.add(queue)
+
+        # Get current existing queues: 仅能获取当前集群的队列列表，其他集群无法通过LSF命令查询
+        current_cluster_db_path = str(self.db_path)
+
+        if db_path == current_cluster_db_path:
+            self.fresh_lsf_info('bqueues')
+            current_queue_list = self.bqueues_dic.get('QUEUE_NAME', []) if hasattr(self, 'bqueues_dic') else []
+        else:
+            # 其他集群的队列默认视为存在，不标记deleted状态
+            current_queue_list = list(all_queues)
+
+        # Sort change points by time
+        queue_change_points.sort(key=lambda x: x[0])
+
+        # Generate time slices
+        if not queue_change_points:
+            # No changes in time range, use current mapping
+            self.fresh_lsf_info('queue_host')
+            return list(all_queues) if all_queues else list(self.queue_host_dic.keys()), [(begin_second, end_second, self.queue_host_dic)], current_queue_list
+
+        # Build mapping matrix
+        current_mapping = {}
+
+        # Initialize mapping: if no records before begin_second, use queue's earliest record as default for pre-begin time
+        for queue in queue_list:
+            table_name = f'queue_{queue}'
+            # First try to get the latest record before begin_second
+            data = common_sqlite3.get_sql_table_data(
+                queue_host_mapping_db_file, conn, table_name,
+                ['sample_second', 'hosts'],
+                f"WHERE sample_second <= {begin_second} ORDER BY sample_second DESC LIMIT 1"
+            )
+
+            if data and data['hosts']:
+                current_mapping[queue] = data['hosts'][0].split()
+            else:
+                # No records before begin_second, get queue's earliest record to use for pre-begin period
+                earliest_data = common_sqlite3.get_sql_table_data(
+                    queue_host_mapping_db_file, conn, table_name,
+                    ['sample_second', 'hosts'],
+                    "ORDER BY sample_second ASC LIMIT 1"
+                )
+
+                if earliest_data and earliest_data['hosts']:
+                    current_mapping[queue] = earliest_data['hosts'][0].split()
+
+        # Process change points to build time slices
+        all_change_times = sorted(list(set([cp[0] for cp in queue_change_points] + [begin_second, end_second])))
+
+        for i in range(len(all_change_times) - 1):
+            slice_start = max(all_change_times[i], begin_second)
+            slice_end = min(all_change_times[i+1], end_second)
+
+            if slice_start >= slice_end:
+                continue
+
+            # Update mapping for this slice
+            for cp_time, queue, hosts in queue_change_points:
+                if cp_time == all_change_times[i]:
+                    current_mapping[queue] = hosts
+
+            # Add to matrix
+            mapping_matrix.append((slice_start, slice_end, copy.deepcopy(current_mapping)))
+
+        conn.close()
+
+        return sorted(list(all_queues)), mapping_matrix, current_queue_list
+
     def get_queue_utilization_info(self):
         """
-        Get sample_time/ut/mem list for specified queues.
+        Get queue utilization info from sqlite database using historical queue-host mapping, support multi-cluster.
         """
         common.bprint('Loading queue utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading queue utilization info ...')
         my_show_message.start()
 
-        utilization_dic = {}
-        utilization_db_file = str(self.db_path) + '/utilization_day.db'
+        # Get time range
+        begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
+        original_begin_second = int(time.mktime(time.strptime(f"{begin_date} 00:00:00", '%Y-%m-%d %H:%M:%S')))
+        end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
+        original_end_second = int(time.mktime(time.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')))
+        # 缓存查询用的时间范围
+        begin_second = original_begin_second
+        end_second = original_end_second
 
-        if not os.path.exists(utilization_db_file):
-            common.bprint(f'Utilization database "{utilization_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-        else:
-            (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
+        # 获取选中的集群
+        db_root_path = Path(config.db_path)
+        selected_cluster_dic = self.utilization_tab_cluster_combo.selectedItems()
+        selected_clusters = sorted(list(selected_cluster_dic.values())) if selected_cluster_dic else []
 
-            if utilization_db_file_connect_result == 'failed':
-                common.bprint(f'Failed on connecting utilization database file "{utilization_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-            else:
-                self.fresh_lsf_info('bhosts')
-                host_list = copy.deepcopy(self.bhosts_dic['HOST_NAME'])
+        if 'ALL' in selected_clusters:
+            selected_clusters = []
 
-                if host_list:
-                    for host_name in host_list:
-                        table_name = 'utilization_' + str(host_name)
-                        utilization_dic.setdefault(host_name, {})
-                        key_list = copy.deepcopy(self.utilization_tab_resource_list)
-                        key_list.insert(0, 'sample_date')
-                        begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
-                        begin_date = re.sub('-', '', begin_date)
-                        end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
-                        end_date = re.sub('-', '', end_date)
-                        select_condition = 'WHERE sample_date>=' + str(begin_date) + ' AND sample_date<=' + str(end_date)
-                        data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
+            if db_root_path.exists() and db_root_path.is_dir():
+                for entry in os.scandir(db_root_path):
+                    if entry.is_dir() and entry.name != 'log':
+                        selected_clusters.append(entry.name)
 
-                        if not data_dic:
-                            continue
+        # 获取选中的队列
+        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+        selected_queues = list(selected_queue_dic.values()) if selected_queue_dic else []
+
+        # Generate cache key (增量查询优化：key包含集群和队列，同条件下复用缓存)
+        cache_base_key = (tuple(selected_clusters), tuple(selected_queues), self.enable_utilization_detail)
+
+        # Check cache
+        current_time = time.time()
+        cached_full_util = None
+        cached_begin = 0
+        cached_end = 0
+
+        if cache_base_key in self.utilization_cache:
+            cached_full_util, cache_time, cached_begin, cached_end = self.utilization_cache[cache_base_key]
+
+            if current_time - cache_time < self.utilization_cache_timeout:
+                # 检查新查询的时间范围是否完全在缓存范围内
+                if begin_second >= cached_begin and end_second <= cached_end:
+                    common.bprint('Using cached utilization data (full hit).', date_format='%Y-%m-%d %H:%M:%S')
+                    # 从缓存中截取需要的时间段
+                    queue_utilization_dic = {}
+
+                    for queue in cached_full_util:
+                        queue_utilization_dic[queue] = {'is_deleted': cached_full_util[queue]['is_deleted']}
+
+                        for res in ['slot', 'cpu', 'mem']:
+                            vals = []
+
+                            for ts_key, val in cached_full_util[queue][res].items():
+                                if self.enable_utilization_detail:
+                                    ts = int(time.mktime(time.strptime(ts_key, '%Y%m%d_%H%M%S')))
+                                else:
+                                    ts = int(time.mktime(time.strptime(f"{ts_key[:4]}-{ts_key[4:6]}-{ts_key[6:8]} 12:00:00", '%Y-%m-%d %H:%M:%S')))
+
+                                if begin_second <= ts <= end_second:
+                                    vals.append(val)
+                            if vals:
+                                queue_utilization_dic[queue][res] = round(sum(vals) / len(vals), 1)
+                            else:
+                                queue_utilization_dic[queue][res] = 0.0
+
+                    time.sleep(0.01)
+                    my_show_message.terminate()
+                    # 缓存命中时也返回完整数据
+                    return queue_utilization_dic, cached_full_util, original_begin_second, original_end_second
+                else:
+                    common.bprint('Using cached utilization data (partial hit), only querying new time range.', date_format='%Y-%m-%d %H:%M:%S')
+                    # 部分命中，扩展时间范围查询
+                    new_begin = min(begin_second, cached_begin)
+                    new_end = max(end_second, cached_end)
+
+                    if new_begin == begin_second and new_end == end_second:
+                        # 完全不重叠，重新查询
+                        cached_full_util = None
+                    else:
+                        # 调整查询范围为新增部分
+                        if begin_second < cached_begin:
+                            query_begin = begin_second
+                            query_end = cached_begin
                         else:
-                            for resource in self.utilization_tab_resource_list:
-                                utilization_dic[host_name].setdefault(resource, 0.0)
-                                utilization_list = []
+                            query_begin = cached_end
+                            query_end = end_second
 
-                                for utilization in data_dic[resource]:
-                                    utilization = float(utilization)
+                        begin_second, end_second = query_begin, query_end
 
-                                    if int(utilization) >= 100:
-                                        utilization = 100.0
+        # Clean up expired cache
+        keys_to_delete = [k for k, (_, t, _, _) in self.utilization_cache.items() if current_time - t > self.utilization_cache_timeout]
 
-                                    utilization_list.append(utilization)
+        for k in keys_to_delete:
+            del self.utilization_cache[k]
 
-                                if utilization_list:
-                                    avg_utilization = round((sum(utilization_list)/len(utilization_list)), 1)
-                                    utilization_dic[host_name][resource] = avg_utilization
+        # Limit cache size to 20 entries
+        if len(self.utilization_cache) > 20:
+            oldest_key = sorted(self.utilization_cache.keys(), key=lambda k: self.utilization_cache[k][1])[0]
+            del self.utilization_cache[oldest_key]
 
-            utilization_db_conn.close()
+        # Update message: loading historical mapping
+        # 解析队列和集群的映射
+        queue_cluster_map = {}
+        queue_full_name_map = {}
+        only_all_selected = len(selected_queues) == 1 and 'ALL' in selected_queues
 
-        # Organize utilization info, get average utlization for every queue.
-        queue_utilization_dic = {}
-        self.fresh_lsf_info('bqueues')
+        for q in selected_queues:
+            if q == 'ALL':
+                continue
 
-        if 'QUEUE_NAME' in self.bqueues_dic:
-            queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
-            queue_list.sort()
-        else:
-            queue_list = []
+            if '-' in q:
+                cluster, queue_name = q.split('-', 1)
 
-        queue_list.append('ALL')
+                if cluster in selected_clusters:
+                    if cluster not in queue_cluster_map:
+                        queue_cluster_map[cluster] = []
 
-        # Init queue_utilization_dic.
-        for queue in queue_list:
-            queue_utilization_dic.setdefault(queue, {})
+                    queue_cluster_map[cluster].append(queue_name)
+                    queue_full_name_map[(cluster, queue_name)] = q
 
-            for resource in self.utilization_tab_resource_list:
-                queue_utilization_dic[queue].setdefault(resource, [])
+        # 遍历每个集群收集数据
+        all_time_based_util = {}
+        all_queue_avg = {}
 
-        # Fill queue_utilization_dic detailed data.
-        self.fresh_lsf_info('host_queue')
+        for cluster in selected_clusters:
+            cluster_db_path = db_root_path / cluster
 
-        for host_name in utilization_dic.keys():
-            if host_name in self.host_queue_dic:
-                for resource in self.utilization_tab_resource_list:
-                    if resource in utilization_dic[host_name]:
-                        for queue in self.host_queue_dic[host_name]:
-                            queue_utilization_dic[queue][resource].append(utilization_dic[host_name][resource])
+            if not cluster_db_path.exists():
+                continue
 
-                        queue_utilization_dic['ALL'][resource].append(utilization_dic[host_name][resource])
+            # Update message: loading historical mapping for cluster
+            time.sleep(0.01)
+            my_show_message.terminate()
+            my_show_message = ShowMessage('Info', f'Loading historical mapping for cluster {cluster} ...')
+            my_show_message.start()
+            QApplication.processEvents()
 
-        # Get queue_utilization_dic average utilizaton data.
-        for queue in queue_utilization_dic.keys():
-            for resource in self.utilization_tab_resource_list:
-                utilization_list = queue_utilization_dic[queue][resource]
+            # Get historical mapping for current cluster
+            historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_queue_host_mapping(str(cluster_db_path), original_begin_second, original_end_second)
 
-                if utilization_list:
-                    queue_utilization_dic[queue][resource] = round((sum(utilization_list)/len(utilization_list)), 1)
+            # 确定当前集群要处理的队列
+            if only_all_selected or 'ALL' in selected_queues:
+                cluster_process_queues = historical_queue_list
+            else:
+                cluster_process_queues = queue_cluster_map.get(cluster, [])
+
+            if not cluster_process_queues:
+                continue
+
+            # Collect all hosts involved for current cluster
+            all_hosts = set()
+
+            for _, _, mapping in mapping_matrix:
+                if only_all_selected or 'ALL' in selected_queues:
+                    for queue in mapping:
+                        all_hosts.update(mapping[queue])
+                else:
+                    for queue in cluster_process_queues:
+                        if queue in mapping:
+                            all_hosts.update(mapping[queue])
+
+            all_hosts = list(all_hosts)
+
+            if not all_hosts:
+                continue
+
+            # Update message: loading host utilization data for cluster
+            time.sleep(0.01)
+            my_show_message.terminate()
+            my_show_message = ShowMessage('Info', f'Loading {len(all_hosts)} hosts data for cluster {cluster} ...')
+            my_show_message.start()
+            QApplication.processEvents()
+
+            # Get utilization data for current cluster
+            df_cluster = pd.DataFrame()
+
+            if self.enable_utilization_detail:
+                db_file = str(cluster_db_path) + '/utilization.db'
+            else:
+                db_file = str(cluster_db_path) + '/utilization_day.db'
+
+            if os.path.exists(db_file):
+                (result, conn) = common_sqlite3.connect_db_file(db_file)
+
+                if result == 'passed':
+                    host_dfs = []
+
+                    for host in all_hosts:
+                        table_name = f'utilization_{host}'
+
+                        if table_name not in common_sqlite3.get_sql_table_list(db_file, conn):
+                            continue
+
+                        if self.enable_utilization_detail:
+                            key_list = ['sample_second', 'slot', 'cpu', 'mem']
+                            select_condition = f"WHERE sample_second BETWEEN {original_begin_second} AND {original_end_second}"
+                        else:
+                            key_list = ['sample_date', 'slot', 'cpu', 'mem']
+                            begin_date_str = re.sub('-', '', begin_date)
+                            end_date_str = re.sub('-', '', end_date)
+                            select_condition = f"WHERE sample_date BETWEEN '{begin_date_str}' AND '{end_date_str}'"
+
+                        data = common_sqlite3.get_sql_table_data(db_file, conn, table_name, key_list, select_condition)
+
+                        if data:
+                            df_host = pd.DataFrame(data)
+                            df_host['host'] = host
+
+                            if self.enable_utilization_detail:
+                                df_host['sample_second'] = df_host['sample_second'].astype(np.int64)
+
+                            host_dfs.append(df_host)
+
+                    if host_dfs:
+                        df_cluster = pd.concat(host_dfs, ignore_index=True)
+
+                    conn.close()
+
+            # 转换数值类型
+            for res in ['slot', 'cpu', 'mem']:
+                if res in df_cluster.columns:
+                    df_cluster[res] = pd.to_numeric(df_cluster[res], errors='coerce').fillna(0).clip(upper=100)
+
+            if df_cluster.empty:
+                continue
+
+            # Update message: calculating utilization for cluster
+            time.sleep(0.01)
+            my_show_message.terminate()
+            my_show_message = ShowMessage('Info', f'Calculating utilization for cluster {cluster} ...')
+            my_show_message.start()
+            QApplication.processEvents()
+
+            # 生成时间key
+            if self.enable_utilization_detail:
+                df_cluster['time_key'] = df_cluster['sample_second'].apply(lambda x: time.strftime('%Y%m%d_%H%M%S', time.localtime(x)))
+                df_cluster['ts'] = df_cluster['sample_second']
+            else:
+                df_cluster['ts'] = pd.to_datetime(df_cluster['sample_date'], format='%Y%m%d').astype(np.int64) // 10**9 + 12*3600
+                df_cluster['time_key'] = df_cluster['sample_date']
+
+            # 处理当前集群的每个时间切片
+            for slice_idx, (slice_start, slice_end, mapping) in enumerate(mapping_matrix):
+                if slice_end - slice_start <= 0:
+                    continue
+
+                mask = (df_cluster['ts'] >= slice_start) & (df_cluster['ts'] <= slice_end)
+                df_slice = df_cluster[mask].copy()
+
+                if df_slice.empty:
+                    continue
+
+                # 处理单个队列
+                for queue in cluster_process_queues:
+                    if queue not in mapping:
+                        continue
+
+                    full_queue_name = queue_full_name_map.get((cluster, queue), f"{cluster}-{queue}")
+
+                    if full_queue_name not in all_time_based_util:
+                        all_time_based_util[full_queue_name] = {'slot': {}, 'cpu': {}, 'mem': {}}
+                        all_queue_avg[full_queue_name] = {'is_deleted': queue not in current_queue_list}
+
+                    queue_hosts = mapping[queue]
+                    df_queue = df_slice[df_slice['host'].isin(queue_hosts)]
+
+                    if df_queue.empty:
+                        continue
+
+                    for res in ['slot', 'cpu', 'mem']:
+                        grouped = df_queue.groupby('time_key')[res].mean().round(1)
+
+                        for time_key, avg_val in grouped.items():
+                            if not self.enable_utilization_detail:
+                                all_time_based_util[full_queue_name][res][time_key] = avg_val
+                            else:
+                                if time_key not in all_time_based_util[full_queue_name][res]:
+                                    all_time_based_util[full_queue_name][res][time_key] = []
+
+                                all_time_based_util[full_queue_name][res][time_key].append(avg_val)
+
+                # 处理当前集群的ALL队列数据，汇总到全局ALL
+                if 'ALL' not in all_time_based_util:
+                    all_time_based_util['ALL'] = {'slot': {}, 'cpu': {}, 'mem': {}}
+                    all_queue_avg['ALL'] = {'is_deleted': False}
+
+                all_slice_hosts = set()
+
+                for queue in cluster_process_queues:
+                    if queue in mapping:
+                        all_slice_hosts.update(mapping[queue])
+
+                df_all_queue = df_slice[df_slice['host'].isin(all_slice_hosts)]
+
+                if not df_all_queue.empty:
+                    for res in ['slot', 'cpu', 'mem']:
+                        grouped = df_all_queue.groupby('time_key')[res].mean().round(1)
+
+                        for time_key, avg_val in grouped.items():
+                            if not self.enable_utilization_detail:
+                                if time_key not in all_time_based_util['ALL'][res]:
+                                    all_time_based_util['ALL'][res][time_key] = []
+
+                                all_time_based_util['ALL'][res][time_key].append(avg_val)
+                            else:
+                                if time_key not in all_time_based_util['ALL'][res]:
+                                    all_time_based_util['ALL'][res][time_key] = []
+
+                                all_time_based_util['ALL'][res][time_key].append(avg_val)
+
+        # 合并所有集群的数据，计算平均值
+        queue_utilization_dic = copy.deepcopy(all_queue_avg)
+        full_time_util = {}
+
+        # 处理detail模式下的多值平均
+        for queue in all_time_based_util:
+            full_time_util[queue] = {'is_deleted': queue_utilization_dic[queue]['is_deleted']}
+
+            for res in ['slot', 'cpu', 'mem']:
+                res_data = all_time_based_util[queue][res]
+                avg_vals = {}
+                all_vals = []
+
+                for time_key, vals in res_data.items():
+                    if isinstance(vals, list):
+                        avg_val = round(sum(vals) / len(vals), 1)
+                    else:
+                        avg_val = vals
+
+                    avg_vals[time_key] = avg_val
+                    all_vals.append(avg_val)
+
+                full_time_util[queue][res] = avg_vals
+
+                if all_vals:
+                    queue_utilization_dic[queue][res] = round(sum(all_vals) / len(all_vals), 1)
+                else:
+                    queue_utilization_dic[queue][res] = 0.0
+
+        # 合并缓存数据（如果有部分命中）
+        if cached_full_util is not None:
+            # 合并新旧时间序列数据
+            for queue in full_time_util:
+                if queue not in cached_full_util:
+                    cached_full_util[queue] = {'is_deleted': full_time_util[queue]['is_deleted']}
+
+                    for res in ['slot', 'cpu', 'mem']:
+                        cached_full_util[queue][res] = {}
+
+                # 合并每个时间点的数据
+                for res in ['slot', 'cpu', 'mem']:
+                    cached_full_util[queue][res].update(full_time_util[queue][res])
+
+            # 使用合并后的完整数据
+            full_time_util = cached_full_util
+
+        # 保存到缓存
+        cache_begin = min(original_begin_second, cached_begin) if cached_full_util is not None else original_begin_second
+        cache_end = max(original_end_second, cached_end) if cached_full_util is not None else original_end_second
+        self.utilization_cache[cache_base_key] = (full_time_util, current_time, cache_begin, cache_end)
 
         time.sleep(0.01)
         my_show_message.terminate()
 
-        return queue_utilization_dic
+        if not queue_utilization_dic:
+            common.bprint('No utilization data found for selected clusters and queues.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            return None
+
+        return queue_utilization_dic, full_time_util, original_begin_second, original_end_second
 
     def get_utilization_info(self, selected_host_list, selected_resource_list):
         """
@@ -3657,36 +4359,105 @@ Please contact with liyanqing1987@163.com with any question."""
 
             for queue in queue_utilization_dic.keys():
                 row += 1
+                queue_data = queue_utilization_dic[queue]
+                is_deleted = queue_data.get('is_deleted', False) if isinstance(queue_data, dict) else False
 
                 # Fill "Queue" item.
-                item = QTableWidgetItem(queue)
+                queue_display = queue
+
+                if is_deleted:
+                    queue_display = f"{queue} (deleted)"
+
+                item = QTableWidgetItem(queue_display)
                 item.setFont(QFont('song', 9, QFont.Bold))
+
+                if is_deleted:
+                    item.setForeground(QBrush(Qt.gray))
+
                 self.utilization_tab_table.setItem(row, 0, item)
 
                 # Fill "slots" item.
                 total = 0
 
                 if queue == 'ALL':
-                    if 'MAX' in self.bhosts_dic:
-                        for max in self.bhosts_dic['MAX']:
-                            if re.match(r'^\d+$', max):
-                                total += int(max)
-                elif queue == 'lost_and_found':
+                    # Get all selected queues (exclude ALL itself)
+                    selected_queues = [q for q in queue_utilization_dic.keys() if q != 'ALL']
+                    has_na = False
+                    all_hosts = set()
+
+                    for q in selected_queues:
+                        # 检查是否有跨集群队列、已删除队列或不存在的队列
+                        queue_name = q
+
+                        if '-' in q:
+                            q_cluster, queue_name = q.split('-', 1)
+
+                            if q_cluster != self.cluster:
+                                has_na = True
+                                break
+
+                        if queue_name not in self.queue_host_dic:
+                            has_na = True
+                            break
+
+                        all_hosts.update(self.queue_host_dic[queue_name])
+
+                    if has_na:
+                        total = 'N/A'
+                    else:
+                        # Calculate sum of slots for unique hosts
+                        total = 0
+
+                        if 'HOST_NAME' in self.bhosts_dic and 'MAX' in self.bhosts_dic:
+                            for host in all_hosts:
+                                if host in self.bhosts_dic['HOST_NAME']:
+                                    host_index = self.bhosts_dic['HOST_NAME'].index(host)
+                                    host_max = self.bhosts_dic['MAX'][host_index]
+
+                                    if re.match(r'^\d+$', host_max):
+                                        total += int(host_max)
+                elif queue == 'lost_and_found' or is_deleted:
                     total = 'N/A'
                 else:
-                    for queue_host in self.queue_host_dic[queue]:
-                        if 'HOST_NAME' in self.bhosts_dic:
-                            if queue_host in self.bhosts_dic['HOST_NAME']:
-                                host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
-                                host_max = self.bhosts_dic['MAX'][host_index]
+                    # 检查是否是跨集群队列
+                    if '-' in queue:
+                        q_cluster = queue.split('-', 1)[0]
 
-                                if re.match(r'^\d+$', host_max):
-                                    total += int(host_max)
+                        if q_cluster != self.cluster:
+                            total = 'N/A'
+                        else:
+                            # 同集群的带前缀队列，提取队列名查询
+                            queue_name = queue.split('-', 1)[1]
+
+                            if queue_name in self.queue_host_dic:
+                                for queue_host in self.queue_host_dic[queue_name]:
+                                    if 'HOST_NAME' in self.bhosts_dic:
+                                        if queue_host in self.bhosts_dic['HOST_NAME']:
+                                            host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                                            host_max = self.bhosts_dic['MAX'][host_index]
+
+                                            if re.match(r'^\d+$', host_max):
+                                                total += int(host_max)
+                            else:
+                                total = 'N/A'
+                    else:
+                        # 当前集群普通队列
+                        if queue in self.queue_host_dic:
+                            for queue_host in self.queue_host_dic[queue]:
+                                if 'HOST_NAME' in self.bhosts_dic:
+                                    if queue_host in self.bhosts_dic['HOST_NAME']:
+                                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                                        host_max = self.bhosts_dic['MAX'][host_index]
+
+                                        if re.match(r'^\d+$', host_max):
+                                            total += int(host_max)
+                        else:
+                            total = 'N/A'
 
                 item = QTableWidgetItem()
 
-                if queue == 'lost_and_found':
-                    item.setForeground(QBrush(Qt.red))
+                if queue == 'lost_and_found' or is_deleted:
+                    item.setForeground(QBrush(Qt.gray))
 
                 if total == 'N/A':
                     item.setData(Qt.DisplayRole, str(total))
@@ -3698,7 +4469,15 @@ Please contact with liyanqing1987@163.com with any question."""
                 for (i, resource) in enumerate(self.utilization_tab_resource_list):
                     # Fill <resource> item.
                     item = QTableWidgetItem()
-                    item.setData(Qt.DisplayRole, queue_utilization_dic[queue][resource])
+
+                    if isinstance(queue_data, dict) and resource in queue_data:
+                        item.setData(Qt.DisplayRole, queue_data[resource])
+                    else:
+                        item.setData(Qt.DisplayRole, queue_data)
+
+                    if is_deleted:
+                        item.setForeground(QBrush(Qt.gray))
+
                     self.utilization_tab_table.setItem(row, i+2, item)
 
     def utilization_tab_check_click(self, item=None):
@@ -3708,6 +4487,8 @@ Please contact with liyanqing1987@163.com with any question."""
         if item is not None:
             current_row = self.utilization_tab_table.currentRow()
             queue = self.utilization_tab_table.item(current_row, 0).text().strip()
+            # Remove (deleted) suffix if exists
+            queue = re.sub(r'\s*\(deleted\)$', '', queue)
 
             if item.column() == 0:
                 common.bprint(f'Checking utilization for queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
@@ -3735,19 +4516,25 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def update_utilization_tab_frame1(self):
         """
-        Draw Ut curve for specified host on self.utilization_tab_frame1.
+        Draw Ut curve for specified queue on self.utilization_tab_frame1, 使用和左侧表格完全相同的计算结果，保证数据一致
         """
         # Generate figure.
         fig = self.utilization_tab_utilization_canvas.figure
         fig.clear()
         self.utilization_tab_utilization_canvas.draw()
 
-        # Update figure.
-        selected_host_dic = self.utilization_tab_host_combo.selectedItems()
-        selected_host_list = list(selected_host_dic.values())
+        # 检查是否有已计算好的利用率数据
+        if not hasattr(self, 'utilization_full_time_data') or not self.utilization_full_time_data:
+            warning_message = 'No utilization data available, please click "Check" button first.'
+            self.gui_warning(warning_message)
+            return
 
-        if not selected_host_list:
-            warning_message = 'No queue/host is specified on UTILIZATION tab.'
+        # Get selected queues
+        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+        selected_queues = list(selected_queue_dic.values()) if selected_queue_dic else []
+
+        if not selected_queues:
+            warning_message = 'No queue is specified on UTILIZATION tab.'
             self.gui_warning(warning_message)
             return
 
@@ -3759,11 +4546,145 @@ Please contact with liyanqing1987@163.com with any question."""
             self.gui_warning(warning_message)
             return
 
-        if selected_host_list and selected_resource_list:
-            utilization_dic = self.get_utilization_info(selected_host_list, selected_resource_list)
+        # 获取时间范围
+        begin_second, end_second = self.utilization_time_range
 
-            if utilization_dic:
-                self.draw_utilization_tab_utilization_curve(fig, utilization_dic)
+        # 无论选择多少队列，只显示汇聚的ALL曲线
+        display_queues = ['ALL'] if 'ALL' in self.utilization_full_time_data else []
+
+        if not display_queues:
+            warning_message = 'No valid queue data available for selected queues.'
+            self.gui_warning(warning_message)
+            return
+
+        # 为每个资源每个队列准备数据
+        plot_data = {}
+        title_lines = []
+
+        # 资源颜色配置，和原版本保持完全一致
+        resource_colors = {
+            'slot': {'line': 'bo-', 'fill': 'lightblue', 'alpha': 0.3},
+            'cpu': {'line': 'ro-', 'fill': 'red', 'alpha': 0.5},
+            'mem': {'line': 'go-', 'fill': 'green', 'alpha': 0.3}
+        }
+
+        for queue in display_queues:
+            queue_data = self.utilization_full_time_data[queue]
+
+            # 计算队列的总平均，和左侧表格一致
+            for res in selected_resource_list:
+                res_vals = []
+
+                for ts_key, val in queue_data[res].items():
+                    # 只统计当前时间范围内的数据
+                    if self.enable_utilization_detail:
+                        ts = int(time.mktime(time.strptime(ts_key, '%Y%m%d_%H%M%S')))
+                    else:
+                        ts = int(time.mktime(time.strptime(f"{ts_key[:4]}-{ts_key[4:6]}-{ts_key[6:8]} 12:00:00", '%Y-%m-%d %H:%M:%S')))
+
+                    if begin_second <= ts <= end_second:
+                        res_vals.append(val)
+
+                if res_vals:
+                    avg_val = round(sum(res_vals) / len(res_vals), 1)
+                    title_lines.append(f"{queue} {res}: {avg_val}%")
+
+                    # 整理时间序列数据
+                    time_series = []
+
+                    for ts_key, val in queue_data[res].items():
+                        if self.enable_utilization_detail:
+                            ts = int(time.mktime(time.strptime(ts_key, '%Y%m%d_%H%M%S')))
+                            dt = datetime.datetime.strptime(ts_key, '%Y%m%d_%H%M%S')
+                        else:
+                            ts = int(time.mktime(time.strptime(f"{ts_key[:4]}-{ts_key[4:6]}-{ts_key[6:8]} 12:00:00", '%Y-%m-%d %H:%M:%S')))
+                            dt = datetime.datetime.strptime(ts_key, '%Y%m%d')
+
+                        if begin_second <= ts <= end_second:
+                            time_series.append((dt, val))
+
+                    # 按时间排序
+                    time_series.sort(key=lambda x: x[0])
+                    date_list = [x[0] for x in time_series]
+                    util_list = [min(x[1], 100.0) for x in time_series]
+
+                    plot_key = f"{queue}_{res}"
+                    plot_data[plot_key] = {
+                        'queue': queue,
+                        'resource': res,
+                        'date_list': date_list,
+                        'util_list': util_list
+                    }
+
+        if not plot_data:
+            warning_message = 'No valid data to plot for the selected criteria.'
+            self.gui_warning(warning_message)
+            return
+
+        # 绘制曲线
+        fig.subplots_adjust(bottom=0.25)
+        axes = fig.add_subplot(111)
+
+        # 设置标题
+        title = ';    '.join(title_lines)
+
+        # 设置样式
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+
+            if self.enable_utilization_detail:
+                axes.set_xlabel('Sample Time', color='white')
+            else:
+                axes.set_xlabel('Sample Date', color='white')
+
+            axes.set_ylabel('Utilization (%)', color='white')
+            axes.set_title(title, color='white')
+        else:
+            if self.enable_utilization_detail:
+                axes.set_xlabel('Sample Time')
+            else:
+                axes.set_xlabel('Sample Date')
+
+            axes.set_ylabel('Utilization (%)')
+            axes.set_title(title)
+
+        # 绘制曲线
+        for plot_key, data in plot_data.items():
+            queue = data['queue']
+            res = data['resource']
+            date_list = data['date_list']
+            util_list = data['util_list']
+
+            # 选择颜色，和原版本保持完全一致
+            line_color = resource_colors[res]['line']
+            fill_color = resource_colors[res]['fill']
+            fill_alpha = resource_colors[res]['alpha']
+
+            # 设置线宽和标记大小
+            if self.enable_utilization_detail:
+                linewidth = 0.1
+                markersize = 0.1
+            else:
+                linewidth = 1
+                markersize = 1
+
+            # 绘制曲线
+            label = f"{queue}_{res.upper()}" if queue != 'ALL' else res.upper()
+            axes.plot(date_list, util_list, line_color, label=label, linewidth=linewidth, markersize=markersize)
+
+            # 只有ALL队列做填充，避免多队列时颜色叠加变色，和原版本效果保持一致
+            if queue == 'ALL':
+                axes.fill_between(date_list, util_list, color=fill_color, alpha=fill_alpha)
+
+        axes.legend(loc='upper right')
+        axes.tick_params(axis='x', rotation=15)
+        axes.grid()
+        self.utilization_tab_utilization_canvas.draw()
 
     def draw_utilization_tab_utilization_curve(self, fig, utilization_dic):
         """
