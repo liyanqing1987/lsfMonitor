@@ -824,7 +824,7 @@ Please contact with liyanqing1987@163.com with any question."""
                             finished_job_list = common_sqlite3.get_sql_table_key_list(job_finished_date_db, job_finished_date_db_conn, 'job', 'job')
 
                             if current_job in finished_job_list:
-                                job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition)
+                                job_tab_current_job_dic = common_sqlite3.get_sql_table_data(job_finished_date_db, job_finished_date_db_conn, 'job', ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'specified_hosts', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'idle_factor', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info'], select_condition)
 
                                 if job_tab_current_job_dic:
                                     self.job_tab_current_job_dic[current_job] = {}
@@ -961,7 +961,7 @@ Please contact with liyanqing1987@163.com with any question."""
         else:
             idle_value = ''
 
-            if self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor'] != '':
+            if ('idle_factor' in self.job_tab_current_job_dic[self.job_tab_current_job]) and (self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor'] != ''):
                 idle_value = str(round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor']), 2))
 
             self.job_tab_idle_factor_line.setText(idle_value)
