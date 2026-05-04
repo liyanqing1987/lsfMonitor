@@ -3,7 +3,6 @@ import re
 import sys
 import json
 import uuid
-import pandas
 import socket
 import getpass
 import datetime
@@ -338,8 +337,8 @@ def write_csv(csv_file, content_dic):
         ...
     }
     """
-    df = pandas.DataFrame(content_dic)
-    df.to_csv(csv_file, index=False)
+    import pandas
+    pandas.DataFrame(content_dic).to_csv(csv_file, index=False)
 
 
 def create_file(file_path, permission=0o777):

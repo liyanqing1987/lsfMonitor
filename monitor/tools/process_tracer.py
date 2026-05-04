@@ -116,8 +116,9 @@ class ProcessTracer(QMainWindow):
         for line in str(stdout, 'utf-8').split('\n'):
             line = line.strip()
 
-            if re.match(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line):
-                my_match = re.match(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
+            my_match = re.match(r'^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+([a-zA-Z]{3} \d{2}|\d{2}:\d{2}:\d{2})\s(.+)$', line)
+
+            if my_match:
                 user = my_match.group(1)
                 pid = my_match.group(2)
                 cpu = my_match.group(3)

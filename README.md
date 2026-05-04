@@ -1,121 +1,133 @@
-**Author:** liyanqing1987@163.com    
-**Version:** V2.1
+# lsfMonitor
 
-## What’s lsfMonitor?
-`lsfMonitor` is an open source software for LSF information data-collection,
-data-analysis and data-display.
+An open-source HPC cluster monitoring tool for **LSF**, **volclava**, and **OpenLava**. It collects, analyzes, and visualizes cluster metrics (jobs, queues, hosts, load, utilization, licenses) via a PyQt5 desktop GUI. Also includes an ML-based job memory prediction subsystem and an LLM-powered AI helpdesk with RAG.
 
-## Python dependency
-Need python3.12.12.    
-Install python library dependency with command    
+**Author:** liyanqing1987@163.com
+**Version:** V2.2
+**License:** GPL-3.0
 
-    pip install -r requirements.txt
+## Features
 
-Or
+- **JOB** — Single job details + memory usage curve
+- **JOBS** — Batch view of running jobs with filtering by Status/Queue/Host/User
+- **HOSTS** — Server status and resource overview with alert highlighting
+- **LOAD** — Historical CPU/memory load curves per host
+- **USERS** — User-level job statistics (pass rate, memory waste)
+- **QUEUES** — Queue slot/pend/run trends over time
+- **UTILIZATION** — Cluster-wide slot/cpu/mem utilization rates
+- **LICENSE** — EDA license feature usage and expiration tracking
+- **AI** — LLM-powered helpdesk with RAG document search and tool execution
 
-    pip install <library> --only-library=:all:
+## Quick Start
 
-## Install
-Copy install package into install directory.    
-Execute below command under install directory.    
+### 1. Install dependencies
 
-    python3 install.py
+Requires **Python 3.12.12**.
 
-## Quick start
-Execute command `bmonitor` to start lsfMonitor.    
-* Below is a demo on how to track job status.    
+```bash
+pip install -r requirements.txt
+```
 
-   ![job trace demo](data/demo/job_trace_demo.gif)
+### 2. Install
 
-* Below is a demo on how to view server load information.
+```bash
+python3 install.py
+```
 
-   ![load demo](data/demo/load_demo.gif)
+Options: `-p PREFIX` (install path), `-f` (force reinstall), `-m` (include memPrediction).
 
-* Below is a demo on how to search license feature usage information.
+### 3. Configure
 
-   ![license demo](data/demo/license_demo.gif)
+Edit `monitor/conf/config.py`:
 
-## Configuration
-After installing the tool, come into <LSFMONITOR_INSTALL_PATH>/monitor/conf directory,
-then update file config.py for your own configuration.
+```python
+db_path = "/path/to/lsfMonitor/db"
+license_administrators = "all"
+lmstat_path = "/path/to/lmstat"
+lmstat_bsub_command = ""
+excluded_license_servers = ""
+```
 
-    db_path = ""
-    lmstat_path = ""
-    lmstat_bsub_command = ""
+### 4. Sample data
 
-"db_path" is used to save database files, default is on <LSFMONITOR_INSTALL_PATH>/db,
-you can re-point it into your own path.
-"lmstat_path" is used to specify lmstat path, it is for LICENSE tab.
-"lmstat_bsub_command" is used to specify LSF command for lmstat, for example, "bsub -q
-normal -Is". (It is forbidden to run lmstat on login server.)
+Set up crontab for periodic data collection:
 
-## Sample
-Use monitor/bin/bsample sample job/queue/load/utilization data first, then bmonitor
-can show the job/queue/load/utilization info with saved database.
-Below is the suggested crontab setting on sampling data.
+```bash
+# Example crontab (crontab -e)
+# Remember to set PATH and LSF_* environment variables in crontab header
 
-    SHELL=/bin/csh
-    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:<BSUB_PATH>
-    10 11,23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -j
-    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -m
-    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -q
-    */5 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -l
-    30 11,23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -u
-    */10 * * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -U
-    55 23 * * * <LSFMONITOR_INSTALL_PATH>/monitor/bin/bsample -UD
+3 0 * * * <INSTALL_PATH>/monitor/bin/bsample -c       # cleanup
+10 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -j   # jobs history
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -m       # job memory
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -q       # queues
+*/10 * * * * <INSTALL_PATH>/monitor/bin/bsample -qH     # queue-host mapping
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -H       # hosts
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -l       # load
+30 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -u    # users
+*/10 * * * * <INSTALL_PATH>/monitor/bin/bsample -U      # utilization
+55 23 * * * <INSTALL_PATH>/monitor/bin/bsample -UD      # utilization daily
+```
 
+### 5. Launch GUI
 
-More details please see ["docs/lsfMonitor_user_manual.pdf"](./docs/lsfMonitor_user_manual.pdf)
+```bash
+bmonitor            # default (light mode)
+bmonitor -d         # dark mode
+bmonitor -j 12345   # jump to JOB tab for specific job
+```
 
+## Demo
 
-## Update history
-***
-| Version | Date      | Update content                                               |
-| :------ | :-------- | :----------------------------------------------------------- |
-| V1.0    | (2017)    | Release original version "openlavaMonitor".                  |
-| V1.1    | (2020)    | Rename to "lsfMonitor", support LSF since this version.      |
-| V1.2    | (2022)    | Add LICENSE tab, sample&display license information.         |
-| V1.3    | (2023.05) | Add UTILIZATION tab, sample&display LSF queue utilization information. |
-|         |           | Add tool tools/patch.                                        |
-|         |           | Optimize database format.                                    |
-| V1.3.1  | (2023.06) | Optimize the format of utilization sampling.                 |
-|         |           | Optimize EDA license sampling with multi-process.            |
-| V1.3.2  | (2023.06) | On HOST tab, can selected hosts with Status/MAX/MaxMem/Host. |
-|         |           | On LICENSE tab, can filter license feature with User.        |
-| V1.3.3  | (2023.09) | On LICENSE tab, can show feature <-> job relationship.       |
-|         |           | Add tool tools/akill to kill job easily.                     |
-| V1.4    | (2023.11) | Update most radio box into checkbox.                         |
-|         |           | On QUEUES/UTILIZATION tabs, support detailed curve.          |
-|         |           | On QUEUES tab, support specifying Begin_Date and End_Date.   |
-|         |           | On UTILIZATION tab, support summary utilization info of queues. |
-| V1.4.1  | (2023.12) | Add logo.                                                    |
-|         |           | Support exporting all tables into Excel.                     |
-|         |           | Optimize on curve displaying.                                |
-| V1.4.2  | (2024.03) | Support multi LSF/openlava clusters on db_path.              |
-| V1.5    | (2024.06) | Add job memory predict/analysis tool memPredict.             |
-|         |           | Replace export file from excel to csv file.                  |
-| V1.5.1  | (2024.08) | Add DONE/EXIT job sample function on tool bsample with json file. |
-|         |           | Support reading DONE/EXIT json file as source data on memPrediction. |
-| V1.6    | (2024.09) | Add user information sample function on tool bsample.        |
-|         |           | Add USERS tab on bmonitor to show user summary data.         |
-|         |           | Add darm_mode on bmonitor.                                   |
-|         |           | Support volclava, an open-source scheduler compatible with LSF. |
-| V1.7    | (2025.03) | Optimize bsample to speed up data sample.                    |
-|         |           | Support "HOSTS: <host_group>+<num>" format on queue info.    |
-|         |           | Splite Mem into aMem and saMem on HOSTS tab.                 |
-|         |           | Add parameter "excluded_license_servers" on conf/config.py, to exclude license servers. |
-| V1.8    | (2025.10) | Add scheduler - cluster info on GUI Titel Bar.               |
-|         |           | On LOAD tab, update the Host dropdown radio box to a text box that supports fuzzy matching. |
-|         |           | On QUEUES tab, add "Queue" checkbox to aggregate historical usage information of SLOTS/PEND/RUN accross multiple queues. |
-|         |           | Add fuzzy matching feature for checkboxes.                   |
-|         |           | Add parameter "license_administrators" on conf/config.py, allowing only specified administrators to view the LICENSE tab. |
-| V2.0    | (2026.02) | Update python3.8.8 support to python3.12.12.                 |
-|         |           | Add the logging function.                                    |
-|         |           | Optimize with AI suggestion.                                 |
-| V2.1    | (2026.03) | Add new parameter "--queue_host_mapping" on bsample          |
-|         |           | Optimize the utilization calculation method.                 |
-|         |           | Increase support for multi cluster utilization computing.    |
-|         |           | Add a lazy loading mechanism, resulting in faster startup speed. |
-|         |           | Add IDLE_FACTOR info on JOB tab.                             |
-|         |           | Add IDLE and MaxMem info on JOBS tab.                        |
-|         |           | Add Modify Rusage Mem function on JOBS tab on Rusage part with owner's job. |
+**Job trace:**
+
+![job trace demo](data/demo/job_trace_demo.gif)
+
+**Server load:**
+
+![load demo](data/demo/load_demo.gif)
+
+**License search:**
+
+![license demo](data/demo/license_demo.gif)
+
+## Auxiliary Tools
+
+| Tool | Description |
+|------|-------------|
+| `akill` | Enhanced bkill — kill jobs by jobid/name/command/host/queue/user |
+| `seedb` | Inspect sqlite3 database contents |
+| `patch` | Apply incremental updates from a new install package |
+| `rag_builder` | Build RAG vector database for AI helpdesk |
+| `process_tracer` | Trace job process tree and system calls |
+| `check_issue_reason` | Diagnose job PEND/SLOW/FAIL reasons |
+| `show_license_feature_usage` | View license feature check-in details |
+
+## Documentation
+
+- [User Manual (Markdown)](docs/lsfMonitor_user_manual.md)
+- [User Manual (PDF)](docs/lsfMonitor_user_manual.pdf)
+- [RAG Builder Guide](docs/rag_builder.md)
+- [memPrediction Manual (PDF)](docs/memPrediction_user_manual.pdf)
+
+## Update History
+
+| Version | Date    | Highlights |
+|---------|---------|------------|
+| V1.0    | 2017    | Initial release as "openlavaMonitor" |
+| V1.1    | 2020    | Renamed to lsfMonitor, added LSF support |
+| V1.2    | 2022    | Added LICENSE tab |
+| V1.3    | 2023.05 | Added UTILIZATION tab, patch tool, optimized DB format |
+| V1.3.1  | 2023.06 | Optimized utilization sampling; multi-process license sampling |
+| V1.3.2  | 2023.06 | Added host/license filtering on HOSTS and LICENSE tabs |
+| V1.3.3  | 2023.09 | Feature-job association on LICENSE tab; added akill tool |
+| V1.4    | 2023.11 | Checkbox multi-select; detailed QUEUES/UTILIZATION curves |
+| V1.4.1  | 2023.12 | Logo, table export, curve display optimization |
+| V1.4.2  | 2024.03 | Multi LSF/openlava cluster support |
+| V1.5    | 2024.06 | UI auto-resize, kill job, right-click menus, memPrediction tool |
+| V1.5.1  | 2024.08 | DONE/EXIT job sampling; memPrediction json data source |
+| V1.6    | 2024.09 | USERS tab, dark mode, volclava support |
+| V1.7    | 2025.03 | Faster sampling, aMem/saMem split, excluded_license_servers |
+| V1.8    | 2025.10 | Fuzzy matching, queue aggregation, license_administrators |
+| V2.0    | 2026.01 | Python 3.12.12, logging, code optimization |
+| V2.1    | 2026.03 | Queue-host mapping, dynamic utilization, lazy loading, Modify Rusage Mem |
+| V2.2    | 2026.04 | AI tab with LLM helpdesk and RAG document search |

@@ -4,20 +4,21 @@
 import os
 import re
 import sys
+import json
 import time
 import copy
+import socket
 import getpass
 import argparse
 import datetime
 from pathlib import Path
 import numpy as np
-import pandas as pd
 
 # Third-party imports
 import qdarkstyle
-from PyQt5.QtCore import QDate, Qt, QThread
-from PyQt5.QtGui import QBrush, QFont, QIcon
-from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QWidget, qApp, QInputDialog
+from PyQt5.QtCore import QDate, Qt, QThread, QTimer, QUrl, pyqtSignal
+from PyQt5.QtGui import QBrush, QColor, QFont, QIcon, QPainter, QPainterPath, QPen, QPixmap, QTextBlockFormat, QTextCharFormat, QTextImageFormat, QTextLength, QTextTableFormat
+from PyQt5.QtWidgets import QAction, QApplication, QComboBox, QDateEdit, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget, qApp, QInputDialog
 
 # Local imports
 LSFMONITOR_INSTALL_PATH = Path(os.environ['LSFMONITOR_INSTALL_PATH'])
@@ -27,6 +28,8 @@ from common import common_lsf
 from common import common_license
 from common import common_pyqt5
 from common import common_sqlite3
+from common import common_ai
+from common import common_ai_log
 
 # Import local config file if exists.
 local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
@@ -39,8 +42,8 @@ else:
     from conf import config
 
 # Constants
-VERSION = 'V2.1'
-VERSION_DATE = '2026.03.27'
+VERSION = 'V2.2'
+VERSION_DATE = '2026.05.02'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -73,7 +76,7 @@ def read_args():
                         help='Specify license feature which you want to see on "LICENSE" tab.')
     parser.add_argument("-t", "--tab",
                         default='',
-                        choices=['JOB', 'JOBS', 'HOSTS', 'LOAD', 'USERS', 'QUEUES', 'UTILIZATION', 'LICENSE'],
+                        choices=['JOB', 'JOBS', 'HOSTS', 'LOAD', 'USERS', 'QUEUES', 'UTILIZATION', 'LICENSE', 'AI'],
                         help='Specify current tab, default is "JOBS" tab.')
     parser.add_argument("--disable_license",
                         action='store_true',
@@ -115,15 +118,17 @@ class MainWindow(QMainWindow):
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         # Check cluster info.
+        common.bprint('Checking cluster information ...', date_format='%Y-%m-%d %H:%M:%S')
         (self.tool, self.cluster) = self.check_cluster_info()
 
         # Set db_path.
-        self.db_path = str(config.db_path) + '/lsfMonitor'
+        self.cluster_db_path = str(config.db_path) + '/lsfMonitor'
 
         if self.cluster:
-            self.db_path = str(config.db_path) + '/' + str(self.cluster)
+            self.cluster_db_path = str(config.db_path) + '/' + str(self.cluster)
 
-        common.create_dir(self.db_path, 0o1777)
+        common.create_dir(config.db_path, 0o1777)
+        common.create_dir(self.cluster_db_path, 0o1777)
 
         # Save start action.
         log_dir = str(config.db_path) + '/log'
@@ -188,11 +193,17 @@ class MainWindow(QMainWindow):
         self.utilization_loaded = False
         self.license_loaded = False
 
+        # AI helpdesk thread.
+        self.ai_thread = None
+
         # Generate GUI.
         self.init_ui()
 
         # Switch tab.
         self.switch_tab(specified_tab)
+
+        common.bprint('lsfMonitor is ready.', date_format='%Y-%m-%d %H:%M:%S')
+        print('')
 
     def check_cluster_info(self):
         """
@@ -301,6 +312,7 @@ class MainWindow(QMainWindow):
         self.queues_tab = QWidget()
         self.utilization_tab = QWidget()
         self.license_tab = QWidget()
+        self.ai_tab = QWidget()
 
         # Add the sub-tabs into main Tab widget
         self.main_tab.addTab(self.job_tab, 'JOB')
@@ -314,19 +326,33 @@ class MainWindow(QMainWindow):
         if ('all' in self.license_administrator_list) or ('ALL' in self.license_administrator_list) or (USER in self.license_administrator_list):
             self.main_tab.addTab(self.license_tab, 'LICENSE')
 
+        self.main_tab.addTab(self.ai_tab, 'AI')
+
         # Generate the sub-tabs
+        common.bprint('Generating JOB tab ...', date_format='%Y-%m-%d %H:%M:%S')
         self.gen_job_tab()
 
         if not self.specified_job:
+            common.bprint('Generating JOBS tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_jobs_tab()
+            common.bprint('Generating HOSTS tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_hosts_tab()
+            common.bprint('Generating LOAD tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_load_tab()
+            common.bprint('Generating USERS tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_users_tab()
+            common.bprint('Generating QUEUES tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_queues_tab()
+            common.bprint('Generating UTILIZATION tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_utilization_tab()
+            common.bprint('Generating LICENSE tab ...', date_format='%Y-%m-%d %H:%M:%S')
             self.gen_license_tab()
 
+        common.bprint('Generating AI tab ...', date_format='%Y-%m-%d %H:%M:%S')
+        self.gen_ai_tab()
+
         # Show main window
+        common.bprint('Initializing main window ...', date_format='%Y-%m-%d %H:%M:%S')
         common_pyqt5.auto_resize(self, 1300, 610)
         self.setWindowTitle('lsfMonitor ' + str(VERSION) + '    (' + str(self.tool) + ' - ' + str(self.cluster) + ')')
         self.setWindowIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/monitor.ico'))
@@ -346,7 +372,8 @@ class MainWindow(QMainWindow):
                    'USERS': self.users_tab,
                    'QUEUES': self.queues_tab,
                    'UTILIZATION': self.utilization_tab,
-                   'LICENSE': self.license_tab}
+                   'LICENSE': self.license_tab,
+                   'AI': self.ai_tab}
 
         # 切换到USERS页面时，如果还没加载过用户信息，就加载
         if specified_tab == 'USERS' and not self.users_loaded:
@@ -440,6 +467,24 @@ class MainWindow(QMainWindow):
         function_menu.addAction(check_pend_reason_action)
         function_menu.addAction(check_slow_reason_action)
         function_menu.addAction(check_fail_reason_action)
+
+        # AI
+        ai_record_search_action = QAction('Record Search', self)
+        ai_record_search_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/magnifier.png'))
+        ai_record_search_action.triggered.connect(self.ai_record_search)
+
+        ai_problem_analysis_action = QAction('Problem Analysis', self)
+        ai_problem_analysis_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/trace.png'))
+        ai_problem_analysis_action.triggered.connect(self.ai_problem_analysis)
+
+        ai_record_cleanup_action = QAction('Record Cleanup', self)
+        ai_record_cleanup_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/close.png'))
+        ai_record_cleanup_action.triggered.connect(self.ai_record_cleanup)
+
+        ai_menu = menubar.addMenu('AI')
+        ai_menu.addAction(ai_record_search_action)
+        ai_menu.addAction(ai_problem_analysis_action)
+        ai_menu.addAction(ai_record_cleanup_action)
 
         # Help
         version_action = QAction('Version', self)
@@ -593,12 +638,12 @@ Please contact with liyanqing1987@163.com with any question."""
         job_tab_check_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         job_tab_check_button.clicked.connect(self.check_job_on_job_tab)
 
-        # "Check" button.
+        # "Kill" button.
         job_tab_kill_button = QPushButton('Kill', self.job_tab_frame0)
         job_tab_kill_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         job_tab_kill_button.clicked.connect(self.kill_job_on_job_tab)
 
-        # "Check" button.
+        # "Trace" button.
         job_tab_trace_button = QPushButton('Trace', self.job_tab_frame0)
         job_tab_trace_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
         job_tab_trace_button.clicked.connect(lambda: self.trace_job(jobid=self.job_tab_current_job, job_status=self.job_tab_current_job_dic[self.job_tab_current_job]['status']))
@@ -785,13 +830,13 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Get real jobid and check it.
         self.job_tab_current_job = self.job_tab_job_line.text().strip()
+        my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
 
-        if not re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job):
+        if not my_match:
             warning_message = 'No valid job is specified on JOB tab.'
             self.gui_warning(warning_message)
             return
 
-        my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
         current_job = my_match.group(1)
 
         common.bprint(f'Checking job "{current_job}".', date_format='%Y-%m-%d %H:%M:%S')
@@ -805,7 +850,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.job_tab_current_job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(current_job))
 
         if not self.job_tab_current_job_dic:
-            job_db_path = str(self.db_path) + '/job'
+            job_db_path = str(self.cluster_db_path) + '/job'
 
             if os.path.exists(job_db_path):
                 select_condition = 'WHERE job="' + str(current_job) + '"'
@@ -895,105 +940,48 @@ Please contact with liyanqing1987@163.com with any question."""
             elif (job_status == 'DONE') or (job_status == 'EXIT'):
                 self.check_fail_reason(job=jobid)
 
+    def _fill_line_edit(self, line_edit, value, init):
+        if init:
+            line_edit.setText('')
+        else:
+            line_edit.setText(str(value))
+            line_edit.setCursorPosition(0)
+
+    def _fill_mem_line_edit(self, line_edit, mem_mb, init):
+        if init:
+            line_edit.setText('')
+        elif mem_mb != '':
+            line_edit.setText(str(round(float(mem_mb) / 1024, 1)) + ' G')
+            line_edit.setCursorPosition(0)
+
     def update_job_tab_frame1(self, init=False):
         """
         Update self.job_tab_frame1 with job infos.
         """
-        # Fill "Status" item.
-        if init:
-            self.job_tab_status_line.setText('')
-        else:
-            self.job_tab_status_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['status'])
-            self.job_tab_status_line.setCursorPosition(0)
+        job_dic = self.job_tab_current_job_dic.get(self.job_tab_current_job, {}) if not init else {}
 
-        # Fill "User" item.
-        if init:
-            self.job_tab_user_line.setText('')
-        else:
-            self.job_tab_user_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['user'])
-            self.job_tab_user_line.setCursorPosition(0)
+        self._fill_line_edit(self.job_tab_status_line, job_dic.get('status', ''), init)
+        self._fill_line_edit(self.job_tab_user_line, job_dic.get('user', ''), init)
+        self._fill_line_edit(self.job_tab_project_line, job_dic.get('project', ''), init)
+        self._fill_line_edit(self.job_tab_queue_line, job_dic.get('queue', ''), init)
+        self._fill_line_edit(self.job_tab_started_on_line, job_dic.get('started_on', ''), init)
+        self._fill_line_edit(self.job_tab_started_time_line, job_dic.get('started_time', ''), init)
+        self._fill_line_edit(self.job_tab_finished_time_line, job_dic.get('finished_time', ''), init)
+        self._fill_line_edit(self.job_tab_processors_requested_line, job_dic.get('processors_requested', ''), init)
 
-        # Fill "Project" item.
-        if init:
-            self.job_tab_project_line.setText('')
-        else:
-            self.job_tab_project_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['project'])
-            self.job_tab_project_line.setCursorPosition(0)
-
-        # Fill "Queue" item.
-        if init:
-            self.job_tab_queue_line.setText('')
-        else:
-            self.job_tab_queue_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['queue'])
-            self.job_tab_queue_line.setCursorPosition(0)
-
-        # Fill "Host" item.
-        if init:
-            self.job_tab_started_on_line.setText('')
-        else:
-            self.job_tab_started_on_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['started_on'])
-            self.job_tab_started_on_line.setCursorPosition(0)
-
-        # Fill "Started Time" item.
-        if init:
-            self.job_tab_started_time_line.setText('')
-        else:
-            self.job_tab_started_time_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['started_time'])
-            self.job_tab_started_time_line.setCursorPosition(0)
-
-        # Fill "Finished Time" item.
-        if init:
-            self.job_tab_finished_time_line.setText('')
-        else:
-            self.job_tab_finished_time_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['finished_time'])
-            self.job_tab_finished_time_line.setCursorPosition(0)
-
-        # Fill "Processors" item.
-        if init:
-            self.job_tab_processors_requested_line.setText('')
-        else:
-            self.job_tab_processors_requested_line.setText(self.job_tab_current_job_dic[self.job_tab_current_job]['processors_requested'])
-            self.job_tab_processors_requested_line.setCursorPosition(0)
-
-        # Fill "IDLE Factor" item.
         if init:
             self.job_tab_idle_factor_line.setText('')
         else:
             idle_value = ''
-
-            if ('idle_factor' in self.job_tab_current_job_dic[self.job_tab_current_job]) and (self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor'] != ''):
-                idle_value = str(round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['idle_factor']), 2))
-
+            idle_factor = job_dic.get('idle_factor', '')
+            if idle_factor != '':
+                idle_value = str(round(float(idle_factor), 2))
             self.job_tab_idle_factor_line.setText(idle_value)
             self.job_tab_idle_factor_line.setCursorPosition(0)
 
-        # Fill "Rusage" item.
-        if init:
-            self.job_tab_rusage_mem_line.setText('')
-        else:
-            if self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'] != '':
-                rusage_mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['rusage_mem'])/1024, 1)
-
-                self.job_tab_rusage_mem_line.setText(str(rusage_mem_value) + ' G')
-                self.job_tab_rusage_mem_line.setCursorPosition(0)
-
-        # Fill "Mem" item.
-        if init:
-            self.job_tab_mem_line.setText('')
-        else:
-            if self.job_tab_current_job_dic[self.job_tab_current_job]['mem'] != '':
-                mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['mem'])/1024, 1)
-                self.job_tab_mem_line.setText(str(mem_value) + ' G')
-                self.job_tab_mem_line.setCursorPosition(0)
-
-        # Fill "max_mem" item.
-        if init:
-            self.job_tab_max_mem_line.setText('')
-        else:
-            if self.job_tab_current_job_dic[self.job_tab_current_job]['max_mem'] != '':
-                max_mem_value = round(float(self.job_tab_current_job_dic[self.job_tab_current_job]['max_mem'])/1024, 1)
-                self.job_tab_max_mem_line.setText(str(max_mem_value) + ' G')
-                self.job_tab_max_mem_line.setCursorPosition(0)
+        self._fill_mem_line_edit(self.job_tab_rusage_mem_line, job_dic.get('rusage_mem', ''), init)
+        self._fill_mem_line_edit(self.job_tab_mem_line, job_dic.get('mem', ''), init)
+        self._fill_mem_line_edit(self.job_tab_max_mem_line, job_dic.get('max_mem', ''), init)
 
     def update_job_tab_frame2(self, init=False):
         """
@@ -1015,7 +1003,7 @@ Please contact with liyanqing1987@163.com with any question."""
         job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_list = list(job_range_dic.keys())
         job_range = job_range_list[0]
-        job_mem_db_file = str(self.db_path) + '/job_mem/' + str(job_range) + '.db'
+        job_mem_db_file = str(self.cluster_db_path) + '/job_mem/' + str(job_range) + '.db'
 
         if not os.path.exists(job_mem_db_file):
             common.bprint(f'Job memory usage information is missing for "{self.job_tab_current_job}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2031,16 +2019,20 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Switch mem unit M/G/T into G, then remove the unit string.
         """
-        if re.search(r'M', mem_string):
-            mem_string = float(re.sub(r'M', '', mem_string))/1024
-        elif re.search(r'G', mem_string):
-            mem_string = float(re.sub(r'G', '', mem_string))
-        elif re.search(r'T', mem_string):
-            mem_string = float(re.sub(r'T', '', mem_string))*1024
-        else:
-            mem_string = 0.0
+        mem_match = re.match(r'^([\d.]+)([MGT])$', str(mem_string))
 
-        return mem_string
+        if mem_match:
+            value = float(mem_match.group(1))
+            unit = mem_match.group(2)
+
+            if unit == 'M':
+                return value / 1024
+            elif unit == 'G':
+                return value
+            elif unit == 'T':
+                return value * 1024
+
+        return 0.0
 
     def gen_hosts_tab_menu(self, pos):
         """
@@ -2491,7 +2483,7 @@ Please contact with liyanqing1987@163.com with any question."""
         ut_list = []
         mem_list = []
 
-        load_db_file = str(self.db_path) + '/load.db'
+        load_db_file = str(self.cluster_db_path) + '/load.db'
 
         if not os.path.exists(load_db_file):
             common.bprint(f'Load database "{load_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -2926,7 +2918,7 @@ Please contact with liyanqing1987@163.com with any question."""
             # Get all user/date history data.
             current_date_string = current_date.toString('yyyyMMdd')
             current_date = current_date.addDays(1)
-            user_db_file = str(self.db_path) + '/user/' + str(current_date_string) + '.db'
+            user_db_file = str(self.cluster_db_path) + '/user/' + str(current_date_string) + '.db'
 
             if os.path.exists(user_db_file):
                 (user_db_file_connect_result, user_db_conn) = common_sqlite3.connect_db_file(user_db_file)
@@ -3346,7 +3338,7 @@ Please contact with liyanqing1987@163.com with any question."""
         Draw (PEND/RUN) job number curve for specified queueu.
         """
         queue_date_dic = {}
-        queue_db_file = str(self.db_path) + '/queue.db'
+        queue_db_file = str(self.cluster_db_path) + '/queue.db'
 
         if not os.path.exists(queue_db_file):
             common.bprint(f'Queue database file "{queue_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -3354,7 +3346,7 @@ Please contact with liyanqing1987@163.com with any question."""
             (queue_db_file_connect_result, queue_db_conn) = common_sqlite3.connect_db_file(queue_db_file)
 
             if queue_db_file_connect_result == 'failed':
-                common.bprint(f'Failed on connecting queue database file "{self.queue_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+                common.bprint(f'Failed on connecting queue database file "{queue_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             else:
                 for queue in queue_list:
                     table_name = 'queue_' + str(queue)
@@ -3804,7 +3796,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 all_queues.add(queue)
 
         # Get current existing queues: 仅能获取当前集群的队列列表，其他集群无法通过LSF命令查询
-        current_cluster_db_path = str(self.db_path)
+        current_cluster_db_path = str(self.cluster_db_path)
 
         if db_path == current_cluster_db_path:
             self.fresh_lsf_info('bqueues')
@@ -3874,6 +3866,8 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         Get queue utilization info from sqlite database using historical queue-host mapping, support multi-cluster.
         """
+        import pandas as pd
+
         common.bprint('Loading queue utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', 'Loading queue utilization info ...')
@@ -4260,9 +4254,9 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_dic = {}
 
         if self.enable_utilization_detail:
-            utilization_db_file = str(self.db_path) + '/utilization.db'
+            utilization_db_file = str(self.cluster_db_path) + '/utilization.db'
         else:
-            utilization_db_file = str(self.db_path) + '/utilization_day.db'
+            utilization_db_file = str(self.cluster_db_path) + '/utilization_day.db'
 
         if not os.path.exists(utilization_db_file):
             common.bprint(f'Utilization database "{utilization_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -5250,12 +5244,827 @@ Please contact with liyanqing1987@163.com with any question."""
             common.write_csv(csv_file=output_file, content_dic=content_dic)
 # Export table (end) #
 
+# For AI TAB (begin) #
+    def gen_ai_tab(self):
+        """
+        Generate the AI helpdesk tab.
+        """
+        # Check if AI is configured.
+        self.ai_configured = False
+
+        if hasattr(config, 'ai_api_base_url') and config.ai_api_base_url and hasattr(config, 'ai_api_key') and config.ai_api_key and hasattr(config, 'ai_model_name') and config.ai_model_name:
+            self.ai_configured = True
+
+        # Chat display area.
+        self.ai_tab_chat_text = QTextEdit(self.ai_tab)
+        self.ai_tab_chat_text.setReadOnly(True)
+        self._create_chat_avatars()
+
+        if not self.ai_configured:
+            self.ai_tab_chat_text.setHtml('<p>AI helpdesk is not configured.</p><p>Please set <b>ai_api_base_url</b>, <b>ai_api_key</b>, and <b>ai_model_name</b> in config.py.</p>')
+
+        # Input area (multi-line, Enter sends, Shift+Enter for newline).
+        self.ai_tab_input = AiInputBox(self.ai_tab)
+        self.ai_tab_input.setPlaceholderText('Ask AI about LSF jobs, cluster status, licenses ... (Enter to send, Shift+Enter for newline)')
+        self.ai_tab_input.setFixedHeight(60)
+        self.ai_tab_input.send_requested.connect(self.ai_tab_send_message)
+
+        if not self.ai_configured:
+            self.ai_tab_input.setEnabled(False)
+
+        # Buttons (stacked vertically, matching input height).
+        ai_tab_send_button = QPushButton('Send', self.ai_tab)
+        ai_tab_send_button.setFixedHeight(28)
+        ai_tab_send_button.clicked.connect(self.ai_tab_send_message)
+
+        ai_tab_clear_button = QPushButton('Clear', self.ai_tab)
+        ai_tab_clear_button.setFixedHeight(28)
+        ai_tab_clear_button.clicked.connect(self.ai_tab_clear_chat)
+
+        button_layout = QVBoxLayout()
+        button_layout.addWidget(ai_tab_send_button)
+        button_layout.addWidget(ai_tab_clear_button)
+        button_layout.setSpacing(4)
+
+        # Layout.
+        ai_tab_grid = QGridLayout()
+        ai_tab_grid.addWidget(self.ai_tab_chat_text, 0, 0, 1, 2)
+        ai_tab_grid.addWidget(self.ai_tab_input, 1, 0)
+        ai_tab_grid.addLayout(button_layout, 1, 1)
+        ai_tab_grid.setColumnStretch(0, 10)
+        ai_tab_grid.setColumnStretch(1, 1)
+        self.ai_tab.setLayout(ai_tab_grid)
+
+        # Init conversation history.
+        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT}]
+
+        # Load AI documents (RAG vectors or keyword chunks) in background.
+        common.bprint('Loading AI documents ...', date_format='%Y-%m-%d %H:%M:%S')
+        self.ai_doc_chunks = {"chunks": [], "embeddings": None}
+        docs_dir = os.path.join(os.environ.get('LSFMONITOR_INSTALL_PATH', '.'), 'db', 'ai')
+        self._doc_loader = common_ai.DocLoaderThread(docs_dir)
+        self._doc_loader.finished_signal.connect(lambda doc_data: setattr(self, 'ai_doc_chunks', doc_data))
+        self._doc_loader.start()
+
+        # Load skills.
+        common.bprint('Loading AI skills ...', date_format='%Y-%m-%d %H:%M:%S')
+        skills_dir = os.path.join(os.environ.get('LSFMONITOR_INSTALL_PATH', '.'), 'monitor', 'conf', 'skills')
+        self.ai_skills = common_ai.load_skills(skills_dir)
+
+        # Init AI log database.
+        self.ai_log_db_file = common_ai_log.init_ai_log_db(config.db_path)
+
+    def _create_chat_avatars(self):
+        """Create user (person) and AI (robot) avatar icons with QPainter."""
+        size = 32
+        doc = self.ai_tab_chat_text.document()
+
+        # Circular clip path.
+        clip = QPainterPath()
+        clip.addEllipse(0, 0, size, size)
+
+        # --- User avatar: blue circle, white person silhouette ---
+        user_pm = QPixmap(size, size)
+        user_pm.fill(Qt.transparent)
+        p = QPainter(user_pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setClipPath(clip)
+        p.fillRect(0, 0, size, size, QColor('#5DADE2'))
+        p.setBrush(QColor('#FFFFFF'))
+        p.setPen(Qt.NoPen)
+        p.drawEllipse(10, 3, 12, 12)
+        p.drawEllipse(4, 17, 24, 22)
+        p.end()
+
+        # --- AI avatar: green circle, white robot face ---
+        ai_pm = QPixmap(size, size)
+        ai_pm.fill(Qt.transparent)
+        p = QPainter(ai_pm)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setClipPath(clip)
+        p.fillRect(0, 0, size, size, QColor('#27AE60'))
+        p.setBrush(QColor('#FFFFFF'))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(6, 7, 20, 14, 3, 3)
+        p.setBrush(QColor('#27AE60'))
+        p.drawRoundedRect(9, 10, 5, 5, 1, 1)
+        p.drawRoundedRect(18, 10, 5, 5, 1, 1)
+        p.drawRect(11, 17, 10, 2)
+        p.setPen(QPen(QColor('#FFFFFF'), 2))
+        p.drawLine(16, 7, 16, 3)
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor('#FFFFFF'))
+        p.drawEllipse(14, 0, 4, 4)
+        p.drawRoundedRect(9, 23, 14, 7, 2, 2)
+        p.end()
+
+        doc.addResource(2, QUrl("user_avatar"), user_pm)
+        doc.addResource(2, QUrl("ai_avatar"), ai_pm)
+
+    def ai_tab_send_message(self):
+        """
+        Send user message to AI and start streaming response.
+        """
+        if not self.ai_configured:
+            return
+
+        user_text = self.ai_tab_input.toPlainText().strip()
+
+        if not user_text:
+            return
+
+        # Don't send while AI is still responding.
+        if self.ai_thread and self.ai_thread.isRunning():
+            return
+
+        # Display user message (right-aligned light blue bubble with avatar).
+        user_html = user_text.replace('\n', '<br>')
+        self.ai_tab_chat_text.append(
+            f'<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+            f'<td width="15%"></td>'
+            f'<td style="background-color:#D6EAF8; padding:10px 14px; -qt-block-indent:0;">'
+            f'{user_html}</td>'
+            f'<td width="42" valign="top" style="padding:2px 0 0 6px;">'
+            f'<img src="user_avatar" width="32" height="32"></td>'
+            f'</tr></table>'
+        )
+        self.ai_tab_input.clear()
+
+        # Log the question.
+        self.my_save_log.save_log(f'AI question: {user_text}')
+
+        # Track session for AI log database.
+        self._ai_send_time = time.time()
+        common.bprint('[AI Debug] User sent message', date_format='%Y-%m-%d %H:%M:%S')
+
+        self._current_ai_session_id = common_ai_log.gen_session_id()
+        self._current_ai_question = user_text
+        self._current_ai_tool_calls = []
+
+        # Query similar solved cases for experience injection.
+        experience_cases = []
+
+        if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file:
+            t0 = time.time()
+            experience_cases = common_ai_log.find_similar_conversations(self.ai_log_db_file, user_text, limit=3)
+            common.bprint(f'[AI Debug] find_similar_conversations: {time.time() - t0:.2f}s, found {len(experience_cases)} cases', date_format='%Y-%m-%d %H:%M:%S')
+
+        # Add to messages.
+        self.ai_messages.append({"role": "user", "content": user_text})
+
+        # Trim context if too long (keep system prompt + last 30 messages).
+        if len(self.ai_messages) > 40:
+            self.ai_messages = [self.ai_messages[0]] + self.ai_messages[-30:]
+
+        # Get config.
+        forbidden_commands = []
+
+        if hasattr(config, 'ai_forbidden_commands') and config.ai_forbidden_commands:
+            forbidden_commands = config.ai_forbidden_commands.split()
+
+        dangerous_commands = common_ai.DEFAULT_DANGEROUS_COMMANDS
+
+        if hasattr(config, 'ai_dangerous_commands') and config.ai_dangerous_commands:
+            dangerous_commands = config.ai_dangerous_commands.split()
+
+        lmstat_path = config.lmstat_path if hasattr(config, 'lmstat_path') else 'lmstat'
+        lmstat_bsub_command = config.lmstat_bsub_command if hasattr(config, 'lmstat_bsub_command') else ''
+
+        # Insert "AI" label and prepare block format for streaming text.
+        self._ai_tab_start_ai_block()
+
+        # Start AI thread.
+        embedding_model = config.ai_embedding_model_name if hasattr(config, 'ai_embedding_model_name') else ''
+        embedding_api_base_url = config.ai_embedding_api_base_url if hasattr(config, 'ai_embedding_api_base_url') else ''
+        embedding_api_key = config.ai_embedding_api_key if hasattr(config, 'ai_embedding_api_key') else ''
+        self.ai_thread = common_ai.AiChatThread(
+            api_base_url=config.ai_api_base_url,
+            api_key=config.ai_api_key,
+            model_name=config.ai_model_name,
+            messages=self.ai_messages,
+            db_path=self.cluster_db_path,
+            license_dic=self.license_dic,
+            lmstat_path=lmstat_path,
+            lmstat_bsub_command=lmstat_bsub_command,
+            forbidden_commands=forbidden_commands,
+            dangerous_commands=dangerous_commands,
+            doc_chunks=self.ai_doc_chunks,
+            skills=self.ai_skills,
+            embedding_model=embedding_model,
+            embedding_api_base_url=embedding_api_base_url,
+            embedding_api_key=embedding_api_key,
+            experience_cases=experience_cases
+        )
+        self.ai_thread.token_received.connect(self.ai_tab_on_token)
+        self.ai_thread.tool_call_start.connect(self.ai_tab_on_tool_start)
+        self.ai_thread.tool_call_result.connect(self.ai_tab_on_tool_result)
+        self.ai_thread.finished_signal.connect(self.ai_tab_on_finished)
+        self.ai_thread.error_signal.connect(self.ai_tab_on_error)
+        self.ai_thread.confirm_requested.connect(self.ai_handle_confirm_request)
+        self.ai_thread.status_signal.connect(self.ai_tab_on_status)
+        self.ai_thread.sources_signal.connect(self.ai_tab_on_sources)
+        self._ai_sources = {}
+        self.ai_thread.start()
+
+    def _ai_tab_start_ai_block(self):
+        """Insert robot avatar with animated 'Thinking...' placeholder, set block format for streaming."""
+        cursor = self.ai_tab_chat_text.textCursor()
+        cursor.movePosition(cursor.End)
+
+        # Two-column table: left=avatar, right=gray message area (mirrors user HTML table).
+        table_fmt = QTextTableFormat()
+        table_fmt.setBorder(0)
+        table_fmt.setCellPadding(6)
+        table_fmt.setCellSpacing(0)
+        table_fmt.setTopMargin(6)
+        table_fmt.setBottomMargin(4)
+        table_fmt.setRightMargin(80)
+        table_fmt.setColumnWidthConstraints([
+            QTextLength(QTextLength.FixedLength, 42),
+            QTextLength(QTextLength.PercentageLength, 100),
+        ])
+        table = cursor.insertTable(1, 2, table_fmt)
+
+        # Left cell: avatar.
+        avatar_cursor = table.cellAt(0, 0).firstCursorPosition()
+        img_fmt = QTextImageFormat()
+        img_fmt.setName("ai_avatar")
+        img_fmt.setWidth(32)
+        img_fmt.setHeight(32)
+        avatar_cursor.insertImage(img_fmt)
+
+        # Right cell: gray background message area.
+        self._ai_msg_cell = table.cellAt(0, 1)
+        cell_fmt = self._ai_msg_cell.format()
+        cell_fmt.setBackground(QColor('#F2F3F4'))
+        self._ai_msg_cell.setFormat(cell_fmt)
+
+        cursor = self._ai_msg_cell.firstCursorPosition()
+
+        # Animated status placeholder in gray italic.
+        self._ai_thinking_pos = cursor.position()
+        self._ai_thinking_fmt = QTextCharFormat()
+        self._ai_thinking_fmt.setForeground(QColor('#999999'))
+        self._ai_thinking_fmt.setFontItalic(True)
+        self._ai_status_base = 'Thinking'
+        cursor.insertText('Thinking.', self._ai_thinking_fmt)
+        self._ai_first_token = True
+        self._ai_thinking_dots = 1
+
+        # Start dot animation timer.
+        if not hasattr(self, '_ai_thinking_timer'):
+            self._ai_thinking_timer = QTimer(self)
+            self._ai_thinking_timer.timeout.connect(self._ai_tab_animate_thinking)
+
+        self._ai_thinking_timer.start(500)
+
+        # Normal text format for streaming content.
+        self._ai_text_fmt = QTextCharFormat()
+        self._ai_text_fmt.setForeground(QColor('#000000'))
+
+        self.ai_tab_chat_text.setTextCursor(cursor)
+        self.ai_tab_chat_text.ensureCursorVisible()
+
+    def _ai_frame_end_position(self):
+        """Return the last valid cursor position inside the current AI message cell."""
+        if hasattr(self, '_ai_msg_cell') and self._ai_msg_cell:
+            return self._ai_msg_cell.lastCursorPosition().position()
+
+        # Fallback: document end.
+        return self.ai_tab_chat_text.document().characterCount() - 1
+
+    def _ai_tab_animate_thinking(self):
+        """Cycle dots on status text: Thinking. -> Thinking.. -> Thinking..."""
+        if not self._ai_first_token:
+            self._ai_thinking_timer.stop()
+            return
+
+        self._ai_thinking_dots = (self._ai_thinking_dots % 3) + 1
+        text = self._ai_status_base + '.' * self._ai_thinking_dots
+
+        cursor = self.ai_tab_chat_text.textCursor()
+        cursor.setPosition(self._ai_thinking_pos)
+        cursor.setPosition(self._ai_frame_end_position(), cursor.KeepAnchor)
+        cursor.insertText(text, self._ai_thinking_fmt)
+        self.ai_tab_chat_text.setTextCursor(cursor)
+        self.ai_tab_chat_text.ensureCursorVisible()
+
+    def _ai_tab_remove_thinking(self):
+        """Remove 'Thinking...' placeholder and stop animation."""
+        if not self._ai_first_token:
+            return
+
+        self._ai_first_token = False
+
+        if hasattr(self, '_ai_thinking_timer'):
+            self._ai_thinking_timer.stop()
+
+        cursor = self.ai_tab_chat_text.textCursor()
+        cursor.setPosition(self._ai_thinking_pos)
+        cursor.setPosition(self._ai_frame_end_position(), cursor.KeepAnchor)
+        cursor.removeSelectedText()
+        self.ai_tab_chat_text.setTextCursor(cursor)
+
+    def ai_tab_on_token(self, token):
+        """Append a single token to the chat display (streaming)."""
+        self._ai_tab_remove_thinking()
+        cursor = self._ai_msg_cell.lastCursorPosition() if hasattr(self, '_ai_msg_cell') and self._ai_msg_cell else self.ai_tab_chat_text.textCursor()
+        cursor.insertText(token, self._ai_text_fmt)
+        self.ai_tab_chat_text.setTextCursor(cursor)
+        self.ai_tab_chat_text.ensureCursorVisible()
+
+    def ai_tab_on_status(self, status):
+        """Update the animated status text with a new phase description."""
+        self._ai_status_base = status
+        self._ai_thinking_dots = 0
+        self._ai_tab_animate_thinking()
+
+    def ai_tab_on_tool_start(self, tool_name, description):
+        """Tool call started - update status text to show what's being executed."""
+        self._ai_status_base = description
+        self._ai_thinking_dots = 0
+        self._ai_tab_animate_thinking()
+        self.my_save_log.save_log(f'AI tool: {description}')
+
+        # Track tool call for AI log.
+        self._current_ai_tool_calls.append({'name': tool_name, 'args': description, 'result': ''})
+
+    def ai_tab_on_tool_result(self, tool_name, result):
+        """Tool call finished - start a new AI block for the response."""
+        self.my_save_log.save_log(f'AI tool result: {tool_name}, {len(result)} chars')
+
+        # Update the latest tool call with its result.
+        if self._current_ai_tool_calls:
+            self._current_ai_tool_calls[-1]['result'] = result[:1000]
+
+        # Start new AI block (shows Thinking... while API processes tool results).
+        self._ai_tab_start_ai_block()
+
+    def ai_tab_on_sources(self, sources):
+        """Store sources dict emitted by AiChatThread."""
+        self._ai_sources = sources
+
+    def _ai_tab_render_sources(self, rag_sources, skills):
+        """Append a sources block at the bottom of the current AI message cell."""
+        if not hasattr(self, '_ai_msg_cell') or not self._ai_msg_cell:
+            return
+
+        cursor = self._ai_msg_cell.lastCursorPosition()
+
+        # Separator line.
+        cursor.insertBlock()
+        sep_fmt = QTextCharFormat()
+        sep_fmt.setForeground(QColor('#AAAAAA'))
+        sep_fmt.setFontPointSize(8)
+        cursor.insertText('\u2500' * 40, sep_fmt)
+
+        # "Sources:" label.
+        cursor.insertBlock()
+        label_fmt = QTextCharFormat()
+        label_fmt.setForeground(QColor('#666666'))
+        label_fmt.setFontPointSize(9)
+        label_fmt.setFontItalic(True)
+        cursor.insertText('Sources:', label_fmt)
+
+        # Item format.
+        item_fmt = QTextCharFormat()
+        item_fmt.setForeground(QColor('#888888'))
+        item_fmt.setFontPointSize(8)
+        item_fmt.setFontItalic(True)
+
+        # RAG sources (deduplicated by source+page).
+        seen = set()
+
+        for meta in rag_sources:
+            source = meta.get('source', '')
+            page = meta.get('page', '')
+            key = (source, str(page))
+
+            if key in seen or not source:
+                continue
+
+            seen.add(key)
+            cursor.insertBlock()
+            text = f'  \u00b7 {source}'
+
+            if page:
+                text += f' (p.{page})'
+
+            cursor.insertText(text, item_fmt)
+
+        # Skill sources.
+        for skill_name in skills:
+            cursor.insertBlock()
+            cursor.insertText(f'  \u00b7 Skill: {skill_name}', item_fmt)
+
+        self.ai_tab_chat_text.setTextCursor(cursor)
+
+    def ai_tab_on_finished(self):
+        """Called when AI response is complete."""
+        # Render sources block if any sources were collected.
+        rag_sources = self._ai_sources.get('rag_sources', []) if self._ai_sources else []
+        skills = self._ai_sources.get('skills', []) if self._ai_sources else []
+
+        if rag_sources or skills:
+            self._ai_tab_render_sources(rag_sources, skills)
+
+        # Add a blank separator line.
+        cursor = self.ai_tab_chat_text.textCursor()
+        cursor.movePosition(cursor.End)
+        cursor.insertBlock(QTextBlockFormat())
+        self.ai_tab_chat_text.setTextCursor(cursor)
+        self.ai_tab_chat_text.ensureCursorVisible()
+
+        # Extract the full AI answer.
+        full_answer = ''
+
+        for msg in reversed(self.ai_messages):
+            if msg.get('role') == 'assistant' and msg.get('content'):
+                full_answer = msg['content']
+                break
+
+        # Log the AI answer (truncated for text log).
+        if full_answer:
+            self.my_save_log.save_log(f'AI answer: {full_answer[:200]}')
+
+        # Save complete conversation to AI log database.
+        if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file and hasattr(self, '_current_ai_session_id'):
+            try:
+                common_ai_log.save_conversation(
+                    db_file=self.ai_log_db_file,
+                    session_id=self._current_ai_session_id,
+                    user=USER,
+                    cluster=self.cluster or '',
+                    host=socket.gethostname(),
+                    question=self._current_ai_question,
+                    answer=full_answer,
+                    tool_calls=self._current_ai_tool_calls,
+                )
+            except Exception as e:
+                common.bprint(f'Failed to save AI conversation log: {e}', level='Warning')
+
+    def ai_tab_on_error(self, error_msg):
+        """Show error in chat."""
+        self._ai_tab_remove_thinking()
+        cursor = self.ai_tab_chat_text.textCursor()
+        cursor.movePosition(cursor.End)
+
+        block_fmt = QTextBlockFormat()
+        block_fmt.setBackground(QColor('#F8D7DA'))
+        block_fmt.setLeftMargin(4)
+        block_fmt.setRightMargin(4)
+        block_fmt.setTopMargin(4)
+        block_fmt.setBottomMargin(4)
+        cursor.insertBlock(block_fmt)
+
+        char_fmt = QTextCharFormat()
+        char_fmt.setForeground(QColor('#721C24'))
+        char_fmt.setFontWeight(QFont.Bold)
+        cursor.insertText('Error: ', char_fmt)
+
+        char_fmt.setFontWeight(QFont.Normal)
+        cursor.insertText(error_msg, char_fmt)
+        self.ai_tab_chat_text.setTextCursor(cursor)
+
+        self.my_save_log.save_log(f'AI error: {error_msg}')
+
+    def ai_tab_clear_chat(self):
+        """Clear chat history."""
+        self.ai_tab_chat_text.clear()
+        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT}]
+
+    def ai_handle_confirm_request(self, command):
+        """Show QMessageBox to confirm dangerous command execution."""
+        result = QMessageBox.question(
+            self,
+            'Confirm Command',
+            f'AI wants to execute:\n\n{command}\n\nAllow?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        self.ai_thread.set_confirm_result(result == QMessageBox.Yes)
+
+        if result == QMessageBox.Yes:
+            self.my_save_log.save_log(f'AI dangerous command approved: {command}')
+        else:
+            self.my_save_log.save_log(f'AI dangerous command rejected: {command}')
+# For AI TAB (end) #
+
+# For AI Menu (start) #
+    def ai_record_search(self):
+        """Open the AI conversation record search window."""
+        if not hasattr(self, 'ai_log_db_file') or not self.ai_log_db_file:
+            QMessageBox.warning(self, 'Warning', 'AI log database is not initialized.')
+            return
+
+        self.ai_search_window = AiRecordSearchWindow(self.ai_log_db_file)
+        self.ai_search_window.show()
+
+    def ai_problem_analysis(self):
+        """Generate an AI problem analysis HTML report using LLM."""
+        if not hasattr(self, 'ai_log_db_file') or not self.ai_log_db_file:
+            QMessageBox.warning(self, 'Warning', 'AI log database is not initialized.')
+            return
+
+        if not self.ai_configured:
+            QMessageBox.warning(self, 'Warning', 'AI is not configured. Cannot generate analysis report.')
+            return
+
+        # Get all conversations.
+        data = common_ai_log.get_all_conversations(self.ai_log_db_file)
+
+        if not data or 'question' not in data or len(data['question']) == 0:
+            QMessageBox.information(self, 'Info', 'No conversation records found. Please use the AI helpdesk first.')
+            return
+
+        # Choose output file path.
+        default_name = f'ai_report_{datetime.datetime.now().strftime("%Y%m%d_%H%M%S")}.html'
+        output_file, _ = QFileDialog.getSaveFileName(self, 'Save Analysis Report', default_name, 'HTML Files (*.html)')
+
+        if not output_file:
+            return
+
+        # Start report generation thread.
+        self._ai_report_thread = common_ai_log.AiReportThread(
+            api_base_url=config.ai_api_base_url,
+            api_key=config.ai_api_key,
+            model_name=config.ai_model_name,
+            conversations_data=data,
+            output_file=output_file,
+        )
+        self._ai_report_thread.finished_signal.connect(self._ai_report_finished)
+        self._ai_report_thread.error_signal.connect(self._ai_report_error)
+        self._ai_report_thread.start()
+
+        # Estimate time: ~1.5min per batch of 50 records.
+        total = len(data['question'])
+        batch_count = (total + 49) // 50
+        est_minutes = max(1, round(batch_count * 1.5))
+
+        # Show non-modal info dialog (user can dismiss it anytime).
+        self._ai_report_msgbox = QMessageBox(QMessageBox.Information, 'Problem Analysis',
+                                             f'Generating analysis report ({total} conversations) ...\n'
+                                             f'Approximately {est_minutes} min, will auto-open when done.\n\n'
+                                             f'You can close this dialog and continue working.',
+                                             QMessageBox.Close, self)
+        self._ai_report_msgbox.setModal(False)
+        self._ai_report_msgbox.show()
+
+    def _ai_report_close_msgbox(self):
+        """Close the report progress dialog if it exists."""
+        if hasattr(self, '_ai_report_msgbox') and self._ai_report_msgbox:
+            self._ai_report_msgbox.close()
+            self._ai_report_msgbox = None
+
+    def _ai_report_finished(self, output_file):
+        """Called when AI report generation is complete."""
+        self._ai_report_close_msgbox()
+
+        # Auto-open the report.
+        import webbrowser
+        webbrowser.open(f'file://{output_file}')
+
+    def _ai_report_error(self, error_msg):
+        """Called when AI report generation fails."""
+        self._ai_report_close_msgbox()
+
+        QMessageBox.warning(self, 'Error', f'Failed to generate report:\n{error_msg}')
+
+    def ai_record_cleanup(self):
+        """Clean up AI conversation records by entries limit."""
+        if not hasattr(self, 'ai_log_db_file') or not self.ai_log_db_file:
+            QMessageBox.warning(self, 'Warning', 'AI log database is not initialized.')
+            return
+
+        user_list = common_ai_log.get_user_list(self.ai_log_db_file)
+
+        if not user_list:
+            QMessageBox.information(self, 'Info', 'No conversation records found.')
+            return
+
+        # Ask for entries limit.
+        entries_limit, ok = QInputDialog.getInt(self, 'Record Cleanup', 'Max records to keep per user:', 100, 0, 100000, 10)
+
+        if not ok:
+            return
+
+        total_deleted = 0
+
+        for user in user_list:
+            deleted = common_ai_log.cleanup_conversations(self.ai_log_db_file, user, entries_limit)
+            total_deleted += deleted
+
+        QMessageBox.information(self, 'Cleanup Done', f'Cleaned up {total_deleted} records across {len(user_list)} users.\nEach user keeps at most {entries_limit} records.')
+
+# For AI Menu (end) #
+
     def closeEvent(self, QCloseEvent):
         """
         When window close, post-process.
         """
+        # Stop AI thread if running.
+        if self.ai_thread and self.ai_thread.isRunning():
+            self.ai_thread.stop()
+            self.ai_thread.wait(3000)
+
         common.bprint('Bye', date_format='%Y-%m-%d %H:%M:%S')
         self.my_save_log.save_log('Exit lsfMonitor')
+
+
+class AiInputBox(QTextEdit):
+    """
+    Multi-line input box for AI tab.
+    Enter sends message, Shift+Enter inserts newline.
+    """
+    send_requested = pyqtSignal()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter) and not (event.modifiers() & Qt.ShiftModifier):
+            self.send_requested.emit()
+        else:
+            super().keyPressEvent(event)
+
+
+class AiRecordSearchWindow(QWidget):
+    """Window for searching and browsing AI conversation records."""
+
+    def __init__(self, db_file):
+        super().__init__()
+        self.db_file = db_file
+        self._search_results = {}
+        self.setWindowTitle('AI Record Search')
+        self.resize(1000, 700)
+        self._init_ui()
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout()
+
+        # Top filter area.
+        filter_layout = QHBoxLayout()
+
+        filter_layout.addWidget(QLabel('Keyword:'))
+        self.keyword_edit = QLineEdit()
+        self.keyword_edit.setPlaceholderText('Search question/answer/keywords')
+        filter_layout.addWidget(self.keyword_edit)
+
+        filter_layout.addWidget(QLabel('User:'))
+        self.user_edit = QLineEdit()
+        self.user_edit.setFixedWidth(100)
+        filter_layout.addWidget(self.user_edit)
+
+        filter_layout.addWidget(QLabel('From:'))
+        self.date_start_edit = QLineEdit()
+        self.date_start_edit.setPlaceholderText('YYYY-MM-DD')
+        self.date_start_edit.setFixedWidth(110)
+        filter_layout.addWidget(self.date_start_edit)
+
+        filter_layout.addWidget(QLabel('To:'))
+        self.date_end_edit = QLineEdit()
+        self.date_end_edit.setPlaceholderText('YYYY-MM-DD')
+        self.date_end_edit.setFixedWidth(110)
+        filter_layout.addWidget(self.date_end_edit)
+
+        filter_layout.addWidget(QLabel('Status:'))
+        self.resolution_combo = QComboBox()
+        self.resolution_combo.addItems(['all', 'solved', 'unsolved', 'unknown'])
+        self.resolution_combo.setFixedWidth(100)
+        filter_layout.addWidget(self.resolution_combo)
+
+        search_button = QPushButton('Search')
+        search_button.clicked.connect(self._do_search)
+        filter_layout.addWidget(search_button)
+
+        main_layout.addLayout(filter_layout)
+
+        # Results table.
+        self.result_table = QTableWidget()
+        self.result_table.setColumnCount(4)
+        self.result_table.setHorizontalHeaderLabels(['Time', 'User', 'Question', 'Status'])
+        self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.result_table.clicked.connect(self._on_row_clicked)
+        self.result_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.result_table.customContextMenuRequested.connect(self._show_context_menu)
+        main_layout.addWidget(self.result_table)
+
+        # Detail area.
+        self.detail_text = QTextEdit()
+        self.detail_text.setReadOnly(True)
+        self.detail_text.setMaximumHeight(250)
+        main_layout.addWidget(self.detail_text)
+
+        self.setLayout(main_layout)
+
+        # Load all records initially.
+        self._do_search()
+
+    def _do_search(self):
+        """Execute search with current filter values."""
+        self._search_results = common_ai_log.search_conversations(
+            db_file=self.db_file,
+            keyword=self.keyword_edit.text().strip(),
+            user=self.user_edit.text().strip(),
+            date_start=self.date_start_edit.text().strip(),
+            date_end=self.date_end_edit.text().strip(),
+            resolution=self.resolution_combo.currentText(),
+        )
+
+        self._populate_table()
+
+    def _populate_table(self):
+        """Fill table with search results."""
+        data = self._search_results
+
+        if not data or 'timestamp' not in data:
+            self.result_table.setRowCount(0)
+            return
+
+        count = len(data['timestamp'])
+        self.result_table.setRowCount(count)
+
+        for i in range(count):
+            self.result_table.setItem(i, 0, QTableWidgetItem(data['timestamp'][i] or ''))
+            self.result_table.setItem(i, 1, QTableWidgetItem(data.get('user', [''])[i] or ''))
+
+            question = data.get('question', [''])[i] or ''
+            self.result_table.setItem(i, 2, QTableWidgetItem(question[:100]))
+
+            self.result_table.setItem(i, 3, QTableWidgetItem(data.get('resolution', [''])[i] or ''))
+
+    def _on_row_clicked(self, index):
+        """Show full detail for clicked row."""
+        row = index.row()
+        data = self._search_results
+
+        if not data or 'question' not in data or row >= len(data['question']):
+            return
+
+        question = data['question'][row] or ''
+        answer = data.get('answer', [''])[row] or ''
+        tool_calls = data.get('tool_calls', ['[]'])[row] or '[]'
+        session_id = data.get('session_id', [''])[row] or ''
+        resolution = data.get('resolution', [''])[row] or ''
+        cluster = data.get('cluster', [''])[row] or ''
+        host = data.get('host', [''])[row] or ''
+
+        # Format tool calls.
+        tool_text = ''
+
+        try:
+            tools = json.loads(tool_calls)
+
+            if tools:
+                tool_lines = []
+
+                for t in tools:
+                    tool_lines.append(f"  - {t.get('name', 'unknown')}: {t.get('args', '')}")
+
+                tool_text = '\n'.join(tool_lines)
+        except (json.JSONDecodeError, TypeError):
+            tool_text = tool_calls
+
+        detail = (
+            f'<b>Session ID:</b> {session_id}<br>'
+            f'<b>Status:</b> {resolution} | <b>Cluster:</b> {cluster} | <b>Host:</b> {host}<br><br>'
+            f'<b>Question:</b><br>{question.replace(chr(10), "<br>")}<br><br>'
+            f'<b>Answer:</b><br>{answer.replace(chr(10), "<br>")}<br><br>'
+        )
+
+        if tool_text:
+            detail += f'<b>Tool Calls:</b><br><pre>{tool_text}</pre>'
+
+        self.detail_text.setHtml(detail)
+
+    def _show_context_menu(self, pos):
+        """Right-click context menu to update resolution."""
+        row = self.result_table.rowAt(pos.y())
+
+        if row < 0:
+            return
+
+        data = self._search_results
+
+        if not data or 'session_id' not in data or row >= len(data['session_id']):
+            return
+
+        session_id = data['session_id'][row]
+        row_user = data.get('user', [''])[row] or ''
+
+        menu = QMenu(self)
+        mark_solved = menu.addAction('Mark as Solved')
+        mark_unsolved = menu.addAction('Mark as Unsolved')
+
+        action = menu.exec_(self.result_table.mapToGlobal(pos))
+
+        if action == mark_solved:
+            common_ai_log.update_resolution(self.db_file, session_id, 'solved', user=row_user)
+            data['resolution'][row] = 'solved'
+            self.result_table.setItem(row, 3, QTableWidgetItem('solved'))
+        elif action == mark_unsolved:
+            common_ai_log.update_resolution(self.db_file, session_id, 'unsolved', user=row_user)
+            data['resolution'][row] = 'unsolved'
+            self.result_table.setItem(row, 3, QTableWidgetItem('unsolved'))
 
 
 class CheckIssueReason(QThread):

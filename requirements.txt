@@ -2,13 +2,13 @@ qdarkstyle==3.2.3
 PyQt5==5.15.11
 screeninfo==0.8.1
 matplotlib==3.10.8
-pandas==2.3.3
+pandas==2.3.2
 pyyaml==6.0.3
 xgboost==3.0.5
 tabulate==0.9.0
 scikit-learn==1.7.2
-imblearn==0.0 
-elasticsearch==9.2.1 
+imbalanced-learn==0.14.1
+elasticsearch==8.19.3
 tqdm==4.67.1 
 gensim==4.3.3 
 glove-py==0.1.0 
@@ -16,3 +16,7 @@ flask==3.1.2
 flask_restful==0.3.10
 es_pandas==0.0.23
 numpy==1.26.4
+openai>=1.0.0
+anthropic>=0.40.0
+pypdf>=4.0.0
+faiss-cpu>=1.7.0

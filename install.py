@@ -54,6 +54,7 @@ class Installation():
             'monitor/tools/check_issue_reason',
             'monitor/tools/patch',
             'monitor/tools/process_tracer',
+            'monitor/tools/rag_builder',
             'monitor/tools/seedb',
             'monitor/tools/show_license_feature_usage'
         ]
@@ -129,6 +130,15 @@ export LSFMONITOR_INSTALL_PATH={self.prefix}
 # Set LD_LIBRARY_PATH.
 {ld_library_path_setting}
 
+# Set input method for Qt5 (auto-detect ibus/fcitx).
+if [ -z "$QT_IM_MODULE" ]; then
+    if pgrep -x ibus-daemon > /dev/null 2>&1; then
+        export QT_IM_MODULE=ibus
+    elif pgrep -x fcitx > /dev/null 2>&1 || pgrep -x fcitx5 > /dev/null 2>&1; then
+        export QT_IM_MODULE=fcitx
+    fi
+fi
+
 # Execute {tool_name}.py
 python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
 """
@@ -171,6 +181,26 @@ lmstat_bsub_command = ""
 
 # Excluded license servers, format is "27020@lic_server 5280@lic_server".
 excluded_license_servers = ""
+
+# AI helpdesk settings (OpenAI-compatible API).
+ai_api_base_url = ""
+ai_api_key = ""
+ai_model_name = ""
+
+# AI embedding model for RAG documentation search (optional).
+# Default recommendation for the "Doubao-embedding-vision" model of Volcano Ark.
+# If ai_embedding_api_base_url/ai_embedding_api_key are empty, falls back to ai_api_base_url/ai_api_key.
+ai_embedding_api_base_url = ""
+ai_embedding_api_key = ""
+ai_embedding_model_name = ""
+
+# Commands forbidden for AI to execute (space-separated).
+# Example: "rm reboot shutdown"
+ai_forbidden_commands = ""
+
+# Commands requiring user confirmation before AI executes (space-separated).
+# Default if empty: "bkill badmin brestart bstop bresume bswitch"
+ai_dangerous_commands = ""
 """
                 CF.write(config_content)
 

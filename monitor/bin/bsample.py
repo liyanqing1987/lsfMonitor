@@ -126,6 +126,7 @@ class Sampling:
         self.job_mem_db_path = str(self.db_path) + '/job_mem'
         self.user_db_path = str(self.db_path) + '/user'
 
+        common.create_dir(self.db_path, 0o1777)
         common.create_dir(self.job_db_path, 0o1777)
         common.create_dir(self.job_mem_db_path, 0o1777)
         common.create_dir(self.user_db_path, 0o1777)
