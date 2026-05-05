@@ -105,8 +105,6 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 ## Documentation
 
 - [User Manual (Markdown)](docs/lsfMonitor_user_manual.md)
-- [User Manual (PDF)](docs/lsfMonitor_user_manual.pdf)
-- [RAG Builder Guide](docs/rag_builder.md)
 - [memPrediction Manual (PDF)](docs/memPrediction_user_manual.pdf)
 
 ## Update History
