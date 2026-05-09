@@ -389,6 +389,7 @@ class MainWindow(QMainWindow):
         if specified_tab == 'LICENSE' and not self.license_loaded:
             self.get_license_dic()
             self.license_loaded = True
+            self.update_license_tab_feature_completer()
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
 
@@ -4969,6 +4970,11 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return feature_list
 
+    def update_license_tab_feature_completer(self):
+        feature_list = self.get_license_feature_list()
+        completer = common_pyqt5.get_completer(feature_list)
+        self.license_tab_feature_line.setCompleter(completer)
+
     def set_license_tab_show_combo(self, checked_status_list=['ALL', ]):
         self.license_tab_show_combo.clear()
 
@@ -5026,6 +5032,8 @@ Please contact with liyanqing1987@163.com with any question."""
             warning_message = 'Not find any license information.'
             self.gui_warning(warning_message)
             return
+
+        self.update_license_tab_feature_completer()
 
         selected_license_server_list = self.license_tab_server_combo.currentText().strip().split()
         selected_vendor_daemon_list = self.license_tab_vendor_combo.currentText().strip().split()
