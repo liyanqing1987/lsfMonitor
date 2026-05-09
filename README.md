@@ -90,6 +90,10 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 
 ![license demo](data/demo/license_demo.gif)
 
+**AI function:**
+
+![ai demo](data/demo/ai_demo.gif)
+
 ## Auxiliary Tools
 
 | Tool | Description |
