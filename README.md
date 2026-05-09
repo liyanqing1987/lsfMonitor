@@ -3,8 +3,11 @@
 An open-source HPC cluster monitoring tool for **LSF**, **volclava**, and **OpenLava**. It collects, analyzes, and visualizes cluster metrics (jobs, queues, hosts, load, utilization, licenses) via a PyQt5 desktop GUI. Also includes an ML-based job memory prediction subsystem and an LLM-powered AI helpdesk with RAG.
 
 **Author:** liyanqing1987@163.com
+
 **Version:** V2.2
+
 **License:** GPL-3.0
+
 
 ## Features
 
