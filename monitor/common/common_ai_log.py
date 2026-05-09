@@ -22,6 +22,11 @@ from common import common_sqlite3
 TABLE_KEY_LIST = ['session_id', 'timestamp', 'user', 'cluster', 'host', 'question', 'answer', 'tool_calls', 'resolution', 'keywords']
 TABLE_KEY_TYPE_LIST = ['TEXT PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
+# Insights table: distilled knowledge from solved conversations.
+INSIGHTS_TABLE = 'insights'
+INSIGHTS_KEY_LIST = ['id', 'timestamp', 'session_id', 'insight', 'keywords', 'source_question']
+INSIGHTS_KEY_TYPE_LIST = ['TEXT PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
+
 # Chinese/English stop words for keyword extraction.
 STOP_WORDS = {
     'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
@@ -306,6 +311,331 @@ def _get_target_tables(db_file, user):
     table_list = common_sqlite3.get_sql_table_list(db_file, '')
 
     return [t for t in table_list if t.startswith('conversations_')]
+
+
+def auto_judge_resolution(question, answer, tool_calls=None):
+    """
+    Automatically judge whether a conversation was solved/unsolved/unknown
+    based on the content of the question, answer, and tool call results.
+    """
+    if not answer:
+        return 'unknown'
+
+    answer_lower = answer.lower()
+
+    # Negative signals from AI answer — AI admits failure.
+    ai_failure_patterns = [
+        r'无法(确定|解决|找到|获取|帮助)',
+        r'抱歉.{0,10}(无法|不能|没有办法)',
+        r'sorry.{0,20}(cannot|unable|can\'t|don\'t know)',
+        r'i\'m not (sure|able)',
+        r'没有找到.{0,10}(相关|有效|可用)',
+        r'暂时无法',
+        r'超出.{0,5}(能力|范围)',
+        r'建议.{0,5}(联系|咨询).{0,5}(管理员|support)',
+    ]
+
+    for pattern in ai_failure_patterns:
+        if re.search(pattern, answer_lower):
+            return 'unsolved'
+
+    # Negative signals from tool calls — command execution errors.
+    if tool_calls:
+        calls = tool_calls if isinstance(tool_calls, list) else []
+
+        if isinstance(tool_calls, str):
+            try:
+                calls = json.loads(tool_calls)
+            except (json.JSONDecodeError, TypeError):
+                calls = []
+
+        if calls:
+            error_count = 0
+            total_count = len(calls)
+
+            for call in calls:
+                if not isinstance(call, dict):
+                    continue
+
+                result = (call.get('result', '') or '').lower()
+                # Command returned error indicators.
+                if re.search(r'(error|failed|permission denied|not found|no such|command not found|traceback|exception)', result):
+                    error_count += 1
+
+            # All tool calls failed → unsolved.
+            if total_count > 0 and error_count == total_count:
+                return 'unsolved'
+
+    # Positive signals — AI provided a clear, substantive answer.
+    # Check answer has reasonable length (not just a one-liner apology).
+    # Use 20 chars as threshold since Chinese text is denser than English.
+    if len(answer) > 20:
+        # AI gave explanation with results/commands/data.
+        positive_patterns = [
+            r'(结果|输出|如下|以下|显示)',
+            r'(可以看到|从.{0,5}可以)',
+            r'(建议|解决方案|解决方法|步骤)',
+            r'(已经|已成功|执行完成|完成)',
+            r'(here|result|output|shows|following)',
+            r'(you can|try|solution|resolved)',
+        ]
+
+        for pattern in positive_patterns:
+            if re.search(pattern, answer_lower):
+                return 'solved'
+
+    # Tool calls executed and at least some succeeded.
+    if tool_calls:
+        calls = tool_calls if isinstance(tool_calls, list) else []
+
+        if isinstance(tool_calls, str):
+            try:
+                calls = json.loads(tool_calls)
+            except (json.JSONDecodeError, TypeError):
+                calls = []
+
+        if calls:
+            success_count = 0
+
+            for call in calls:
+                if not isinstance(call, dict):
+                    continue
+
+                result = (call.get('result', '') or '')
+
+                if len(result) > 20 and not re.search(r'(error|failed|permission denied|not found|command not found)', result.lower()):
+                    success_count += 1
+
+            if success_count > 0:
+                return 'solved'
+
+    return 'unknown'
+
+
+def _ensure_insights_table(db_file):
+    """Create the insights table if it does not exist."""
+    key_string = common_sqlite3.gen_sql_table_key_string(INSIGHTS_KEY_LIST, INSIGHTS_KEY_TYPE_LIST)
+    common_sqlite3.create_sql_table(db_file, '', INSIGHTS_TABLE, key_string)
+
+
+def save_insight(db_file, session_id, insight, keywords, source_question):
+    """Save a distilled insight from a solved conversation."""
+    _ensure_insights_table(db_file)
+
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    insight_id = uuid.uuid4().hex[:8]
+    value_list = [insight_id, timestamp, session_id, insight, keywords, source_question]
+    value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+    common_sqlite3.insert_into_sql_table(db_file, '', INSIGHTS_TABLE, value_string)
+
+
+def find_relevant_insights(db_file, user_message, limit=5):
+    """
+    Find insights relevant to the user's question by keyword matching.
+    Returns a list of insight strings.
+    """
+    if not os.path.exists(db_file):
+        return []
+
+    _ensure_insights_table(db_file)
+
+    query_keywords = extract_keywords(user_message).split()
+
+    if not query_keywords:
+        return []
+
+    like_parts = []
+
+    for kw in query_keywords[:8]:
+        safe_kw = kw.replace("'", "''")
+        like_parts.append(f"keywords LIKE '%{safe_kw}%'")
+
+    if not like_parts:
+        return []
+
+    where_clause = f"WHERE {' OR '.join(like_parts)}"
+    select_condition = f"{where_clause} ORDER BY timestamp DESC LIMIT {limit * 3}"
+
+    data_dic = common_sqlite3.get_sql_table_data(db_file, '', INSIGHTS_TABLE, select_condition=select_condition)
+
+    if not data_dic or 'insight' not in data_dic:
+        return []
+
+    # Score and deduplicate.
+    scored = []
+
+    for i in range(len(data_dic['insight'])):
+        kw_text = (data_dic.get('keywords', [''])[i] or '').lower()
+        score = sum(1 for kw in query_keywords if kw.lower() in kw_text)
+
+        if score > 0:
+            scored.append((score, data_dic['insight'][i]))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    # Deduplicate similar insights.
+    seen = set()
+    results = []
+
+    for _, insight in scored:
+        short = insight[:30]
+
+        if short not in seen:
+            seen.add(short)
+            results.append(insight)
+
+        if len(results) >= limit:
+            break
+
+    return results
+
+
+def get_tool_preferences(db_file, user_message, min_count=2):
+    """
+    Analyze solved conversations matching user's question keywords.
+    Returns a list of tool preference hints like "bjobs -p (used in 80% of similar cases)".
+    """
+    if not os.path.exists(db_file):
+        return []
+
+    query_keywords = extract_keywords(user_message).split()
+
+    if not query_keywords:
+        return []
+
+    like_parts = []
+
+    for kw in query_keywords[:8]:
+        safe_kw = kw.replace("'", "''")
+        like_parts.append(f"(keywords LIKE '%{safe_kw}%' OR question LIKE '%{safe_kw}%')")
+
+    if not like_parts:
+        return []
+
+    where_clause = f"WHERE resolution='solved' AND tool_calls != '[]' AND ({' OR '.join(like_parts)})"
+    select_condition = f"{where_clause} ORDER BY timestamp DESC LIMIT 50"
+
+    # Scan all user tables.
+    all_tool_calls = []
+
+    for table_name in _get_target_tables(db_file, ''):
+        data_dic = common_sqlite3.get_sql_table_data(db_file, '', table_name, select_condition=select_condition)
+
+        if not data_dic or 'tool_calls' not in data_dic:
+            continue
+
+        for tc_json in data_dic['tool_calls']:
+            if not tc_json or tc_json == '[]':
+                continue
+
+            try:
+                calls = json.loads(tc_json) if isinstance(tc_json, str) else tc_json
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            for call in calls:
+                if isinstance(call, dict) and call.get('name'):
+                    all_tool_calls.append(call)
+
+    if not all_tool_calls:
+        return []
+
+    # Count tool+args patterns.
+    pattern_count = {}
+
+    for call in all_tool_calls:
+        name = call.get('name', '')
+        args = call.get('args', '')
+
+        # Extract the core command from args (first word/command).
+        if name == 'run_command' and args:
+            cmd_match = re.match(r'(\S+(?:\s+-\S+)?)', args)
+            pattern = cmd_match.group(1) if cmd_match else args.split()[0] if args.split() else name
+        else:
+            pattern = name
+
+        pattern_count[pattern] = pattern_count.get(pattern, 0) + 1
+
+    # Filter by minimum count and sort by frequency.
+    preferences = []
+
+    for pattern, count in sorted(pattern_count.items(), key=lambda x: x[1], reverse=True):
+        if count >= min_count:
+            preferences.append(f'{pattern} (used {count} times in similar solved cases)')
+
+    return preferences[:5]
+
+
+class InsightGeneratorThread(QThread):
+    """Background thread that calls LLM to generate a one-line insight from a solved conversation."""
+
+    finished_signal = pyqtSignal(str, str, str)  # session_id, insight, keywords
+
+    def __init__(self, api_base_url, api_key, model_name, session_id, question, answer, tool_calls_json):
+        super().__init__()
+        self.api_base_url = api_base_url.rstrip('/')
+        self.api_key = api_key
+        self.model_name = model_name
+        self.session_id = session_id
+        self.question = question
+        self.answer = answer
+        self.tool_calls_json = tool_calls_json
+
+    def run(self):
+        try:
+            insight = self._generate_insight()
+
+            if insight:
+                keywords = extract_keywords(self.question + ' ' + insight)
+                self.finished_signal.emit(self.session_id, insight, keywords)
+        except Exception:
+            pass
+
+    def _generate_insight(self):
+        """Call LLM to distill one-line insight."""
+        # Truncate inputs to keep cost low.
+        question = self.question[:200]
+        answer = self.answer[:500]
+        tool_info = ''
+
+        if self.tool_calls_json and self.tool_calls_json != '[]':
+            try:
+                tools = json.loads(self.tool_calls_json) if isinstance(self.tool_calls_json, str) else self.tool_calls_json
+                tool_names = [t.get('name', '') + '(' + (t.get('args', '')[:50]) + ')' for t in tools if isinstance(t, dict)]
+                tool_info = f'\nTools used: {", ".join(tool_names)}'
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        prompt = f"""Based on this solved HPC cluster support conversation, write ONE concise insight (under 80 chars) that would help resolve similar future questions. Focus on the key diagnosis step or solution pattern.
+
+Question: {question}
+Answer: {answer}{tool_info}
+
+Write the insight in the same language as the question. Output ONLY the insight, nothing else."""
+
+        from common import common_ai
+        api_type = common_ai.detect_api_type(self.model_name)
+
+        if api_type == 'anthropic':
+            import anthropic
+            client = anthropic.Anthropic(api_key=self.api_key, base_url=self.api_base_url)
+            response = client.messages.create(
+                model=self.model_name,
+                max_tokens=100,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            return response.content[0].text.strip()
+        else:
+            import openai
+            client = openai.OpenAI(api_key=self.api_key, base_url=self.api_base_url)
+            response = client.chat.completions.create(
+                model=self.model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=100,
+            )
+
+            return response.choices[0].message.content.strip()
 
 
 def extract_keywords(text):

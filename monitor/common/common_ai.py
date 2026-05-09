@@ -634,7 +634,7 @@ class AiChatThread(QThread):
                  db_path='', license_dic=None, lmstat_path='lmstat', lmstat_bsub_command='',
                  forbidden_commands=None, dangerous_commands=None, doc_chunks=None, skills=None,
                  embedding_model='', embedding_api_base_url='', embedding_api_key='',
-                 experience_cases=None):
+                 experience_cases=None, insights=None, tool_preferences=None, debug=False):
         super().__init__()
         self.api_base_url = api_base_url.rstrip('/')
         self.api_key = api_key
@@ -652,6 +652,9 @@ class AiChatThread(QThread):
         self.embedding_api_base_url = embedding_api_base_url.rstrip('/') if embedding_api_base_url else self.api_base_url
         self.embedding_api_key = embedding_api_key if embedding_api_key else self.api_key
         self.experience_cases = experience_cases or []
+        self.insights = insights or []
+        self.tool_preferences = tool_preferences or []
+        self.debug = debug
         self._stop_flag = False
         self._confirm_event = threading.Event()
         self._confirm_result = False
@@ -670,6 +673,9 @@ class AiChatThread(QThread):
 
         # Inject similar solved cases as experience references.
         self._inject_experience()
+
+        # Inject distilled insights and tool preferences (harness).
+        self._inject_harness()
 
     def _inject_skills(self):
         """Check the latest user message against skill tags, inject matched skills into system prompt."""
@@ -724,6 +730,32 @@ class AiChatThread(QThread):
 
         self.messages[0]['content'] = self.messages[0]['content'] + '\n'.join(lines)
 
+    def _inject_harness(self):
+        """Inject distilled insights and tool preferences into system prompt."""
+        if not self.insights and not self.tool_preferences:
+            return
+
+        if not self.messages or self.messages[0].get('role') != 'system':
+            return
+
+        lines = []
+
+        if self.insights:
+            lines.append('\n## 经验总结')
+            lines.append('以下是从历史成功案例中提炼的经验，请参考：')
+
+            for insight in self.insights:
+                lines.append(f'- {insight}')
+
+        if self.tool_preferences:
+            lines.append('\n## 工具使用建议')
+            lines.append('根据历史数据，处理此类问题时常用以下工具/命令：')
+
+            for pref in self.tool_preferences:
+                lines.append(f'- {pref}')
+
+        self.messages[0]['content'] = self.messages[0]['content'] + '\n'.join(lines)
+
     def stop(self):
         self._stop_flag = True
 
@@ -749,7 +781,9 @@ class AiChatThread(QThread):
         except Exception as e:
             self.error_signal.emit(str(e))
         finally:
-            print('')
+            if self.debug:
+                print('')
+
             self.sources_signal.emit(self._sources)
             self.finished_signal.emit()
 
@@ -834,7 +868,9 @@ class AiChatThread(QThread):
         if cache_key not in AiChatThread._openai_client_cache:
             AiChatThread._openai_client_cache[cache_key] = OpenAI(base_url=base_url, api_key=self.api_key)
 
-        common.bprint(f'[AI Debug] openai client ready: {_time.time() - _t_start:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+        if self.debug:
+            common.bprint(f'[AI Debug] openai client ready: {_time.time() - _t_start:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+
         return AiChatThread._openai_client_cache[cache_key]
 
     def _get_anthropic_client(self):
@@ -862,14 +898,32 @@ class AiChatThread(QThread):
                 return
 
             # Debug: log prompt size.
-            _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
-            _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
-            _msg_count = len(self.messages)
-            common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
+            if self.debug:
+                _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
+                _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
+                _msg_count = len(self.messages)
+                common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
 
             self.status_signal.emit('Waiting for LLM response')
 
             _t_api = _time.time()
+
+            # Debug: log request content sent to LLM.
+            if self.debug:
+                common.bprint(f'[AI Debug] === REQUEST to LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
+
+                for _mi, _msg in enumerate(self.messages):
+                    _role = _msg.get('role', '')
+                    _content = str(_msg.get('content', ''))[:500]
+                    _tc = _msg.get('tool_calls', [])
+                    common.bprint(f'[AI Debug]   msg[{_mi}] role={_role}, content={_content}', date_format='%Y-%m-%d %H:%M:%S')
+
+                    if _tc:
+                        for _t in _tc:
+                            _fn = _t.get('function', {})
+                            common.bprint(f'[AI Debug]     tool_call: id={_t.get("id","")}, name={_fn.get("name","")}, args={_fn.get("arguments","")[:200]}', date_format='%Y-%m-%d %H:%M:%S')
+
+                common.bprint('[AI Debug] === END REQUEST ===', date_format='%Y-%m-%d %H:%M:%S')
 
             try:
                 response = client.chat.completions.create(
@@ -882,17 +936,28 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"API call failed: {e}")
                 return
 
-            common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+            if self.debug:
+                common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
 
             full_content = ""
             tool_calls_data = {}
             _first_chunk = True
+            _request_id = None
 
             try:
                 for chunk in response:
                     if _first_chunk:
-                        common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+                        if self.debug:
+                            common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+
                         _first_chunk = False
+
+                        # Extract request ID from response headers or chunk attributes.
+                        if hasattr(chunk, 'id') and chunk.id:
+                            _request_id = chunk.id
+
+                        if self.debug and hasattr(chunk, 'system_fingerprint') and chunk.system_fingerprint:
+                            common.bprint(f'[AI Debug] system_fingerprint={chunk.system_fingerprint}', date_format='%Y-%m-%d %H:%M:%S')
 
                     if self._stop_flag:
                         return
@@ -927,7 +992,28 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, content={len(full_content)} chars, tool_calls={len(tool_calls_data)}', date_format='%Y-%m-%d %H:%M:%S')
+            # Try to get request ID from response object (supports Ark x-tt-logid, OpenAI x-request-id).
+            if hasattr(response, 'response') and hasattr(response.response, 'headers'):
+                _headers = response.response.headers
+                _header_request_id = _headers.get('x-tt-logid') or _headers.get('x-request-id')
+
+                if _header_request_id:
+                    _request_id = _header_request_id
+
+            if self.debug:
+                common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, request_id={_request_id}, content={len(full_content)} chars, tool_calls={len(tool_calls_data)}', date_format='%Y-%m-%d %H:%M:%S')
+
+                # Debug: log LLM response content.
+                common.bprint(f'[AI Debug] === RESPONSE from LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug]   request_id={_request_id}', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug]   content={full_content[:500]}', date_format='%Y-%m-%d %H:%M:%S')
+
+                if tool_calls_data:
+                    for _idx in sorted(tool_calls_data.keys()):
+                        _tc = tool_calls_data[_idx]
+                        common.bprint(f'[AI Debug]   tool_call[{_idx}]: id={_tc["id"]}, name={_tc["name"]}, args={_tc["arguments"][:200]}', date_format='%Y-%m-%d %H:%M:%S')
+
+                common.bprint('[AI Debug] === END RESPONSE ===', date_format='%Y-%m-%d %H:%M:%S')
 
             if not tool_calls_data:
                 if full_content:
@@ -966,7 +1052,10 @@ class AiChatThread(QThread):
                 self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
                 _t_tool = _time.time()
                 result = self._execute_tool(tool_name, args)
-                common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
+                if self.debug:
+                    common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
                 self.tool_call_result.emit(tool_name, result)
 
                 self.messages.append({
@@ -985,7 +1074,9 @@ class AiChatThread(QThread):
         try:
             _t_start = _time.time()
             client = self._get_anthropic_client()
-            common.bprint(f'[AI Debug] anthropic client ready: {_time.time() - _t_start:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+
+            if self.debug:
+                common.bprint(f'[AI Debug] anthropic client ready: {_time.time() - _t_start:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
         except ImportError:
             self.error_signal.emit('anthropic package is not installed. Run: pip install anthropic')
             return
@@ -995,10 +1086,11 @@ class AiChatThread(QThread):
                 return
 
             # Debug: log prompt size.
-            _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
-            _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
-            _msg_count = len(self.messages)
-            common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
+            if self.debug:
+                _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
+                _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
+                _msg_count = len(self.messages)
+                common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
 
             self.status_signal.emit('Waiting for LLM response')
 
@@ -1006,6 +1098,18 @@ class AiChatThread(QThread):
             system, anthropic_msgs = openai_messages_to_anthropic(self.messages)
 
             _t_api = _time.time()
+
+            # Debug: log request content sent to LLM.
+            if self.debug:
+                common.bprint(f'[AI Debug] === REQUEST to LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug]   system_prompt ({len(system)} chars): {system[:300]}...', date_format='%Y-%m-%d %H:%M:%S')
+
+                for _mi, _msg in enumerate(anthropic_msgs):
+                    _role = _msg.get('role', '')
+                    _content = str(_msg.get('content', ''))[:500]
+                    common.bprint(f'[AI Debug]   msg[{_mi}] role={_role}, content={_content}', date_format='%Y-%m-%d %H:%M:%S')
+
+                common.bprint('[AI Debug] === END REQUEST ===', date_format='%Y-%m-%d %H:%M:%S')
 
             try:
                 stream = client.messages.create(
@@ -1020,11 +1124,13 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"API call failed: {e}")
                 return
 
-            common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+            if self.debug:
+                common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
 
             full_content = ""
             tool_calls = {}  # {block_index: {id, name, arguments}}
             _first_chunk = True
+            _request_id = None
 
             try:
                 for event in stream:
@@ -1032,8 +1138,18 @@ class AiChatThread(QThread):
                         return
 
                     if _first_chunk:
-                        common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+                        if self.debug:
+                            common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+
                         _first_chunk = False
+
+                        # Extract request ID from Anthropic stream event.
+                        if hasattr(event, 'message') and hasattr(event.message, 'id'):
+                            _request_id = event.message.id
+
+                    # Capture request ID from message_start event.
+                    if event.type == 'message_start' and hasattr(event, 'message'):
+                        _request_id = getattr(event.message, 'id', _request_id)
 
                     if event.type == 'content_block_start':
                         if event.content_block.type == 'tool_use':
@@ -1053,7 +1169,28 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, content={len(full_content)} chars, tool_calls={len(tool_calls)}', date_format='%Y-%m-%d %H:%M:%S')
+            # Try to get request ID from stream response headers.
+            if hasattr(stream, 'response') and hasattr(stream.response, 'headers'):
+                _headers = stream.response.headers
+                _header_request_id = _headers.get('x-request-id') or _headers.get('x-tt-logid')
+
+                if _header_request_id:
+                    _request_id = _header_request_id
+
+            if self.debug:
+                common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, request_id={_request_id}, content={len(full_content)} chars, tool_calls={len(tool_calls)}', date_format='%Y-%m-%d %H:%M:%S')
+
+                # Debug: log LLM response content.
+                common.bprint(f'[AI Debug] === RESPONSE from LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug]   request_id={_request_id}', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug]   content={full_content[:500]}', date_format='%Y-%m-%d %H:%M:%S')
+
+                if tool_calls:
+                    for _idx in sorted(tool_calls.keys()):
+                        _tc = tool_calls[_idx]
+                        common.bprint(f'[AI Debug]   tool_call[{_idx}]: id={_tc["id"]}, name={_tc["name"]}, args={_tc["arguments"][:200]}', date_format='%Y-%m-%d %H:%M:%S')
+
+                common.bprint('[AI Debug] === END RESPONSE ===', date_format='%Y-%m-%d %H:%M:%S')
 
             # No tool calls -> done.
             if not tool_calls:
@@ -1095,7 +1232,10 @@ class AiChatThread(QThread):
                 self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
                 _t_tool = _time.time()
                 result = self._execute_tool(tool_name, args)
-                common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
+                if self.debug:
+                    common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
                 self.tool_call_result.emit(tool_name, result)
 
                 self.messages.append({

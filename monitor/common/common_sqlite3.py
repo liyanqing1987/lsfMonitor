@@ -3,7 +3,9 @@ import re
 import sys
 import sqlite3
 
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+if 'LSFMONITOR_INSTALL_PATH' in os.environ:
+    sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+
 from common import common
 
 

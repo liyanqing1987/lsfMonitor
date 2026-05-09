@@ -4,7 +4,9 @@ import sys
 import time
 import datetime
 
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+if 'LSFMONITOR_INSTALL_PATH' in os.environ:
+    sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
+
 from common import common
 
 
@@ -160,6 +162,9 @@ def get_bhosts_load_info(command='bhosts -l'):
                 total_load_list = total_load_string.split()
 
                 for (i, head_name) in enumerate(head_list):
+                    if i >= len(total_load_list):
+                        break
+
                     load = re.sub(r'\*', '', total_load_list[i])
                     bhosts_load_dic[hostname]['Total'].setdefault(head_name, load)
             elif re.match(r'^\s*Reserved\s+(.+?)\s*$', line):
@@ -170,6 +175,9 @@ def get_bhosts_load_info(command='bhosts -l'):
                 reserved_load_list = reserved_load_string.split()
 
                 for (i, head_name) in enumerate(head_list):
+                    if i >= len(reserved_load_list):
+                        break
+
                     load = re.sub(r'\*', '', reserved_load_list[i])
                     bhosts_load_dic[hostname]['Reserved'].setdefault(head_name, load)
             else:

@@ -43,7 +43,7 @@ else:
 
 # Constants
 VERSION = 'V2.2'
-VERSION_DATE = '2026.05.02'
+VERSION_DATE = '2026.05.09'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -481,10 +481,16 @@ class MainWindow(QMainWindow):
         ai_record_cleanup_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/close.png'))
         ai_record_cleanup_action.triggered.connect(self.ai_record_cleanup)
 
+        self.ai_debug_action = QAction('Debug', self)
+        self.ai_debug_action.setCheckable(True)
+        self.ai_debug_action.setChecked(False)
+
         ai_menu = menubar.addMenu('AI')
         ai_menu.addAction(ai_record_search_action)
         ai_menu.addAction(ai_problem_analysis_action)
         ai_menu.addAction(ai_record_cleanup_action)
+        ai_menu.addSeparator()
+        ai_menu.addAction(self.ai_debug_action)
 
         # Help
         version_action = QAction('Version', self)
@@ -5286,11 +5292,37 @@ Please contact with liyanqing1987@163.com with any question."""
         button_layout.addWidget(ai_tab_clear_button)
         button_layout.setSpacing(4)
 
+        # Feedback bar (hidden by default, shown after AI response).
+        self.ai_feedback_widget = QWidget(self.ai_tab)
+        feedback_layout = QHBoxLayout(self.ai_feedback_widget)
+        feedback_layout.setContentsMargins(0, 2, 0, 2)
+        feedback_layout.setSpacing(6)
+
+        feedback_label = QLabel('Was this helpful?')
+        feedback_label.setStyleSheet('color: #888; font-size: 11px;')
+        feedback_layout.addWidget(feedback_label)
+
+        self.ai_feedback_solved_btn = QPushButton('Solved')
+        self.ai_feedback_solved_btn.setFixedSize(60, 22)
+        self.ai_feedback_solved_btn.setStyleSheet('font-size: 11px;')
+        self.ai_feedback_solved_btn.clicked.connect(lambda: self._ai_tab_user_feedback('solved'))
+        feedback_layout.addWidget(self.ai_feedback_solved_btn)
+
+        self.ai_feedback_unsolved_btn = QPushButton('Unsolved')
+        self.ai_feedback_unsolved_btn.setFixedSize(70, 22)
+        self.ai_feedback_unsolved_btn.setStyleSheet('font-size: 11px;')
+        self.ai_feedback_unsolved_btn.clicked.connect(lambda: self._ai_tab_user_feedback('unsolved'))
+        feedback_layout.addWidget(self.ai_feedback_unsolved_btn)
+
+        feedback_layout.addStretch()
+        self.ai_feedback_widget.hide()
+
         # Layout.
         ai_tab_grid = QGridLayout()
         ai_tab_grid.addWidget(self.ai_tab_chat_text, 0, 0, 1, 2)
-        ai_tab_grid.addWidget(self.ai_tab_input, 1, 0)
-        ai_tab_grid.addLayout(button_layout, 1, 1)
+        ai_tab_grid.addWidget(self.ai_feedback_widget, 1, 0, 1, 2)
+        ai_tab_grid.addWidget(self.ai_tab_input, 2, 0)
+        ai_tab_grid.addLayout(button_layout, 2, 1)
         ai_tab_grid.setColumnStretch(0, 10)
         ai_tab_grid.setColumnStretch(1, 1)
         self.ai_tab.setLayout(ai_tab_grid)
@@ -5377,6 +5409,9 @@ Please contact with liyanqing1987@163.com with any question."""
         if self.ai_thread and self.ai_thread.isRunning():
             return
 
+        # Hide feedback bar from previous response.
+        self.ai_feedback_widget.hide()
+
         # Display user message (right-aligned light blue bubble with avatar).
         user_html = user_text.replace('\n', '<br>')
         self.ai_tab_chat_text.append(
@@ -5395,19 +5430,27 @@ Please contact with liyanqing1987@163.com with any question."""
 
         # Track session for AI log database.
         self._ai_send_time = time.time()
-        common.bprint('[AI Debug] User sent message', date_format='%Y-%m-%d %H:%M:%S')
+
+        if self.ai_debug_action.isChecked():
+            common.bprint('[AI Debug] User sent message', date_format='%Y-%m-%d %H:%M:%S')
 
         self._current_ai_session_id = common_ai_log.gen_session_id()
         self._current_ai_question = user_text
         self._current_ai_tool_calls = []
 
-        # Query similar solved cases for experience injection.
+        # Query similar solved cases, insights, and tool preferences for injection.
         experience_cases = []
+        insights = []
+        tool_preferences = []
 
         if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file:
             t0 = time.time()
             experience_cases = common_ai_log.find_similar_conversations(self.ai_log_db_file, user_text, limit=3)
-            common.bprint(f'[AI Debug] find_similar_conversations: {time.time() - t0:.2f}s, found {len(experience_cases)} cases', date_format='%Y-%m-%d %H:%M:%S')
+            insights = common_ai_log.find_relevant_insights(self.ai_log_db_file, user_text, limit=5)
+            tool_preferences = common_ai_log.get_tool_preferences(self.ai_log_db_file, user_text, min_count=2)
+
+            if self.ai_debug_action.isChecked():
+                common.bprint(f'[AI Debug] harness query: {time.time() - t0:.2f}s, experience={len(experience_cases)}, insights={len(insights)}, tool_prefs={len(tool_preferences)}', date_format='%Y-%m-%d %H:%M:%S')
 
         # Add to messages.
         self.ai_messages.append({"role": "user", "content": user_text})
@@ -5453,7 +5496,10 @@ Please contact with liyanqing1987@163.com with any question."""
             embedding_model=embedding_model,
             embedding_api_base_url=embedding_api_base_url,
             embedding_api_key=embedding_api_key,
-            experience_cases=experience_cases
+            experience_cases=experience_cases,
+            insights=insights,
+            tool_preferences=tool_preferences,
+            debug=self.ai_debug_action.isChecked()
         )
         self.ai_thread.token_received.connect(self.ai_tab_on_token)
         self.ai_thread.tool_call_start.connect(self.ai_tab_on_tool_start)
@@ -5690,6 +5736,12 @@ Please contact with liyanqing1987@163.com with any question."""
         # Save complete conversation to AI log database.
         if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file and hasattr(self, '_current_ai_session_id'):
             try:
+                resolution = common_ai_log.auto_judge_resolution(
+                    self._current_ai_question,
+                    full_answer,
+                    self._current_ai_tool_calls,
+                )
+
                 common_ai_log.save_conversation(
                     db_file=self.ai_log_db_file,
                     session_id=self._current_ai_session_id,
@@ -5699,9 +5751,72 @@ Please contact with liyanqing1987@163.com with any question."""
                     question=self._current_ai_question,
                     answer=full_answer,
                     tool_calls=self._current_ai_tool_calls,
+                    resolution=resolution,
                 )
+
+                # Trigger background insight generation for solved conversations.
+                if resolution == 'solved':
+                    self._ai_generate_insight(self._current_ai_session_id, self._current_ai_question, full_answer, self._current_ai_tool_calls)
             except Exception as e:
                 common.bprint(f'Failed to save AI conversation log: {e}', level='Warning')
+
+        # Show feedback bar for user override.
+        self.ai_feedback_widget.show()
+
+    def _ai_tab_user_feedback(self, resolution):
+        """User clicked Solved/Unsolved button to override auto-judgment."""
+        self.ai_feedback_widget.hide()
+
+        if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file and hasattr(self, '_current_ai_session_id'):
+            try:
+                common_ai_log.update_resolution(self.ai_log_db_file, self._current_ai_session_id, resolution, user=USER)
+
+                # User confirmed solved — generate insight if not already done.
+                if resolution == 'solved' and hasattr(self, '_current_ai_question'):
+                    full_answer = ''
+
+                    for msg in reversed(self.ai_messages):
+                        if msg.get('role') == 'assistant' and msg.get('content'):
+                            full_answer = msg['content']
+                            break
+
+                    if full_answer:
+                        self._ai_generate_insight(self._current_ai_session_id, self._current_ai_question, full_answer, self._current_ai_tool_calls)
+            except Exception as e:
+                common.bprint(f'Failed to update AI resolution: {e}', level='Warning')
+
+    def _ai_generate_insight(self, session_id, question, answer, tool_calls):
+        """Launch background thread to generate and save a distilled insight."""
+        tool_calls_json = json.dumps(tool_calls or [], ensure_ascii=False)
+
+        self._insight_thread = common_ai_log.InsightGeneratorThread(
+            api_base_url=config.ai_api_base_url,
+            api_key=config.ai_api_key,
+            model_name=config.ai_model_name,
+            session_id=session_id,
+            question=question,
+            answer=answer,
+            tool_calls_json=tool_calls_json,
+        )
+        self._insight_thread.finished_signal.connect(self._ai_on_insight_generated)
+        self._insight_thread.start()
+
+    def _ai_on_insight_generated(self, session_id, insight, keywords):
+        """Callback when background insight generation completes."""
+        if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file:
+            try:
+                common_ai_log.save_insight(
+                    db_file=self.ai_log_db_file,
+                    session_id=session_id,
+                    insight=insight,
+                    keywords=keywords,
+                    source_question=self._current_ai_question[:200] if hasattr(self, '_current_ai_question') else '',
+                )
+
+                if self.ai_debug_action.isChecked():
+                    common.bprint(f'[AI Debug] Insight saved: {insight[:80]}', date_format='%Y-%m-%d %H:%M:%S')
+            except Exception as e:
+                common.bprint(f'Failed to save AI insight: {e}', level='Warning')
 
     def ai_tab_on_error(self, error_msg):
         """Show error in chat."""
@@ -5732,6 +5847,7 @@ Please contact with liyanqing1987@163.com with any question."""
         """Clear chat history."""
         self.ai_tab_chat_text.clear()
         self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT}]
+        self.ai_feedback_widget.hide()
 
     def ai_handle_confirm_request(self, command):
         """Show QMessageBox to confirm dangerous command execution."""
