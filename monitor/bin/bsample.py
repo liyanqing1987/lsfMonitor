@@ -27,6 +27,34 @@ os.environ['LSB_NTRIES'] = '3'
 os.environ["PYTHONUNBUFFERED"] = '1'
 
 
+def reload_config_for_cluster(cluster):
+    """
+    Reload config with cluster-specific config file if it exists.
+    Search order: local_config_dir (~/.lsfMonitor/conf/), then conf/ directory.
+    """
+    global config
+
+    if not cluster:
+        return
+
+    cluster_config_name = f'config_{cluster}'
+    cluster_config_local = os.path.join(local_config_dir, f'{cluster_config_name}.py')
+    cluster_config_conf = os.path.join(os.environ['LSFMONITOR_INSTALL_PATH'], 'monitor', 'conf', f'{cluster_config_name}.py')
+
+    if os.path.exists(cluster_config_local):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_local)
+        config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config)
+        sys.modules['config'] = config
+    elif os.path.exists(cluster_config_conf):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_conf)
+        config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config)
+        sys.modules['config'] = config
+
+
 def read_args():
     """
     Read arguments.
@@ -117,6 +145,9 @@ class Sampling:
         # Update self.db_path with cluster information.
         self.db_path = str(config.db_path) + '/monitor'
         (self.tool, cluster) = self.check_cluster_info()
+
+        # Reload cluster-specific config if exists.
+        reload_config_for_cluster(cluster)
 
         if cluster:
             self.db_path = str(config.db_path) + '/' + str(cluster)

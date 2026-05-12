@@ -113,7 +113,7 @@ options:
 
 ### 3.3 工具配置
 
-安装目录下主配置文件为monitor/conf/config.py，安装后默认配置如下，一般需要重新配置。
+安装目录下主配置文件为monitor/conf/config.py，如果monitor/conf/config_<CLUSTER>.py存在，则优先生效。安装后默认配置如下，一般需要重新配置。
 
 ```python
 # Specify the database directory.

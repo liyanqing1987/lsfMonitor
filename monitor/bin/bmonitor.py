@@ -41,9 +41,38 @@ if os.path.exists(local_config):
 else:
     from conf import config
 
+
+def reload_config_for_cluster(cluster):
+    """
+    Reload config with cluster-specific config file if it exists.
+    Search order: local_config_dir (~/.lsfMonitor/conf/), then conf/ directory.
+    """
+    global config
+
+    if not cluster:
+        return
+
+    cluster_config_name = f'config_{cluster}'
+    cluster_config_local = os.path.join(local_config_dir, f'{cluster_config_name}.py')
+    cluster_config_conf = str(LSFMONITOR_INSTALL_PATH / 'monitor' / 'conf' / f'{cluster_config_name}.py')
+
+    if os.path.exists(cluster_config_local):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_local)
+        config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config)
+        sys.modules['config'] = config
+    elif os.path.exists(cluster_config_conf):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_conf)
+        config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(config)
+        sys.modules['config'] = config
+
+
 # Constants
 VERSION = 'V2.2'
-VERSION_DATE = '2026.05.09'
+VERSION_DATE = '2026.05.12'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -120,6 +149,9 @@ class MainWindow(QMainWindow):
         # Check cluster info.
         common.bprint('Checking cluster information ...', date_format='%Y-%m-%d %H:%M:%S')
         (self.tool, self.cluster) = self.check_cluster_info()
+
+        # Reload cluster-specific config if exists.
+        reload_config_for_cluster(self.cluster)
 
         # Set db_path.
         self.cluster_db_path = str(config.db_path) + '/lsfMonitor'
