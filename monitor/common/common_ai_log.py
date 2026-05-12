@@ -82,6 +82,11 @@ def init_ai_log_db(db_path):
 
     db_file = os.path.join(ai_db_dir, 'ai_log.db')
 
+    try:
+        os.chmod(db_file, 0o1777)
+    except PermissionError:
+        pass
+
     return db_file
 
 
