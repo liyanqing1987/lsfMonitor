@@ -75,26 +75,24 @@ def init_ai_log_db(db_path):
         ai_db_dir = os.path.expanduser('~/.lsfMonitor/db/ai')
         os.makedirs(ai_db_dir, exist_ok=True)
 
-    try:
-        os.chmod(ai_db_dir, 0o1777)
-    except PermissionError:
-        pass
-
     db_file = os.path.join(ai_db_dir, 'ai_log.db')
-
-    try:
-        os.chmod(db_file, 0o1777)
-    except PermissionError:
-        pass
 
     return db_file
 
 
 def _ensure_user_table(db_file, user):
     """Create the per-user table if it does not exist (write mode, auto-creates db file)."""
+    db_file_exists = os.path.exists(db_file)
+
     table_name = gen_table_name(user)
     key_string = common_sqlite3.gen_sql_table_key_string(TABLE_KEY_LIST, TABLE_KEY_TYPE_LIST)
     common_sqlite3.create_sql_table(db_file, '', table_name, key_string)
+
+    if not db_file_exists and os.path.exists(db_file):
+        try:
+            os.chmod(db_file, 0o1777)
+        except PermissionError:
+            pass
 
 
 def save_conversation(db_file, session_id, user, cluster, host, question, answer, tool_calls=None, resolution='unknown', keywords=''):
