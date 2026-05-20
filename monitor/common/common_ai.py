@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import re
 import sys
 import json
 import datetime
@@ -27,22 +28,26 @@ from common import common_sqlite3
 # Default dangerous commands that require user confirmation.
 DEFAULT_DANGEROUS_COMMANDS = ['bkill', 'badmin', 'brestart', 'bstop', 'bresume', 'bswitch']
 
-SYSTEM_PROMPT = """You are an AI assistant for LSF/OpenLava/Volclava HPC cluster management, integrated into the lsfMonitor tool.
+SYSTEM_PROMPT = """You are an LSF/OpenLava/Volclava HPC cluster AI assistant in lsfMonitor.
 
-You can help users with:
-1. Querying and managing LSF jobs, hosts, queues, and users with run_command tool.
-2. Querying EDA license usage information with query_license_info tool.
-3. Looking up historical job records from the database with query_job_history tool.
-4. Searching local documentation (user manuals, guides) with search_documentation tool.
+Tools: run_command(LSF/Linux commands), query_license_info(EDA license), query_job_history(finished jobs), search_documentation(RAG docs).
 
-Guidelines:
-- When users ask about cluster status, jobs, hosts, or queues, use run_command to execute the appropriate LSF command.
-- When users ask about EDA license usage, use query_license_info.
-- When users ask about past/finished jobs, use query_job_history.
-- When users ask about command syntax, options, configuration, or best practices, use search_documentation to look up the answer first.
-- Explain the results clearly and concisely.
-- If a command fails, explain what went wrong and suggest alternatives.
-- Respond in the same language the user uses.
+Response style:
+- Be concise and direct. Lead with the conclusion or diagnosis, then explain briefly.
+- Reply in user's language.
+- If a command fails or returns an error, immediately retry with an alternative command. Not all flags are supported across LSF/OpenLava/Volclava — use simpler, universally compatible flags on retry.
+- IMPORTANT: Only run commands when the user asks a specific question about their jobs, cluster, or resources. For greetings (hello/hi/你好) or general questions, respond conversationally — briefly introduce your capabilities without executing any commands.
+- IMPORTANT: When there are actionable solutions, possible next steps, or choices the user could make, you MUST end your response with a clearly formatted numbered list like this:
+
+---
+**可选操作：**
+1. <action description>
+2. <action description>
+3. <action description>
+
+请回复数字选择操作，或直接提问。
+
+Do NOT execute any action from this list until the user explicitly chooses one by number. This is mandatory whenever multiple paths exist.
 """
 
 # Tool definitions in OpenAI format (also used as canonical format).
@@ -134,6 +139,38 @@ def detect_api_type(model_name):
         return 'anthropic'
 
     return 'openai'
+
+
+def parse_xml_tool_calls(content):
+    """Parse XML-formatted tool calls from model content (fallback for models that don't use function calling).
+
+    Handles format:
+        <function_calls>
+        <invoke name="tool_name">
+        <parameter name="param">value</parameter>
+        </invoke>
+        </function_calls>
+
+    Returns list of dicts: [{'name': str, 'arguments': str(json)}] or empty list.
+    """
+    if '<function_calls>' not in content:
+        return []
+
+    results = []
+    invoke_pattern = re.compile(r'<invoke\s+name="([^"]+)">(.*?)</invoke>', re.DOTALL)
+    param_pattern = re.compile(r'<parameter\s+name="([^"]+)">(.*?)</parameter>', re.DOTALL)
+
+    for match in invoke_pattern.finditer(content):
+        tool_name = match.group(1)
+        invoke_body = match.group(2)
+        args = {}
+
+        for param_match in param_pattern.finditer(invoke_body):
+            args[param_match.group(1)] = param_match.group(2).strip()
+
+        results.append({'name': tool_name, 'arguments': json.dumps(args, ensure_ascii=False)})
+
+    return results
 
 
 # ============================================================
@@ -659,23 +696,32 @@ class AiChatThread(QThread):
         self._confirm_event = threading.Event()
         self._confirm_result = False
         self._sources = {"rag_sources": [], "skills": []}
+        self._timing_stats = {"llm_total": 0.0, "llm_first_token_max": 0.0, "llm_generation_total": 0.0, "tool_total": 0.0, "llm_calls": 0, "output_tokens": 0}
 
         # Auto-detect API type.
         self.api_type = detect_api_type(model_name)
 
-        # Copy the system message dict so skill/experience injection doesn't
+        # Copy the system message dict so skill injection doesn't
         # accumulate across conversations (messages list is shared by reference).
         if self.messages and self.messages[0].get('role') == 'system':
             self.messages[0] = dict(self.messages[0])
 
+        # Track system prompt composition for debug output.
+        self._prompt_parts = {}
+        _base_len = len(self.messages[0].get('content', '')) if self.messages else 0
+        self._prompt_parts['base'] = _base_len
+
         # Inject matched skill content into system prompt for this conversation.
         self._inject_skills()
+        _after_skills = len(self.messages[0].get('content', '')) if self.messages else 0
+        self._prompt_parts['skill'] = _after_skills - _base_len
 
-        # Inject similar solved cases as experience references.
-        self._inject_experience()
-
-        # Inject distilled insights and tool preferences (harness).
-        self._inject_harness()
+        # Debug: log injection details.
+        if self.debug:
+            if self._sources.get("skills"):
+                common.bprint(f'[AI Debug] Injected skills: {self._sources["skills"]}', date_format='%Y-%m-%d %H:%M:%S')
+            else:
+                common.bprint('[AI Debug] No skill matched, experience/harness disabled', date_format='%Y-%m-%d %H:%M:%S')
 
     def _inject_skills(self):
         """Check the latest user message against skill tags, inject matched skills into system prompt."""
@@ -700,61 +746,6 @@ class AiChatThread(QThread):
 
         if skill_content and self.messages and self.messages[0].get('role') == 'system':
             self.messages[0]['content'] = self.messages[0]['content'] + '\n\n' + skill_content
-
-    def _inject_experience(self):
-        """Inject similar solved cases into system prompt as reference experience."""
-        if not self.experience_cases:
-            return
-
-        if not self.messages or self.messages[0].get('role') != 'system':
-            return
-
-        lines = ['\n## 历史参考案例', '以下是之前成功解决的相似问题，请参考：']
-
-        for i, case in enumerate(self.experience_cases, 1):
-            lines.append(f'\n### 案例 {i}')
-            lines.append(f'**用户问题：** {case.get("question", "")}')
-            lines.append(f'**解决方案：** {case.get("answer", "")[:500]}')
-
-            tool_calls = case.get('tool_calls', '[]')
-
-            if tool_calls and tool_calls != '[]':
-                try:
-                    tools = json.loads(tool_calls) if isinstance(tool_calls, str) else tool_calls
-                    tool_names = [t.get('name', '') for t in tools if isinstance(t, dict)]
-
-                    if tool_names:
-                        lines.append(f'**使用的工具：** {", ".join(tool_names)}')
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
-        self.messages[0]['content'] = self.messages[0]['content'] + '\n'.join(lines)
-
-    def _inject_harness(self):
-        """Inject distilled insights and tool preferences into system prompt."""
-        if not self.insights and not self.tool_preferences:
-            return
-
-        if not self.messages or self.messages[0].get('role') != 'system':
-            return
-
-        lines = []
-
-        if self.insights:
-            lines.append('\n## 经验总结')
-            lines.append('以下是从历史成功案例中提炼的经验，请参考：')
-
-            for insight in self.insights:
-                lines.append(f'- {insight}')
-
-        if self.tool_preferences:
-            lines.append('\n## 工具使用建议')
-            lines.append('根据历史数据，处理此类问题时常用以下工具/命令：')
-
-            for pref in self.tool_preferences:
-                lines.append(f'- {pref}')
-
-        self.messages[0]['content'] = self.messages[0]['content'] + '\n'.join(lines)
 
     def stop(self):
         self._stop_flag = True
@@ -843,6 +834,35 @@ class AiChatThread(QThread):
 
         return f"Unknown tool: {tool_name}"
 
+    def _convert_tool_messages_for_fallback(self):
+        """Convert tool-call messages to plain user/assistant format for APIs with incomplete tool support."""
+        fallback = []
+
+        for msg in self.messages:
+            role = msg.get('role', '')
+
+            if role == 'tool':
+                tool_id = msg.get('tool_call_id', '')
+                content = msg.get('content', '')
+                fallback.append({"role": "user", "content": f"[Tool result ({tool_id})]:\n{content}"})
+            elif role == 'assistant' and msg.get('tool_calls'):
+                # Keep the text content, convert tool_calls to text description.
+                parts = []
+                text_content = msg.get('content') or ''
+
+                if text_content:
+                    parts.append(text_content)
+
+                for tc in msg['tool_calls']:
+                    fn = tc.get('function', {})
+                    parts.append(f"[Calling tool: {fn.get('name', '')}({fn.get('arguments', '')})]")
+
+                fallback.append({"role": "assistant", "content": '\n'.join(parts)})
+            else:
+                fallback.append(msg)
+
+        return fallback
+
     # ==========================================================
     # OpenAI-compatible API loop (OpenAI, DeepSeek, Ark, vLLM).
     # ==========================================================
@@ -866,7 +886,7 @@ class AiChatThread(QThread):
         cache_key = (base_url, self.api_key)
 
         if cache_key not in AiChatThread._openai_client_cache:
-            AiChatThread._openai_client_cache[cache_key] = OpenAI(base_url=base_url, api_key=self.api_key)
+            AiChatThread._openai_client_cache[cache_key] = OpenAI(base_url=base_url, api_key=self.api_key, timeout=120.0)
 
         if self.debug:
             common.bprint(f'[AI Debug] openai client ready: {_time.time() - _t_start:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
@@ -897,70 +917,89 @@ class AiChatThread(QThread):
             if self._stop_flag:
                 return
 
-            # Debug: log prompt size.
             if self.debug:
                 _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
-                _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
+                _non_sys_chars = sum(len(str(m.get('content', ''))) for m in self.messages[1:])
+                _total_chars = _sys_len + _non_sys_chars
                 _msg_count = len(self.messages)
-                common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
+                _parts = self._prompt_parts
+                _skill_info = f', skill={_parts["skill"]}' if _parts.get('skill', 0) > 0 else ''
+
+                common.bprint(f'[AI Debug] ──── Loop {loop_i} ────', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] INPUT: {_msg_count} msgs, system={_sys_len}(base={_parts.get("base", 0)}{_skill_info}), conversation={_non_sys_chars}, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
+
+                # Only show message details in first loop; subsequent loops just add tool results.
+                if loop_i == 0:
+                    _trunc_len = 200
+
+                    for _mi, _msg in enumerate(self.messages[1:], 1):
+                        _role = _msg.get('role', '')
+                        _full_content = str(_msg.get('content', ''))
+                        _content_display = _full_content[:_trunc_len] + '...' if len(_full_content) > _trunc_len else _full_content
+                        common.bprint(f'[AI Debug]   [{_mi}] {_role}: {_content_display}', date_format='%Y-%m-%d %H:%M:%S')
+                else:
+                    # Show the last few messages (tool results added since previous loop).
+                    for _msg in self.messages[-3:]:
+                        _role = _msg.get('role', '')
+
+                        if _role in ('tool', 'user'):
+                            _content = str(_msg.get('content', ''))[:150]
+                            common.bprint(f'[AI Debug]   +{_role}: {_content}', date_format='%Y-%m-%d %H:%M:%S')
 
             self.status_signal.emit('Waiting for LLM response')
-
             _t_api = _time.time()
-
-            # Debug: log request content sent to LLM.
-            if self.debug:
-                common.bprint(f'[AI Debug] === REQUEST to LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
-
-                for _mi, _msg in enumerate(self.messages):
-                    _role = _msg.get('role', '')
-                    _content = str(_msg.get('content', ''))[:500]
-                    _tc = _msg.get('tool_calls', [])
-                    common.bprint(f'[AI Debug]   msg[{_mi}] role={_role}, content={_content}', date_format='%Y-%m-%d %H:%M:%S')
-
-                    if _tc:
-                        for _t in _tc:
-                            _fn = _t.get('function', {})
-                            common.bprint(f'[AI Debug]     tool_call: id={_t.get("id","")}, name={_fn.get("name","")}, args={_fn.get("arguments","")[:200]}', date_format='%Y-%m-%d %H:%M:%S')
-
-                common.bprint('[AI Debug] === END REQUEST ===', date_format='%Y-%m-%d %H:%M:%S')
 
             try:
                 response = client.chat.completions.create(
                     model=self.model_name,
                     messages=self.messages,
                     tools=TOOLS_OPENAI,
-                    stream=True
+                    temperature=0,
+                    stream=True,
+                    stream_options={"include_usage": True}
                 )
             except Exception as e:
-                self.error_signal.emit(f"API call failed: {e}")
-                return
+                # Retry once without tools parameter in case API rejects tool messages.
+                if self.debug:
+                    common.bprint(f'[AI Debug] API call failed: {e}, retrying without tools ...', date_format='%Y-%m-%d %H:%M:%S')
 
-            if self.debug:
-                common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
+                try:
+                    # Convert tool messages to user messages for compatibility.
+                    fallback_messages = self._convert_tool_messages_for_fallback()
+
+                    response = client.chat.completions.create(
+                        model=self.model_name,
+                        messages=fallback_messages,
+                        temperature=0,
+                        stream=True,
+                        stream_options={"include_usage": True}
+                    )
+                except Exception as e2:
+                    self.error_signal.emit(f"API call failed: {e2}")
+                    return
 
             full_content = ""
             tool_calls_data = {}
             _first_chunk = True
-            _request_id = None
+            _first_token_time = 0.0
+            _first_token_abs = 0.0
+            _completion_tokens = 0
+            _chunk_count = 0
 
             try:
                 for chunk in response:
                     if _first_chunk:
-                        if self.debug:
-                            common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
-
+                        _first_token_abs = _time.time()
+                        _first_token_time = _first_token_abs - _t_api
+                        self._timing_stats["llm_first_token_max"] = max(self._timing_stats["llm_first_token_max"], _first_token_time)
                         _first_chunk = False
-
-                        # Extract request ID from response headers or chunk attributes.
-                        if hasattr(chunk, 'id') and chunk.id:
-                            _request_id = chunk.id
-
-                        if self.debug and hasattr(chunk, 'system_fingerprint') and chunk.system_fingerprint:
-                            common.bprint(f'[AI Debug] system_fingerprint={chunk.system_fingerprint}', date_format='%Y-%m-%d %H:%M:%S')
 
                     if self._stop_flag:
                         return
+
+                    # Capture usage from the final chunk (requires stream_options={"include_usage": True}).
+                    if hasattr(chunk, 'usage') and chunk.usage and hasattr(chunk.usage, 'completion_tokens'):
+                        _completion_tokens = chunk.usage.completion_tokens
 
                     choice = chunk.choices[0] if chunk.choices else None
 
@@ -971,6 +1010,7 @@ class AiChatThread(QThread):
 
                     if delta and delta.content:
                         full_content += delta.content
+                        _chunk_count += 1
                         self.token_received.emit(delta.content)
 
                     if delta and delta.tool_calls:
@@ -988,38 +1028,81 @@ class AiChatThread(QThread):
 
                             if tc.function and tc.function.arguments:
                                 tool_calls_data[idx]['arguments'] += tc.function.arguments
+                                _chunk_count += 1
             except Exception as e:
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            # Try to get request ID from response object (supports Ark x-tt-logid, OpenAI x-request-id).
-            if hasattr(response, 'response') and hasattr(response.response, 'headers'):
-                _headers = response.response.headers
-                _header_request_id = _headers.get('x-tt-logid') or _headers.get('x-request-id')
+            # Prefer API-reported token count; fall back to chunk count for private deployments.
+            self._timing_stats["output_tokens"] += _completion_tokens if _completion_tokens > 0 else _chunk_count
 
-                if _header_request_id:
-                    _request_id = _header_request_id
+            _t_end = _time.time()
+            _llm_elapsed = _t_end - _t_api
+            _generation_time = (_t_end - _first_token_abs) if _first_token_abs > 0 else 0
+            self._timing_stats["llm_total"] += _llm_elapsed
+            self._timing_stats["llm_calls"] += 1
+            self._timing_stats["llm_generation_total"] += _generation_time
+
+            _effective_tokens = _completion_tokens if _completion_tokens > 0 else _chunk_count
+            _tpm = (_generation_time / _effective_tokens * 1000) if _effective_tokens > 0 else 0
+            _token_source = 'api' if _completion_tokens > 0 else 'chunk'
 
             if self.debug:
-                common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, request_id={_request_id}, content={len(full_content)} chars, tool_calls={len(tool_calls_data)}', date_format='%Y-%m-%d %H:%M:%S')
+                _tool_names = [tool_calls_data[i]['name'] for i in sorted(tool_calls_data.keys())] if tool_calls_data else []
+                _output_summary = f'content={len(full_content)} chars' if full_content else 'no content'
 
-                # Debug: log LLM response content.
-                common.bprint(f'[AI Debug] === RESPONSE from LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(f'[AI Debug]   request_id={_request_id}', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(f'[AI Debug]   content={full_content[:500]}', date_format='%Y-%m-%d %H:%M:%S')
+                if _tool_names:
+                    _output_summary += f', tools=[{", ".join(_tool_names)}]'
 
-                if tool_calls_data:
-                    for _idx in sorted(tool_calls_data.keys()):
-                        _tc = tool_calls_data[_idx]
-                        common.bprint(f'[AI Debug]   tool_call[{_idx}]: id={_tc["id"]}, name={_tc["name"]}, args={_tc["arguments"][:200]}', date_format='%Y-%m-%d %H:%M:%S')
-
-                common.bprint('[AI Debug] === END RESPONSE ===', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] OUTPUT: {_output_summary}', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] PERF: total={_llm_elapsed:.1f}s, first_token={_first_token_time:.2f}s, tokens={_effective_tokens}({_token_source}), TPM={_tpm:.0f}ms/token', date_format='%Y-%m-%d %H:%M:%S')
 
             if not tool_calls_data:
-                if full_content:
-                    self.messages.append({"role": "assistant", "content": full_content})
+                # Fallback: check if model output tool calls as XML text.
+                xml_tool_calls = parse_xml_tool_calls(full_content) if full_content else []
 
-                return
+                if not xml_tool_calls:
+                    if full_content:
+                        self.messages.append({"role": "assistant", "content": full_content})
+                    else:
+                        self.error_signal.emit('LLM returned empty response, please retry.')
+
+                    return
+
+                if self.debug:
+                    common.bprint(f'[AI Debug] Parsed {len(xml_tool_calls)} tool call(s) from XML in content (fallback)', date_format='%Y-%m-%d %H:%M:%S')
+
+                # Strip XML block from displayed content.
+                display_content = re.sub(r'<function_calls>.*?</function_calls>', '', full_content, flags=re.DOTALL).strip()
+
+                if display_content:
+                    self.messages.append({"role": "assistant", "content": display_content})
+
+                for i, xtc in enumerate(xml_tool_calls):
+                    if self._stop_flag:
+                        return
+
+                    tool_name = xtc['name']
+
+                    try:
+                        args = json.loads(xtc['arguments'])
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
+                    _t_tool = _time.time()
+                    result = self._execute_tool(tool_name, args)
+                    self._timing_stats["tool_total"] += _time.time() - _t_tool
+
+                    if self.debug:
+                        common.bprint(f'[AI Debug] Tool "{tool_name}" executed (xml fallback): {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
+                    self.tool_call_result.emit(tool_name, result)
+
+                    # Append as user message with tool result so model can continue.
+                    self.messages.append({"role": "user", "content": f"[Tool result from {tool_name}]:\n{result}"})
+
+                continue
 
             assistant_tool_calls = []
 
@@ -1052,6 +1135,7 @@ class AiChatThread(QThread):
                 self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
                 _t_tool = _time.time()
                 result = self._execute_tool(tool_name, args)
+                self._timing_stats["tool_total"] += _time.time() - _t_tool
 
                 if self.debug:
                     common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
@@ -1085,12 +1169,17 @@ class AiChatThread(QThread):
             if self._stop_flag:
                 return
 
-            # Debug: log prompt size.
+            # Debug: log prompt size breakdown.
             if self.debug:
                 _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
-                _total_chars = sum(len(str(m.get('content', ''))) for m in self.messages)
+                _non_sys_chars = sum(len(str(m.get('content', ''))) for m in self.messages[1:])
+                _total_chars = _sys_len + _non_sys_chars
                 _msg_count = len(self.messages)
-                common.bprint(f'[AI Debug] Loop {loop_i}: {_msg_count} messages, system_prompt={_sys_len} chars, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
+                _parts = self._prompt_parts
+                _skill_info = f', skill={_parts["skill"]}' if _parts.get('skill', 0) > 0 else ''
+
+                common.bprint(f'[AI Debug] ──── Loop {loop_i} ────', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] INPUT: {_msg_count} msgs, system={_sys_len}(base={_parts.get("base", 0)}{_skill_info}), conversation={_non_sys_chars}, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
 
             self.status_signal.emit('Waiting for LLM response')
 
@@ -1099,18 +1188,6 @@ class AiChatThread(QThread):
 
             _t_api = _time.time()
 
-            # Debug: log request content sent to LLM.
-            if self.debug:
-                common.bprint(f'[AI Debug] === REQUEST to LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(f'[AI Debug]   system_prompt ({len(system)} chars): {system[:300]}...', date_format='%Y-%m-%d %H:%M:%S')
-
-                for _mi, _msg in enumerate(anthropic_msgs):
-                    _role = _msg.get('role', '')
-                    _content = str(_msg.get('content', ''))[:500]
-                    common.bprint(f'[AI Debug]   msg[{_mi}] role={_role}, content={_content}', date_format='%Y-%m-%d %H:%M:%S')
-
-                common.bprint('[AI Debug] === END REQUEST ===', date_format='%Y-%m-%d %H:%M:%S')
-
             try:
                 stream = client.messages.create(
                     model=self.model_name,
@@ -1118,19 +1195,20 @@ class AiChatThread(QThread):
                     messages=anthropic_msgs,
                     tools=TOOLS_ANTHROPIC,
                     max_tokens=4096,
+                    temperature=0,
                     stream=True
                 )
             except Exception as e:
                 self.error_signal.emit(f"API call failed: {e}")
                 return
 
-            if self.debug:
-                common.bprint(f'[AI Debug] create() returned: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
-
             full_content = ""
             tool_calls = {}  # {block_index: {id, name, arguments}}
             _first_chunk = True
-            _request_id = None
+            _first_token_time = 0.0
+            _first_token_abs = 0.0
+            _completion_tokens = 0
+            _chunk_count = 0
 
             try:
                 for event in stream:
@@ -1138,18 +1216,14 @@ class AiChatThread(QThread):
                         return
 
                     if _first_chunk:
-                        if self.debug:
-                            common.bprint(f'[AI Debug] First chunk received: {_time.time() - _t_api:.2f}s', date_format='%Y-%m-%d %H:%M:%S')
-
+                        _first_token_abs = _time.time()
+                        _first_token_time = _first_token_abs - _t_api
+                        self._timing_stats["llm_first_token_max"] = max(self._timing_stats["llm_first_token_max"], _first_token_time)
                         _first_chunk = False
 
-                        # Extract request ID from Anthropic stream event.
-                        if hasattr(event, 'message') and hasattr(event.message, 'id'):
-                            _request_id = event.message.id
-
-                    # Capture request ID from message_start event.
-                    if event.type == 'message_start' and hasattr(event, 'message'):
-                        _request_id = getattr(event.message, 'id', _request_id)
+                    # Capture output_tokens from message_delta event (Anthropic usage).
+                    if event.type == 'message_delta' and hasattr(event, 'usage'):
+                        _completion_tokens = getattr(event.usage, 'output_tokens', 0)
 
                     if event.type == 'content_block_start':
                         if event.content_block.type == 'tool_use':
@@ -1161,43 +1235,83 @@ class AiChatThread(QThread):
                     elif event.type == 'content_block_delta':
                         if event.delta.type == 'text_delta':
                             full_content += event.delta.text
+                            _chunk_count += 1
                             self.token_received.emit(event.delta.text)
                         elif event.delta.type == 'input_json_delta':
                             if event.index in tool_calls:
                                 tool_calls[event.index]['arguments'] += event.delta.partial_json
+                                _chunk_count += 1
             except Exception as e:
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            # Try to get request ID from stream response headers.
-            if hasattr(stream, 'response') and hasattr(stream.response, 'headers'):
-                _headers = stream.response.headers
-                _header_request_id = _headers.get('x-request-id') or _headers.get('x-tt-logid')
+            # Prefer API-reported token count; fall back to chunk count for private deployments.
+            self._timing_stats["output_tokens"] += _completion_tokens if _completion_tokens > 0 else _chunk_count
 
-                if _header_request_id:
-                    _request_id = _header_request_id
+            _t_end = _time.time()
+            _llm_elapsed = _t_end - _t_api
+            _generation_time = (_t_end - _first_token_abs) if _first_token_abs > 0 else 0
+            self._timing_stats["llm_total"] += _llm_elapsed
+            self._timing_stats["llm_calls"] += 1
+            self._timing_stats["llm_generation_total"] += _generation_time
+
+            _effective_tokens = _completion_tokens if _completion_tokens > 0 else _chunk_count
+            _tpm = (_generation_time / _effective_tokens * 1000) if _effective_tokens > 0 else 0
+            _token_source = 'api' if _completion_tokens > 0 else 'chunk'
 
             if self.debug:
-                common.bprint(f'[AI Debug] Stream done: {_time.time() - _t_api:.2f}s, request_id={_request_id}, content={len(full_content)} chars, tool_calls={len(tool_calls)}', date_format='%Y-%m-%d %H:%M:%S')
+                _tool_names = [tool_calls[i]['name'] for i in sorted(tool_calls.keys())] if tool_calls else []
+                _output_summary = f'content={len(full_content)} chars' if full_content else 'no content'
 
-                # Debug: log LLM response content.
-                common.bprint(f'[AI Debug] === RESPONSE from LLM (loop {loop_i}) ===', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(f'[AI Debug]   request_id={_request_id}', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(f'[AI Debug]   content={full_content[:500]}', date_format='%Y-%m-%d %H:%M:%S')
+                if _tool_names:
+                    _output_summary += f', tools=[{", ".join(_tool_names)}]'
 
-                if tool_calls:
-                    for _idx in sorted(tool_calls.keys()):
-                        _tc = tool_calls[_idx]
-                        common.bprint(f'[AI Debug]   tool_call[{_idx}]: id={_tc["id"]}, name={_tc["name"]}, args={_tc["arguments"][:200]}', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] OUTPUT: {_output_summary}', date_format='%Y-%m-%d %H:%M:%S')
+                common.bprint(f'[AI Debug] PERF: total={_llm_elapsed:.1f}s, first_token={_first_token_time:.2f}s, tokens={_effective_tokens}({_token_source}), TPM={_tpm:.0f}ms/token', date_format='%Y-%m-%d %H:%M:%S')
 
-                common.bprint('[AI Debug] === END RESPONSE ===', date_format='%Y-%m-%d %H:%M:%S')
-
-            # No tool calls -> done.
+            # No tool calls -> done (or fallback to XML parsing).
             if not tool_calls:
-                if full_content:
-                    self.messages.append({"role": "assistant", "content": full_content})
+                xml_tool_calls = parse_xml_tool_calls(full_content) if full_content else []
 
-                return
+                if not xml_tool_calls:
+                    if full_content:
+                        self.messages.append({"role": "assistant", "content": full_content})
+                    else:
+                        self.error_signal.emit('LLM returned empty response, please retry.')
+
+                    return
+
+                if self.debug:
+                    common.bprint(f'[AI Debug] Parsed {len(xml_tool_calls)} tool call(s) from XML in content (fallback)', date_format='%Y-%m-%d %H:%M:%S')
+
+                display_content = re.sub(r'<function_calls>.*?</function_calls>', '', full_content, flags=re.DOTALL).strip()
+
+                if display_content:
+                    self.messages.append({"role": "assistant", "content": display_content})
+
+                for i, xtc in enumerate(xml_tool_calls):
+                    if self._stop_flag:
+                        return
+
+                    tool_name = xtc['name']
+
+                    try:
+                        args = json.loads(xtc['arguments'])
+                    except json.JSONDecodeError:
+                        args = {}
+
+                    self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
+                    _t_tool = _time.time()
+                    result = self._execute_tool(tool_name, args)
+                    self._timing_stats["tool_total"] += _time.time() - _t_tool
+
+                    if self.debug:
+                        common.bprint(f'[AI Debug] Tool "{tool_name}" executed (xml fallback): {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')
+
+                    self.tool_call_result.emit(tool_name, result)
+                    self.messages.append({"role": "user", "content": f"[Tool result from {tool_name}]:\n{result}"})
+
+                continue
 
             # Build assistant message in OpenAI format (for message history).
             assistant_tool_calls = []
@@ -1232,6 +1346,7 @@ class AiChatThread(QThread):
                 self.tool_call_start.emit(tool_name, self._tool_description(tool_name, args))
                 _t_tool = _time.time()
                 result = self._execute_tool(tool_name, args)
+                self._timing_stats["tool_total"] += _time.time() - _t_tool
 
                 if self.debug:
                     common.bprint(f'[AI Debug] Tool "{tool_name}" executed: {_time.time() - _t_tool:.2f}s, result={len(result)} chars', date_format='%Y-%m-%d %H:%M:%S')

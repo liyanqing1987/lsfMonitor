@@ -43,6 +43,7 @@ def read_args():
     rusage_rpt_group.add_argument('-db', default=config.db_path, help='directory path including all job data')
     rusage_rpt_group.add_argument('-m', '--memory', action='store_true', default=False, help='memory analysis')
     rusage_rpt_group.add_argument('-c', '--cpu', action='store_true', default=False, help='cpu analysis')
+    rusage_rpt_group.add_argument('-min_rt', '--min_runtime', type=int, default=0, help='only include jobs with runtime greater than this value (minutes), default 0')
 
     args = parser.parse_args()
 
@@ -75,7 +76,10 @@ def merge_data(start_date='', end_date='', csv_path=os.getcwd(), mode='memory'):
                     df.rename(columns={'index': 'job_id'}, inplace=True)
                     df.reset_index(inplace=True)
             elif hasattr(config, 'job_format') and config.job_format.lower() == 'sqlite':
-                file_date = datetime.strptime(file.replace('.db', ''), '%Y%m%d')
+                name = file.replace('.db', '')
+                if not name or not name.isdigit() or len(name) != 8:
+                    continue
+                file_date = datetime.strptime(name, '%Y%m%d')
 
                 if datetime.strptime(start_date, '%Y-%m-%d') <= file_date <= datetime.strptime(end_date, '%Y-%m-%d'):
                     logger.info("reading %s data ..." % file_date)
@@ -139,9 +143,10 @@ def get_mem_predict_value(job_description, unit='MB'):
 
 
 class MemoryReport:
-    def __init__(self, df, start_date, end_date):
+    def __init__(self, df, start_date, end_date, min_runtime: int = 0):
         self.df = df
         self.start_date, self.end_date = start_date, end_date
+        self.min_runtime = min_runtime
         self.bins = [-float('inf'), 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, float('inf')]
         self.tolerance_list = [4, 3, 2, 1, 1, 0.5, 0.5, 0.3, 0.3, 0.3, 0.3]
         self.x = [i for i in range(len(self.bins) - 1)]
@@ -213,6 +218,7 @@ class MemoryReport:
 
         self.df['run_time'].fillna(pd.Timedelta(0), inplace=True)
         self.df['total_hours'].fillna(1 / 3600, inplace=True)
+        self.df = self.df[self.df["run_time"] >= pd.Timedelta(minutes=self.min_runtime)]
         logger.debug("df runtime: \n %s \n df total_hours \n  %s" % (str(self.df["run_time"]), str(self.df["total_hours"])))
 
     def data_process(self):
@@ -1190,7 +1196,7 @@ def main():
                 logger.error('Could not find valid data, please check.')
                 sys.exit(1)
 
-            rusage_report = MemoryReport(df, args.start_date, args.end_date)
+            rusage_report = MemoryReport(df, args.start_date, args.end_date, args.min_runtime)
             rusage_report.analysis()
             rusage_report.generate_rusage_rpt_md()
         elif args.cpu:

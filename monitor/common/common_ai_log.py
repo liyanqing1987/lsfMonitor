@@ -75,6 +75,11 @@ def init_ai_log_db(db_path):
         ai_db_dir = os.path.expanduser('~/.lsfMonitor/db/ai')
         os.makedirs(ai_db_dir, exist_ok=True)
 
+    try:
+        os.chmod(ai_db_dir, 0o1777)
+    except PermissionError:
+        pass
+
     db_file = os.path.join(ai_db_dir, 'ai_log.db')
 
     return db_file
@@ -306,12 +311,13 @@ def get_user_list(db_file):
 def _get_target_tables(db_file, user):
     """
     Return the list of table names to operate on.
-    If user is specified, return only that user's table; otherwise all conversation tables.
+    If user is specified, return only that user's table (if it exists); otherwise all conversation tables.
     """
-    if user:
-        return [gen_table_name(user)]
-
     table_list = common_sqlite3.get_sql_table_list(db_file, '')
+
+    if user:
+        table_name = gen_table_name(user)
+        return [table_name] if table_name in table_list else []
 
     return [t for t in table_list if t.startswith('conversations_')]
 
@@ -594,9 +600,16 @@ class InsightGeneratorThread(QThread):
         except Exception:
             pass
 
+    @staticmethod
+    def _ensure_base_url(base_url):
+        """Ensure OpenAI-compatible base_url ends with /v1."""
+        if not any(f'/v{n}' in base_url for n in range(1, 10)):
+            return base_url + '/v1'
+
+        return base_url
+
     def _generate_insight(self):
         """Call LLM to distill one-line insight."""
-        # Truncate inputs to keep cost low.
         question = self.question[:200]
         answer = self.answer[:500]
         tool_info = ''
@@ -631,7 +644,7 @@ Write the insight in the same language as the question. Output ONLY the insight,
             return response.content[0].text.strip()
         else:
             import openai
-            client = openai.OpenAI(api_key=self.api_key, base_url=self.api_base_url)
+            client = openai.OpenAI(api_key=self.api_key, base_url=self._ensure_base_url(self.api_base_url))
             response = client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
@@ -734,7 +747,7 @@ class AiReportThread(QThread):
             return response.content[0].text
         else:
             import openai
-            client = openai.OpenAI(api_key=self.api_key, base_url=self.api_base_url)
+            client = openai.OpenAI(api_key=self.api_key, base_url=InsightGeneratorThread._ensure_base_url(self.api_base_url))
             response = client.chat.completions.create(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],

@@ -6,8 +6,6 @@ tags:
   - lsfmonitor
   - bmonitor
   - bsample
-  - 怎么用
-  - 如何使用
   - 使用说明
   - seedb
   - akill
@@ -15,11 +13,6 @@ tags:
   - check_issue_reason
   - show_license_feature_usage
   - rag_builder
-  - RAG
-  - memPrediction
-  - 内存预测
-  - config.py
-  - 配置
 ---
 
 # lsfMonitor 工具使用百科

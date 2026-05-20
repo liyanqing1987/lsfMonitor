@@ -72,7 +72,7 @@ def reload_config_for_cluster(cluster):
 
 # Constants
 VERSION = 'V2.2'
-VERSION_DATE = '2026.05.12'
+VERSION_DATE = '2026.05.20'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -5368,7 +5368,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.ai_tab.setLayout(ai_tab_grid)
 
         # Init conversation history.
-        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT}]
+        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT + f"\n\nCurrent user: {USER}"}]
 
         # Load AI documents (RAG vectors or keyword chunks) in background.
         common.bprint('Loading AI documents ...', date_format='%Y-%m-%d %H:%M:%S')
@@ -5754,6 +5754,46 @@ Please contact with liyanqing1987@163.com with any question."""
         if rag_sources or skills:
             self._ai_tab_render_sources(rag_sources, skills)
 
+        # Append total elapsed time.
+        if hasattr(self, '_ai_send_time') and self._ai_send_time:
+            elapsed = time.time() - self._ai_send_time
+            time_text = f'⏱ Total time: {elapsed:.1f}s'
+
+            # Always append LLM performance metrics.
+            if self.ai_thread and hasattr(self.ai_thread, '_timing_stats'):
+                stats = self.ai_thread._timing_stats
+                first_token_max = stats.get('llm_first_token_max', 0)
+                output_tokens = stats.get('output_tokens', 0)
+
+                first_token_slow = first_token_max > 10
+
+                if first_token_slow:
+                    first_token_html = f'<span style="color: #CC0000;">最慢首token {first_token_max:.1f}s [慢]</span>'
+                else:
+                    first_token_html = f'最慢首token {first_token_max:.1f}s'
+
+                tpm_html = ''
+
+                if output_tokens > 0:
+                    generation_time = stats.get('llm_generation_total', 0)
+                    tpm = (generation_time / output_tokens) * 1000 if generation_time > 0 else 0
+
+                    if tpm > 100:
+                        tpm_html = f'<span style="color: #CC0000;">平均生成 {tpm:.0f}ms/token [慢]</span>'
+                    else:
+                        tpm_html = f'平均生成 {tpm:.0f}ms/token'
+
+                if tpm_html:
+                    time_text += f'（{first_token_html}，{tpm_html}）'
+                else:
+                    time_text += f'（{first_token_html}）'
+
+            cursor = self.ai_tab_chat_text.textCursor()
+            cursor.movePosition(cursor.End)
+            cursor.insertBlock(QTextBlockFormat())
+            cursor.insertHtml(f'<span style="color: #888888; font-size: 11px;">{time_text}</span>')
+            self.ai_tab_chat_text.setTextCursor(cursor)
+
         # Add a blank separator line.
         cursor = self.ai_tab_chat_text.textCursor()
         cursor.movePosition(cursor.End)
@@ -5879,6 +5919,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         char_fmt.setFontWeight(QFont.Normal)
         cursor.insertText(error_msg, char_fmt)
+
         self.ai_tab_chat_text.setTextCursor(cursor)
 
         self.my_save_log.save_log(f'AI error: {error_msg}')
@@ -5886,7 +5927,7 @@ Please contact with liyanqing1987@163.com with any question."""
     def ai_tab_clear_chat(self):
         """Clear chat history."""
         self.ai_tab_chat_text.clear()
-        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT}]
+        self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT + f"\n\nCurrent user: {USER}"}]
         self.ai_feedback_widget.hide()
 
     def ai_handle_confirm_request(self, command):
