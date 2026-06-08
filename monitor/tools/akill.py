@@ -117,7 +117,12 @@ class AutoKill():
 
         for (job, job_dic) in jobs_dic.items():
             for jobid in self.jobid_list:
-                if re.match(jobid, job):
+                if re.search(r'\*', jobid):
+                    jobid_pattern = re.sub(r'\*', '.*', jobid)
+                else:
+                    jobid_pattern = re.escape(jobid)
+
+                if re.match(r'^' + jobid_pattern + r'$', str(job)):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 
@@ -137,7 +142,7 @@ class AutoKill():
                 if re.search(r'\*', command):
                     command = re.sub(r'\*', '.*', command)
 
-                if re.match(command, job_dic['command']):
+                if job_dic['command'] and re.match(command, job_dic['command']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 
@@ -147,7 +152,7 @@ class AutoKill():
                 if re.search(r'\*', submit_time):
                     submit_time = re.sub(r'\*', '.*', submit_time)
 
-                if re.search(submit_time, job_dic['submitted_time']):
+                if job_dic['submitted_time'] and re.search(submit_time, job_dic['submitted_time']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 

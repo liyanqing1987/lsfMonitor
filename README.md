@@ -4,14 +4,14 @@ An open-source HPC cluster monitoring tool for **LSF**, **volclava**, and **Open
 
 **Author:** liyanqing1987@163.com
 
-**Version:** V2.2
+**Version:** V2.3
 
 **License:** GPL-3.0
 
 
 ## Features
 
-- **JOB** — Single job details + memory usage curve
+- **JOB** — Single job details + memory usage and idle_factor (cputime/runtime) curves
 - **JOBS** — Batch view of running jobs with filtering by Status/Queue/Host/User
 - **HOSTS** — Server status and resource overview with alert highlighting
 - **LOAD** — Historical CPU/memory load curves per host
@@ -19,7 +19,7 @@ An open-source HPC cluster monitoring tool for **LSF**, **volclava**, and **Open
 - **QUEUES** — Queue slot/pend/run trends over time
 - **UTILIZATION** — Cluster-wide slot/cpu/mem utilization rates
 - **LICENSE** — EDA license feature usage and expiration tracking
-- **AI** — LLM-powered helpdesk with RAG document search and tool execution
+- **AI** — LLM-powered helpdesk with RAG document search and tool execution, plus one-shot **Cluster Analysis** health reports
 
 ## Quick Start
 
@@ -59,9 +59,9 @@ Set up crontab for periodic data collection:
 # Example crontab (crontab -e)
 # Remember to set PATH and LSF_* environment variables in crontab header
 
-3 0 * * * <INSTALL_PATH>/monitor/bin/bsample -c       # cleanup
-10 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -j   # jobs history
-*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -m       # job memory
+3 0 * * * <INSTALL_PATH>/monitor/bin/bsample -c         # cleanup
+10 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -j    # jobs history
+*/5 * * * * <INSTALL_PATH>/monitor/bin/bsample -m       # job memory & idle_factor
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -q       # queues
 */10 * * * * <INSTALL_PATH>/monitor/bin/bsample -qH     # queue-host mapping
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -H       # hosts
@@ -69,6 +69,7 @@ Set up crontab for periodic data collection:
 30 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -u    # users
 */10 * * * * <INSTALL_PATH>/monitor/bin/bsample -U      # utilization
 55 23 * * * <INSTALL_PATH>/monitor/bin/bsample -UD      # utilization daily
+5 8 * * * <INSTALL_PATH>/monitor/bin/bsample -A         # AI cluster analysis report (requires AI config)
 ```
 
 ### 5. Launch GUI
@@ -97,6 +98,10 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 
 ![ai demo](data/demo/ai_demo.gif)
 
+**AI Cluster Analysis report:**
+
+![ai cluster analysis report](docs/images/lsfMonitor/ai_cluster_analysis_report.png)
+
 ## Auxiliary Tools
 
 | Tool | Description |
@@ -112,6 +117,7 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 ## Documentation
 
 - [User Manual (Markdown)](docs/lsfMonitor_user_manual.md)
+- [Cluster Analysis Manual (Markdown)](docs/cluster_analysis_user_manual.md)
 - [memPrediction Manual (PDF)](docs/memPrediction_user_manual.pdf)
 
 ## Update History
@@ -136,3 +142,4 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 | V2.0    | 2026.01 | Python 3.12.12, logging, code optimization |
 | V2.1    | 2026.03 | Queue-host mapping, dynamic utilization, lazy loading, Modify Rusage Mem |
 | V2.2    | 2026.04 | AI tab with LLM helpdesk and RAG document search |
+| V2.3    | 2026.06 | IDLE_FACTOR sampling in bsample -m; IDLE_FACTOR chart in bmonitor JOB tab; AI Cluster Analysis report (GUI menu and bsample -A) |

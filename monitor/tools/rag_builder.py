@@ -17,15 +17,9 @@ import numpy as np
 sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 
-# Import local config file if exists.
-local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
-local_config = str(local_config_dir) + '/config.py'
+from common import common_config
 
-if os.path.exists(local_config):
-    sys.path.append(local_config_dir)
-    import config
-else:
-    from conf import config
+config = common_config.load_config()
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 

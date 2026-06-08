@@ -300,17 +300,23 @@ def bprint(message, color='', background_color='', display_method='', date_forma
             return
 
 
-def run_command(command, mystdin=subprocess.PIPE, mystdout=subprocess.PIPE, mystderr=subprocess.PIPE):
+def run_command(command, mystdin=subprocess.PIPE, mystdout=subprocess.PIPE, mystderr=subprocess.PIPE, timeout=None):
     """
     Run system command with subprocess.Popen, get returncode/stdout/stderr.
     """
     SP = subprocess.Popen(command, shell=True, stdin=mystdin, stdout=mystdout, stderr=mystderr)
-    (stdout, stderr) = SP.communicate()
+
+    try:
+        (stdout, stderr) = SP.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        SP.kill()
+        SP.communicate()
+        return 1, b'', f'Command timed out after {timeout}s: {command}'.encode()
 
     return SP.returncode, stdout, stderr
 
 
-def get_job_range_dic(job_list):
+def get_job_range_dic(job_list, range_size=100000):
     """
     Get job range string "***_***" based the jobid.
     """
@@ -319,8 +325,8 @@ def get_job_range_dic(job_list):
     for job in job_list:
         job_org = job
         job = re.sub(r'\[.*', '', job)
-        job_head = (int(int(job)/100000))*100000
-        job_tail = job_head + 99999
+        job_head = (int(int(job) / range_size)) * range_size
+        job_tail = job_head + range_size - 1
         job_range = str(job_head) + '_' + str(job_tail)
         job_range_dic.setdefault(job_range, [])
         job_range_dic[job_range].append(job_org)

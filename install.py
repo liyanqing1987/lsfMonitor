@@ -170,6 +170,9 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
                 config_content = f"""# Specify the database directory.
 db_path = "{db_path}"
 
+# Data retention days for cleanup (bsample --cleanup).
+cleanup_expire_days = {{'job': 90, 'job_data': 90, 'user': 365, 'queue': 365, 'queue_host_mapping': 365, 'host': 365, 'load': 365, 'utilization': 365, 'utilization_day': 365}}
+
 # Specify EDA license administrators.
 license_administrators = "all"
 
@@ -194,12 +197,8 @@ ai_embedding_api_base_url = ""
 ai_embedding_api_key = ""
 ai_embedding_model_name = ""
 
-# Commands forbidden for AI to execute (space-separated).
-# Example: "rm reboot shutdown"
-ai_forbidden_commands = ""
-
 # Commands requiring user confirmation before AI executes (space-separated).
-# Default if empty: "bkill badmin brestart bstop bresume bswitch"
+# Default if empty: "bkill badmin brestart bstop bresume bswitch rm kill killall shutdown reboot mkfs dd"
 ai_dangerous_commands = ""
 """
                 CF.write(config_content)

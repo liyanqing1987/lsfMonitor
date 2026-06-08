@@ -8,15 +8,9 @@ sys.path.insert(0, str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 from common import common
 from common import common_sqlite3
 
-# Import local config file if exists.
-local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
-local_config = str(local_config_dir) + '/config.py'
+from common import common_config
 
-if os.path.exists(local_config):
-    sys.path.append(local_config_dir)
-    import config
-else:
-    from conf import config
+config = common_config.load_config()
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -100,30 +94,30 @@ def seedb(db_file, table_list, key_list, number):
                 select_condition = 'limit ' + str(number)
 
             data_dic = common_sqlite3.get_sql_table_data(db_file, '', table, key_list, select_condition)
-            key_list = list(data_dic.keys())
+            display_key_list = list(data_dic.keys())
 
-            if len(key_list) == 0:
+            if len(display_key_list) == 0:
                 common.bprint('No valid key_list is specified.', level='Error')
             else:
-                length = get_length(key_list)
+                length = get_length(display_key_list)
                 format_string = '%-' + str(length+10) + 's'
 
-                for key in key_list:
+                for key in display_key_list:
                     common.bprint(format_string % (key), end='')
 
                 common.bprint('')
 
-                for key in key_list:
+                for key in display_key_list:
                     common.bprint(format_string % ('----'), end='')
 
                 common.bprint('')
 
-                first_key = key_list[0]
+                first_key = display_key_list[0]
                 first_value_list = data_dic[first_key]
 
                 for i in range(len(first_value_list)):
-                    for j in range(len(key_list)):
-                        key = key_list[j]
+                    for j in range(len(display_key_list)):
+                        key = display_key_list[j]
                         value_list = data_dic[key]
                         value = value_list[i]
 

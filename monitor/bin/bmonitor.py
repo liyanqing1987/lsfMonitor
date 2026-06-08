@@ -31,48 +31,14 @@ from common import common_sqlite3
 from common import common_ai
 from common import common_ai_log
 
-# Import local config file if exists.
-local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
-local_config = str(local_config_dir) + '/config.py'
+from common import common_config
 
-if os.path.exists(local_config):
-    sys.path.append(local_config_dir)
-    import config
-else:
-    from conf import config
-
-
-def reload_config_for_cluster(cluster):
-    """
-    Reload config with cluster-specific config file if it exists.
-    Search order: local_config_dir (~/.lsfMonitor/conf/), then conf/ directory.
-    """
-    global config
-
-    if not cluster:
-        return
-
-    cluster_config_name = f'config_{cluster}'
-    cluster_config_local = os.path.join(local_config_dir, f'{cluster_config_name}.py')
-    cluster_config_conf = str(LSFMONITOR_INSTALL_PATH / 'monitor' / 'conf' / f'{cluster_config_name}.py')
-
-    if os.path.exists(cluster_config_local):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_local)
-        config = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(config)
-        sys.modules['config'] = config
-    elif os.path.exists(cluster_config_conf):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(cluster_config_name, cluster_config_conf)
-        config = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(config)
-        sys.modules['config'] = config
+config = common_config.load_config()
 
 
 # Constants
-VERSION = 'V2.2'
-VERSION_DATE = '2026.05.20'
+VERSION = 'V2.3'
+VERSION_DATE = '2026.06.06'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -151,7 +117,7 @@ class MainWindow(QMainWindow):
         (self.tool, self.cluster) = self.check_cluster_info()
 
         # Reload cluster-specific config if exists.
-        reload_config_for_cluster(self.cluster)
+        common_config.reload_config_for_cluster(self.cluster)
 
         # Set db_path.
         self.cluster_db_path = str(config.db_path) + '/lsfMonitor'
@@ -418,10 +384,17 @@ class MainWindow(QMainWindow):
             self.utilization_loaded = True
 
         # 切换到LICENSE页面时，如果还没加载过License信息，就加载
-        if specified_tab == 'LICENSE' and not self.license_loaded:
-            self.get_license_dic()
-            self.license_loaded = True
-            self.update_license_tab_feature_completer()
+        if specified_tab == 'LICENSE':
+            is_license_admin = ('all' in self.license_administrator_list) or ('ALL' in self.license_administrator_list) or (USER in self.license_administrator_list)
+
+            if not is_license_admin:
+                common.bprint('Current user is not a license administrator, cannot switch to LICENSE tab.', level='Warning')
+                return
+
+            if not self.license_loaded:
+                self.get_license_dic()
+                self.license_loaded = True
+                self.update_license_tab_feature_completer()
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
 
@@ -510,6 +483,10 @@ class MainWindow(QMainWindow):
         ai_problem_analysis_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/trace.png'))
         ai_problem_analysis_action.triggered.connect(self.ai_problem_analysis)
 
+        ai_cluster_analysis_action = QAction('Cluster Analysis', self)
+        ai_cluster_analysis_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/trace.png'))
+        ai_cluster_analysis_action.triggered.connect(self.ai_cluster_analysis)
+
         ai_record_cleanup_action = QAction('Record Cleanup', self)
         ai_record_cleanup_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/close.png'))
         ai_record_cleanup_action.triggered.connect(self.ai_record_cleanup)
@@ -522,6 +499,8 @@ class MainWindow(QMainWindow):
         ai_menu.addAction(ai_record_search_action)
         ai_menu.addAction(ai_problem_analysis_action)
         ai_menu.addAction(ai_record_cleanup_action)
+        ai_menu.addSeparator()
+        ai_menu.addAction(ai_cluster_analysis_action)
         ai_menu.addSeparator()
         ai_menu.addAction(self.ai_debug_action)
 
@@ -685,7 +664,7 @@ Please contact with liyanqing1987@163.com with any question."""
         # "Trace" button.
         job_tab_trace_button = QPushButton('Trace', self.job_tab_frame0)
         job_tab_trace_button.setStyleSheet('''QPushButton:hover{background:rgb(0, 85, 255);}''')
-        job_tab_trace_button.clicked.connect(lambda: self.trace_job(jobid=self.job_tab_current_job, job_status=self.job_tab_current_job_dic[self.job_tab_current_job]['status']))
+        job_tab_trace_button.clicked.connect(lambda: self.trace_job())
 
         # self.job_tab_frame0 - Grid
         job_tab_frame0_grid = QGridLayout()
@@ -844,17 +823,41 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def gen_job_tab_frame3(self):
         # self.job_tab_frame3
+        self.job_tab_chart_tab = QTabWidget(self.job_tab_frame3)
+
+        # MEMORY tab
+        job_tab_mem_widget = QWidget()
         self.job_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.job_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.job_tab_mem_canvas, self, x_is_date=False)
 
         if self.dark_mode:
-            fig = self.job_tab_mem_canvas.figure
-            fig.set_facecolor('#19232d')
+            self.job_tab_mem_canvas.figure.set_facecolor('#19232d')
+
+        job_tab_mem_layout = QVBoxLayout()
+        job_tab_mem_layout.addWidget(self.job_tab_mem_toolbar)
+        job_tab_mem_layout.addWidget(self.job_tab_mem_canvas)
+        job_tab_mem_widget.setLayout(job_tab_mem_layout)
+
+        # IDLE_FACTOR tab
+        job_tab_idle_factor_widget = QWidget()
+        self.job_tab_idle_factor_canvas = common_pyqt5.FigureCanvasQTAgg()
+        self.job_tab_idle_factor_toolbar = common_pyqt5.NavigationToolbar2QT(self.job_tab_idle_factor_canvas, self, x_is_date=False)
+
+        if self.dark_mode:
+            self.job_tab_idle_factor_canvas.figure.set_facecolor('#19232d')
+
+        job_tab_idle_factor_layout = QVBoxLayout()
+        job_tab_idle_factor_layout.addWidget(self.job_tab_idle_factor_toolbar)
+        job_tab_idle_factor_layout.addWidget(self.job_tab_idle_factor_canvas)
+        job_tab_idle_factor_widget.setLayout(job_tab_idle_factor_layout)
+
+        # Add tabs
+        self.job_tab_chart_tab.addTab(job_tab_mem_widget, 'MEMORY')
+        self.job_tab_chart_tab.addTab(job_tab_idle_factor_widget, 'IDLE_FACTOR')
 
         # self.job_tab_frame3 - Grid
         job_tab_frame3_grid = QGridLayout()
-        job_tab_frame3_grid.addWidget(self.job_tab_mem_toolbar, 0, 0)
-        job_tab_frame3_grid.addWidget(self.job_tab_mem_canvas, 1, 0)
+        job_tab_frame3_grid.addWidget(self.job_tab_chart_tab, 0, 0)
         self.job_tab_frame3.setLayout(job_tab_frame3_grid)
 
     def check_job_on_job_tab(self):
@@ -916,7 +919,10 @@ Please contact with liyanqing1987@163.com with any question."""
                                     for key in job_tab_current_job_dic:
                                         self.job_tab_current_job_dic[current_job][key] = job_tab_current_job_dic[key][0]
 
+                                job_finished_date_db_conn.close()
                                 break
+
+                            job_finished_date_db_conn.close()
 
         if not self.job_tab_current_job_dic:
             warning_message = 'Not find job information for job "' + str(current_job) + '" on JOB tab.'
@@ -967,10 +973,20 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return -1
 
-    def trace_job(self, jobid='', job_status='RUN'):
+    def trace_job(self, jobid='', job_status=''):
         """
         Trace job pend/slow/fail reason.
         """
+        if not jobid:
+            jobid = self.job_tab_current_job
+
+        if not jobid:
+            common.bprint('No job is selected, cannot trace job.', level='Warning')
+            return
+
+        if not job_status:
+            job_status = self.job_tab_current_job_dic.get(jobid, {}).get('status', '')
+
         if jobid:
             if job_status == 'PEND':
                 self.check_pend_reason(job=jobid)
@@ -1035,14 +1051,49 @@ Please contact with liyanqing1987@163.com with any question."""
     def get_job_mem_list(self):
         """
         Get job sample-time mem list for self.job_tab_current_job.
+        Try new job_data/ format first, fall back to old job_mem/ format.
         """
         runtime_list = []
         real_mem_list = []
 
-        job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ])
-        job_range_list = list(job_range_dic.keys())
-        job_range = job_range_list[0]
-        job_mem_db_file = str(self.cluster_db_path) + '/job_mem/' + str(job_range) + '.db'
+        # Try new format (job_data/ single-table schema, 1M range) first.
+        job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ], range_size=1000000)
+        job_range = list(job_range_dic.keys())[0]
+        job_data_db_file = str(self.cluster_db_path) + '/job_data/' + str(job_range) + '.db'
+
+        if os.path.exists(job_data_db_file):
+            (connect_result, db_conn) = common_sqlite3.connect_db_file(job_data_db_file)
+
+            if connect_result == 'passed':
+                try:
+                    curs = db_conn.cursor()
+                    curs.execute("SELECT sample_time, mem FROM job_data WHERE job_id=? ORDER BY sample_second", (str(self.job_tab_current_job),))
+                    rows = curs.fetchall()
+                    curs.close()
+                    db_conn.close()
+
+                    if rows:
+                        first_sample_time = datetime.datetime.strptime(str(rows[0][0]), '%Y%m%d_%H%M%S').timestamp()
+
+                        for (sample_time, mem) in rows:
+                            current_time = datetime.datetime.strptime(str(sample_time), '%Y%m%d_%H%M%S').timestamp()
+                            runtime = int((current_time - first_sample_time) / 60)
+                            runtime_list.append(runtime)
+
+                            if mem == '' or mem is None:
+                                mem = '0'
+
+                            real_mem = round(float(mem) / 1024, 1)
+                            real_mem_list.append(real_mem)
+
+                        return runtime_list, real_mem_list
+                except Exception:
+                    db_conn.close()
+
+        # Fall back to old format (job_mem/ per-job tables, 100K range).
+        job_range_dic_old = common.get_job_range_dic([self.job_tab_current_job, ])
+        job_range_old = list(job_range_dic_old.keys())[0]
+        job_mem_db_file = str(self.cluster_db_path) + '/job_mem/' + str(job_range_old) + '.db'
 
         if not os.path.exists(job_mem_db_file):
             common.bprint(f'Job memory usage information is missing for "{self.job_tab_current_job}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
@@ -1079,20 +1130,104 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return runtime_list, real_mem_list
 
+    def get_job_idle_factor_list(self):
+        """
+        Get job sample-time idle_factor list for self.job_tab_current_job.
+        Try new job_data/ format first, fall back to old job_idle_factor/ format.
+        """
+        runtime_list = []
+        idle_factor_list = []
+
+        # Try new format (job_data/ single-table schema, 1M range) first.
+        job_range_dic = common.get_job_range_dic([self.job_tab_current_job, ], range_size=1000000)
+        job_range = list(job_range_dic.keys())[0]
+        job_data_db_file = str(self.cluster_db_path) + '/job_data/' + str(job_range) + '.db'
+
+        if os.path.exists(job_data_db_file):
+            (connect_result, db_conn) = common_sqlite3.connect_db_file(job_data_db_file)
+
+            if connect_result == 'passed':
+                try:
+                    curs = db_conn.cursor()
+                    curs.execute("SELECT sample_time, idle_factor FROM job_data WHERE job_id=? ORDER BY sample_second", (str(self.job_tab_current_job),))
+                    rows = curs.fetchall()
+                    curs.close()
+                    db_conn.close()
+
+                    if rows:
+                        first_sample_time = datetime.datetime.strptime(str(rows[0][0]), '%Y%m%d_%H%M%S').timestamp()
+
+                        for (sample_time, idle_factor) in rows:
+                            if idle_factor == '' or idle_factor is None:
+                                continue
+
+                            current_time = datetime.datetime.strptime(str(sample_time), '%Y%m%d_%H%M%S').timestamp()
+                            runtime = int((current_time - first_sample_time) / 60)
+                            runtime_list.append(runtime)
+                            idle_factor_list.append(round(float(idle_factor), 2))
+
+                        return runtime_list, idle_factor_list
+                except Exception:
+                    db_conn.close()
+
+        # Fall back to old format (job_idle_factor/ per-job tables, 100K range).
+        job_range_dic_old = common.get_job_range_dic([self.job_tab_current_job, ])
+        job_range_old = list(job_range_dic_old.keys())[0]
+        job_idle_factor_db_file = str(self.cluster_db_path) + '/job_idle_factor/' + str(job_range_old) + '.db'
+
+        if not os.path.exists(job_idle_factor_db_file):
+            return runtime_list, idle_factor_list
+
+        (connect_result, db_conn) = common_sqlite3.connect_db_file(job_idle_factor_db_file)
+
+        if connect_result == 'passed':
+            table_name = 'job_' + str(self.job_tab_current_job)
+            data_dic = common_sqlite3.get_sql_table_data(job_idle_factor_db_file, db_conn, table_name, ['sample_time', 'idle_factor'])
+
+            if data_dic and 'idle_factor' in data_dic and 'sample_time' in data_dic:
+                sample_time_list = data_dic['sample_time']
+                raw_idle_factor_list = data_dic['idle_factor']
+                first_sample_time = datetime.datetime.strptime(str(sample_time_list[0]), '%Y%m%d_%H%M%S').timestamp()
+
+                for i in range(len(sample_time_list)):
+                    idle_factor = raw_idle_factor_list[i]
+
+                    if idle_factor == '' or idle_factor is None:
+                        continue
+
+                    sample_time = sample_time_list[i]
+                    current_time = datetime.datetime.strptime(str(sample_time), '%Y%m%d_%H%M%S').timestamp()
+                    runtime = int((current_time - first_sample_time) / 60)
+                    runtime_list.append(runtime)
+                    idle_factor_list.append(round(float(idle_factor), 2))
+
+            db_conn.close()
+
+        return runtime_list, idle_factor_list
+
     def update_job_tab_frame3(self, init=False):
         """
-        Draw memory curve for current job on self.job_tab_frame3.
+        Draw memory and idle_factor curves for current job on self.job_tab_frame3.
         """
-        fig = self.job_tab_mem_canvas.figure
-        fig.clear()
+        mem_fig = self.job_tab_mem_canvas.figure
+        mem_fig.clear()
         self.job_tab_mem_canvas.draw()
+
+        idle_factor_fig = self.job_tab_idle_factor_canvas.figure
+        idle_factor_fig.clear()
+        self.job_tab_idle_factor_canvas.draw()
 
         if not init:
             if self.job_tab_current_job_dic[self.job_tab_current_job]['status'] != 'PEND':
                 (runtime_list, mem_list) = self.get_job_mem_list()
 
                 if runtime_list and mem_list:
-                    self.draw_job_tab_mem_curve(fig, runtime_list, mem_list)
+                    self.draw_job_tab_mem_curve(mem_fig, runtime_list, mem_list)
+
+                (idle_runtime_list, idle_factor_list) = self.get_job_idle_factor_list()
+
+                if idle_runtime_list and idle_factor_list:
+                    self.draw_job_tab_idle_factor_curve(idle_factor_fig, idle_runtime_list, idle_factor_list)
 
     def draw_job_tab_mem_curve(self, fig, runtime_list, mem_list):
         """
@@ -1121,6 +1256,34 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.legend(loc='upper right')
         axes.grid()
         self.job_tab_mem_canvas.draw()
+
+    def draw_job_tab_idle_factor_curve(self, fig, runtime_list, idle_factor_list):
+        """
+        Draw idle_factor curve for specified job.
+        """
+        fig.subplots_adjust(bottom=0.2)
+        axes = fig.add_subplot(111)
+
+        if self.dark_mode:
+            axes.set_facecolor('#19232d')
+
+            for spine in axes.spines.values():
+                spine.set_color('white')
+
+            axes.tick_params(axis='both', colors='white')
+            axes.set_title('IDLE_FACTOR(cputime/runtime) for job "' + str(self.job_tab_current_job) + '"', color='white')
+            axes.set_xlabel('Runtime (Minutes)', color='white')
+            axes.set_ylabel('IDLE_FACTOR', color='white')
+        else:
+            axes.set_title('IDLE_FACTOR(cputime/runtime) for job "' + str(self.job_tab_current_job) + '"')
+            axes.set_xlabel('Runtime (Minutes)')
+            axes.set_ylabel('IDLE_FACTOR')
+
+        axes.plot(runtime_list, idle_factor_list, 'bo-', label='IDLE_FACTOR', linewidth=0.1, markersize=0.1)
+        axes.fill_between(runtime_list, idle_factor_list, color='blue', alpha=0.3)
+        axes.legend(loc='upper right')
+        axes.grid()
+        self.job_tab_idle_factor_canvas.draw()
 # For job TAB (end) #
 
 # For jobs TAB (start) #
@@ -1233,7 +1396,7 @@ Please contact with liyanqing1987@163.com with any question."""
     def gen_jobs_tab_table(self):
         # self.jobs_tab_table
         self.jobs_tab_table.setShowGrid(True)
-        self.jobs_tab_table.setSortingEnabled(True)
+        self.jobs_tab_table.setSortingEnabled(False)
         self.jobs_tab_table.setColumnCount(0)
         self.jobs_tab_table.setColumnCount(13)
         self.jobs_tab_table_title_list = ['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Project', 'Slot', 'IDLE', 'Rusage (G)', 'Mem (G)', 'MaxMem (G)', 'Command']
@@ -1409,6 +1572,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "Rusage" item.
             j = j+1
+            rusage_mem_value = 0
 
             if str(job_dic[job]['rusage_mem']) != '':
                 item = QTableWidgetItem()
@@ -1446,6 +1610,8 @@ Please contact with liyanqing1987@163.com with any question."""
             j = j+1
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
+
+        self.jobs_tab_table.setSortingEnabled(True)
 
     def jobs_tab_check_click(self, item=None):
         """
@@ -1808,7 +1974,7 @@ Please contact with liyanqing1987@163.com with any question."""
     def gen_hosts_tab_table(self):
         # self.hosts_tab_table
         self.hosts_tab_table.setShowGrid(True)
-        self.hosts_tab_table.setSortingEnabled(True)
+        self.hosts_tab_table.setSortingEnabled(False)
         self.hosts_tab_table.setColumnCount(0)
         self.hosts_tab_table.setColumnCount(12)
         self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'aMem (G)', 'saMem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
@@ -2053,6 +2219,8 @@ Please contact with liyanqing1987@163.com with any question."""
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
+
+        self.hosts_tab_table.setSortingEnabled(True)
 
     def mem_unit_switch(self, mem_string):
         """
@@ -2800,7 +2968,7 @@ Please contact with liyanqing1987@163.com with any question."""
     def gen_users_tab_table(self):
         # self.users_tab_table
         self.users_tab_table.setShowGrid(True)
-        self.users_tab_table.setSortingEnabled(True)
+        self.users_tab_table.setSortingEnabled(False)
         self.users_tab_table.setColumnCount(0)
         self.users_tab_table.setColumnCount(9)
         self.users_tab_table_title_list = ['User', 'Job_Num', 'Pass_Rate (%)', 'Total_Rusage_Mem (G)', 'Avg_Rusage_Mem (G)', 'Total_Max_Mem (G)', 'Avg_Max_Mem (G)', 'Total_Mem_Waste (G)', 'Avg_Mem_Waste (G)']
@@ -2901,6 +3069,8 @@ Please contact with liyanqing1987@163.com with any question."""
 
             item.setData(Qt.DisplayRole, avg_mem_waste)
             self.users_tab_table.setItem(i, j, item)
+
+        self.users_tab_table.setSortingEnabled(True)
 
     def get_user_info(self):
         """
@@ -3017,6 +3187,8 @@ Please contact with liyanqing1987@163.com with any question."""
         # self.queues_tab
         self.queues_tab_table = QTableWidget(self.queues_tab)
         self.queues_tab_table.itemClicked.connect(self.queues_tab_check_click)
+        self.queues_tab_table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.queues_tab_table.customContextMenuRequested.connect(self.gen_queues_tab_menu)
 
         self.queues_tab_frame0 = QFrame(self.queues_tab)
         self.queues_tab_frame0.setFrameShadow(QFrame.Raised)
@@ -3057,7 +3229,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def gen_queues_tab_table(self):
         self.queues_tab_table.setShowGrid(True)
-        self.queues_tab_table.setSortingEnabled(True)
+        self.queues_tab_table.setSortingEnabled(False)
         self.queues_tab_table.setColumnCount(0)
         self.queues_tab_table.setColumnCount(4)
         self.queues_tab_table_title_list = ['QUEUE', 'SLOTS', 'PEND', 'RUN']
@@ -3165,6 +3337,22 @@ Please contact with liyanqing1987@163.com with any question."""
             item.setFont(QFont('song', 9, QFont.Bold))
             item.setData(Qt.DisplayRole, int(run))
             self.queues_tab_table.setItem(i, j, item)
+
+        self.queues_tab_table.setSortingEnabled(True)
+
+    def gen_queues_tab_menu(self, pos):
+        menu = QMenu(self.queues_tab_table)
+        refresh_action = QAction('Refresh', self)
+        refresh_action.triggered.connect(self.refresh_queues_tab_table)
+        menu.addAction(refresh_action)
+        menu.exec_(self.queues_tab_table.mapToGlobal(pos))
+
+    def refresh_queues_tab_table(self):
+        my_show_message = ShowMessage('Info', 'Loading queue information, please wait ...')
+        my_show_message.start()
+        self.gen_queues_tab_table()
+        time.sleep(0.01)
+        my_show_message.terminate()
 
     def gen_queues_tab_frame0(self):
         # "Queue" item.
@@ -4210,16 +4398,10 @@ Please contact with liyanqing1987@163.com with any question."""
                         grouped = df_all_queue.groupby('time_key')[res].mean().round(1)
 
                         for time_key, avg_val in grouped.items():
-                            if not self.enable_utilization_detail:
-                                if time_key not in all_time_based_util['ALL'][res]:
-                                    all_time_based_util['ALL'][res][time_key] = []
+                            if time_key not in all_time_based_util['ALL'][res]:
+                                all_time_based_util['ALL'][res][time_key] = []
 
-                                all_time_based_util['ALL'][res][time_key].append(avg_val)
-                            else:
-                                if time_key not in all_time_based_util['ALL'][res]:
-                                    all_time_based_util['ALL'][res][time_key] = []
-
-                                all_time_based_util['ALL'][res][time_key].append(avg_val)
+                            all_time_based_util['ALL'][res][time_key].append(avg_val)
 
         # 合并所有集群的数据，计算平均值
         queue_utilization_dic = copy.deepcopy(all_queue_avg)
@@ -4281,94 +4463,12 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return queue_utilization_dic, full_time_util, original_begin_second, original_end_second
 
-    def get_utilization_info(self, selected_host_list, selected_resource_list):
-        """
-        Get sample_time/ut/mem list for specified host.
-        """
-        common.bprint('Loading resource utilization information ...', date_format='%Y-%m-%d %H:%M:%S')
-
-        my_show_message = ShowMessage('Info', 'Loading resource utilization information ...')
-        my_show_message.start()
-
-        utilization_dic = {}
-
-        if self.enable_utilization_detail:
-            utilization_db_file = str(self.cluster_db_path) + '/utilization.db'
-        else:
-            utilization_db_file = str(self.cluster_db_path) + '/utilization_day.db'
-
-        if not os.path.exists(utilization_db_file):
-            common.bprint(f'Utilization database "{utilization_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-        else:
-            (utilization_db_file_connect_result, utilization_db_conn) = common_sqlite3.connect_db_file(utilization_db_file)
-
-            if utilization_db_file_connect_result == 'failed':
-                common.bprint(f'Failed on connecting utilization database file "{utilization_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-            else:
-                if selected_host_list:
-                    for selected_host in selected_host_list:
-                        table_name = 'utilization_' + str(selected_host)
-                        key_list = copy.deepcopy(selected_resource_list)
-
-                        if self.enable_utilization_detail:
-                            key_list.insert(0, 'sample_time')
-                            begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
-                            begin_time = str(begin_date) + ' 00:00:00'
-                            begin_second = time.mktime(time.strptime(begin_time, '%Y-%m-%d %H:%M:%S'))
-                            end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
-                            end_time = str(end_date) + ' 23:59:59'
-                            end_second = time.mktime(time.strptime(end_time, '%Y-%m-%d %H:%M:%S'))
-                            select_condition = 'WHERE sample_second>=' + str(begin_second) + ' AND sample_second<=' + str(end_second)
-                        else:
-                            key_list.insert(0, 'sample_date')
-                            begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
-                            begin_date = re.sub('-', '', begin_date)
-                            end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
-                            end_date = re.sub('-', '', end_date)
-                            select_condition = 'WHERE sample_date>=' + str(begin_date) + ' AND sample_date<=' + str(end_date)
-
-                        data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, table_name, key_list, select_condition)
-
-                        if not data_dic:
-                            common.bprint(f'Utilization information is empty for "{selected_host}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
-                        else:
-                            if self.enable_utilization_detail:
-                                key = 'sample_time'
-                            else:
-                                key = 'sample_date'
-
-                            for (i, sample_date) in enumerate(data_dic[key]):
-                                for selected_resource in selected_resource_list:
-                                    if i == 0:
-                                        utilization_dic.setdefault(selected_resource, {})
-
-                                    utilization = float(data_dic[selected_resource][i])
-
-                                    if int(utilization) >= 100:
-                                        utilization = 100.0
-
-                                    utilization_dic[selected_resource].setdefault(sample_date, {})
-                                    utilization_dic[selected_resource][sample_date].setdefault(selected_host, utilization)
-
-            utilization_db_conn.close()
-
-        # Organize utilization info, get average utlization for sample_date.
-        for selected_resource in utilization_dic.keys():
-            for sample_date in utilization_dic[selected_resource].keys():
-                utilization_list = list(utilization_dic[selected_resource][sample_date].values())
-                utilization_dic[selected_resource][sample_date] = round((sum(utilization_list)/len(utilization_list)), 1)
-
-        time.sleep(0.01)
-        my_show_message.terminate()
-
-        return utilization_dic
-
     def gen_utilization_tab_table(self, queue_utilization_dic={}):
         """
         Generte self.utilization_tab_table.
         """
         self.utilization_tab_table.setShowGrid(True)
-        self.utilization_tab_table.setSortingEnabled(True)
+        self.utilization_tab_table.setSortingEnabled(False)
         self.utilization_tab_table.setColumnCount(0)
         self.utilization_tab_table.setColumnCount(5)
         self.utilization_tab_table.setRowCount(0)
@@ -4512,6 +4612,8 @@ Please contact with liyanqing1987@163.com with any question."""
                         item.setForeground(QBrush(Qt.gray))
 
                     self.utilization_tab_table.setItem(row, i+2, item)
+
+        self.utilization_tab_table.setSortingEnabled(True)
 
     def utilization_tab_check_click(self, item=None):
         """
@@ -4719,137 +4821,6 @@ Please contact with liyanqing1987@163.com with any question."""
         axes.grid()
         self.utilization_tab_utilization_canvas.draw()
 
-    def draw_utilization_tab_utilization_curve(self, fig, utilization_dic):
-        """
-        Draw slot/cpu/mem utilization curve for specified host(s).
-        """
-        fig.subplots_adjust(bottom=0.25)
-        axes = fig.add_subplot(111)
-
-        # Set title.
-        title = ''
-
-        for selected_resource in utilization_dic.keys():
-            utilization_list = list(utilization_dic[selected_resource].values())
-            avg_utilization = round((sum(utilization_list)/len(utilization_list)), 1)
-            title_line = str(selected_resource) + ' utilization : ' + str(avg_utilization) + '%'
-
-            if title:
-                title = str(title) + ';    ' + str(title_line)
-            else:
-                title = title_line
-
-        # set_xlabel/set_ylabel.
-        if self.dark_mode:
-            axes.set_facecolor('#19232d')
-
-            for spine in axes.spines.values():
-                spine.set_color('white')
-
-            axes.tick_params(axis='both', colors='white')
-
-            if self.enable_utilization_detail:
-                axes.set_xlabel('Sample Time', color='white')
-            else:
-                axes.set_xlabel('Sample Date', color='white')
-
-            axes.set_ylabel('Utilization (%)', color='white')
-            axes.set_title(title, color='white')
-        else:
-            if self.enable_utilization_detail:
-                axes.set_xlabel('Sample Time')
-            else:
-                axes.set_xlabel('Sample Date')
-
-            axes.set_ylabel('Utilization (%)')
-            axes.set_title(title)
-
-        # axes.plot (sample_date_list / utilization_list)
-        selected_resource_list = ['slot', 'mem', 'cpu']
-
-        for selected_resource in selected_resource_list:
-            if selected_resource not in utilization_dic:
-                continue
-
-            if self.enable_utilization_detail:
-                common.bprint(f'Drawing {selected_resource} curve ...', date_format='%Y-%m-%d %H:%M:%S')
-
-                my_show_message = ShowMessage('Info', f'Drawing {selected_resource} curve ...')
-                my_show_message.start()
-
-            sample_date_list = []
-            utilization_list = []
-
-            for (sample_date, utilization) in utilization_dic[selected_resource].items():
-                if int(utilization) >= 100:
-                    utilization = 100.0
-
-                if not sample_date_list:
-                    sample_date_list.append(sample_date)
-                    utilization_list.append(utilization)
-                else:
-                    if self.enable_utilization_detail:
-                        for j in range(len(sample_date_list)):
-                            sample_date_1 = re.sub(r'_', '', sample_date)
-                            sample_date_2 = re.sub(r'_', '', sample_date_list[j])
-
-                            if int(sample_date_1) > int(sample_date_2):
-                                if j == len(sample_date_list)-1:
-                                    sample_date_list.append(sample_date)
-                                    utilization_list.append(utilization)
-                                    break
-                            else:
-                                sample_date_list.insert(j, sample_date)
-                                utilization_list.insert(j, utilization)
-                                break
-                    else:
-                        for j in range(len(sample_date_list)):
-                            if int(sample_date) > int(sample_date_list[j]):
-                                if j == len(sample_date_list)-1:
-                                    sample_date_list.append(sample_date)
-                                    utilization_list.append(utilization)
-                                    break
-                            else:
-                                sample_date_list.insert(j, sample_date)
-                                utilization_list.insert(j, utilization)
-                                break
-
-            for (k, sample_date) in enumerate(sample_date_list):
-                if self.enable_utilization_detail:
-                    sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d_%H%M%S')
-                    expected_linewidth = 0.1
-                    expected_markersize = 0.1
-                else:
-                    sample_date = datetime.datetime.strptime(sample_date, '%Y%m%d')
-                    expected_linewidth = 1
-                    expected_markersize = 1
-
-                sample_date_list[k] = sample_date
-
-            if selected_resource == 'slot':
-                color = 'bo-'
-                fill_color = 'lightblue'
-                fill_alpha = 0.3
-            elif selected_resource == 'cpu':
-                color = 'ro-'
-                fill_color = 'red'
-                fill_alpha = 0.5
-            elif selected_resource == 'mem':
-                color = 'go-'
-                fill_color = 'green'
-                fill_alpha = 0.3
-
-            axes.plot(sample_date_list, utilization_list, color, label=selected_resource.upper(), linewidth=expected_linewidth, markersize=expected_markersize)
-            axes.fill_between(sample_date_list, utilization_list, color=fill_color, alpha=fill_alpha)
-
-            if self.enable_utilization_detail:
-                time.sleep(0.01)
-                my_show_message.terminate()
-
-        axes.legend(loc='upper right')
-        axes.tick_params(axis='x', rotation=15)
-        axes.grid()
-        self.utilization_tab_utilization_canvas.draw()
 # For utilization TAB (end) #
 
 # For license TAB (start) #
@@ -5090,7 +5061,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def gen_license_tab_feature_table(self, license_dic):
         self.license_tab_feature_table.setShowGrid(True)
-        self.license_tab_feature_table.setSortingEnabled(True)
+        self.license_tab_feature_table.setSortingEnabled(False)
         self.license_tab_feature_table.setColumnCount(0)
         self.license_tab_feature_table.setColumnCount(5)
         self.license_tab_feature_table_title_list = ['Server', 'Vendor', 'Feature', 'Issued', 'In_Use']
@@ -5155,6 +5126,8 @@ Please contact with liyanqing1987@163.com with any question."""
 
                     self.license_tab_feature_table.setItem(row, 4, item)
 
+        self.license_tab_feature_table.setSortingEnabled(True)
+
     def license_tab_check_click(self, item=None):
         """
         If click the Job id, jump to the JOB tab and show the job information.
@@ -5177,7 +5150,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def gen_license_tab_expires_table(self, license_dic):
         self.license_tab_expires_table.setShowGrid(True)
-        self.license_tab_expires_table.setSortingEnabled(True)
+        self.license_tab_expires_table.setSortingEnabled(False)
         self.license_tab_expires_table.setColumnCount(0)
         self.license_tab_expires_table.setColumnCount(4)
         self.license_tab_expires_table_title_list = ['License Server', 'Feature', 'Num', 'Expires']
@@ -5233,6 +5206,8 @@ Please contact with liyanqing1987@163.com with any question."""
                         else:
                             item.setForeground(QBrush(Qt.red))
                         self.license_tab_expires_table.setItem(row, 3, item)
+
+        self.license_tab_expires_table.setSortingEnabled(True)
 # For license TAB (end) #
 
 # Export table (start) #
@@ -5478,20 +5453,6 @@ Please contact with liyanqing1987@163.com with any question."""
         self._current_ai_question = user_text
         self._current_ai_tool_calls = []
 
-        # Query similar solved cases, insights, and tool preferences for injection.
-        experience_cases = []
-        insights = []
-        tool_preferences = []
-
-        if hasattr(self, 'ai_log_db_file') and self.ai_log_db_file:
-            t0 = time.time()
-            experience_cases = common_ai_log.find_similar_conversations(self.ai_log_db_file, user_text, limit=3)
-            insights = common_ai_log.find_relevant_insights(self.ai_log_db_file, user_text, limit=5)
-            tool_preferences = common_ai_log.get_tool_preferences(self.ai_log_db_file, user_text, min_count=2)
-
-            if self.ai_debug_action.isChecked():
-                common.bprint(f'[AI Debug] harness query: {time.time() - t0:.2f}s, experience={len(experience_cases)}, insights={len(insights)}, tool_prefs={len(tool_preferences)}', date_format='%Y-%m-%d %H:%M:%S')
-
         # Add to messages.
         self.ai_messages.append({"role": "user", "content": user_text})
 
@@ -5500,11 +5461,6 @@ Please contact with liyanqing1987@163.com with any question."""
             self.ai_messages = [self.ai_messages[0]] + self.ai_messages[-30:]
 
         # Get config.
-        forbidden_commands = []
-
-        if hasattr(config, 'ai_forbidden_commands') and config.ai_forbidden_commands:
-            forbidden_commands = config.ai_forbidden_commands.split()
-
         dangerous_commands = common_ai.DEFAULT_DANGEROUS_COMMANDS
 
         if hasattr(config, 'ai_dangerous_commands') and config.ai_dangerous_commands:
@@ -5529,16 +5485,12 @@ Please contact with liyanqing1987@163.com with any question."""
             license_dic=self.license_dic,
             lmstat_path=lmstat_path,
             lmstat_bsub_command=lmstat_bsub_command,
-            forbidden_commands=forbidden_commands,
             dangerous_commands=dangerous_commands,
             doc_chunks=self.ai_doc_chunks,
             skills=self.ai_skills,
             embedding_model=embedding_model,
             embedding_api_base_url=embedding_api_base_url,
             embedding_api_key=embedding_api_key,
-            experience_cases=experience_cases,
-            insights=insights,
-            tool_preferences=tool_preferences,
             debug=self.ai_debug_action.isChecked()
         )
         self.ai_thread.token_received.connect(self.ai_tab_on_token)
@@ -5628,9 +5580,16 @@ Please contact with liyanqing1987@163.com with any question."""
         self._ai_thinking_dots = (self._ai_thinking_dots % 3) + 1
         text = self._ai_status_base + '.' * self._ai_thinking_dots
 
+        doc_length = self.ai_tab_chat_text.document().characterCount()
+        end_pos = self._ai_frame_end_position()
+
+        if self._ai_thinking_pos >= doc_length or end_pos >= doc_length:
+            self._ai_thinking_timer.stop()
+            return
+
         cursor = self.ai_tab_chat_text.textCursor()
         cursor.setPosition(self._ai_thinking_pos)
-        cursor.setPosition(self._ai_frame_end_position(), cursor.KeepAnchor)
+        cursor.setPosition(end_pos, cursor.KeepAnchor)
         cursor.insertText(text, self._ai_thinking_fmt)
         self.ai_tab_chat_text.setTextCursor(cursor)
         self.ai_tab_chat_text.ensureCursorVisible()
@@ -5645,9 +5604,15 @@ Please contact with liyanqing1987@163.com with any question."""
         if hasattr(self, '_ai_thinking_timer'):
             self._ai_thinking_timer.stop()
 
+        doc_length = self.ai_tab_chat_text.document().characterCount()
+        end_pos = self._ai_frame_end_position()
+
+        if self._ai_thinking_pos >= doc_length or end_pos >= doc_length:
+            return
+
         cursor = self.ai_tab_chat_text.textCursor()
         cursor.setPosition(self._ai_thinking_pos)
-        cursor.setPosition(self._ai_frame_end_position(), cursor.KeepAnchor)
+        cursor.setPosition(end_pos, cursor.KeepAnchor)
         cursor.removeSelectedText()
         self.ai_tab_chat_text.setTextCursor(cursor)
 
@@ -6017,15 +5982,162 @@ Please contact with liyanqing1987@163.com with any question."""
         """Called when AI report generation is complete."""
         self._ai_report_close_msgbox()
 
-        # Auto-open the report.
-        import webbrowser
-        webbrowser.open(f'file://{output_file}')
+        if not self._open_in_browser(output_file):
+            QMessageBox.information(self, 'Problem Analysis', f'报告已生成，但无法自动打开浏览器。\n报告路径：\n{output_file}')
 
     def _ai_report_error(self, error_msg):
         """Called when AI report generation fails."""
         self._ai_report_close_msgbox()
 
         QMessageBox.warning(self, 'Error', f'Failed to generate report:\n{error_msg}')
+
+    def ai_cluster_analysis(self):
+        """Generate an AI cluster analysis HTML report and open it in the browser."""
+        if not self.ai_configured:
+            QMessageBox.warning(self, 'Warning', 'AI is not configured. Cannot generate cluster analysis report.')
+            return
+
+        # Guard against re-entry: starting a second run would drop the Python
+        # reference to the still-running QThread and crash the app with
+        # "QThread: Destroyed while thread is still running".
+        if getattr(self, '_cluster_analysis_thread', None) is not None and self._cluster_analysis_thread.isRunning():
+            QMessageBox.information(self, 'Cluster Analysis', '集群分析报告正在生成中，请稍候 ...')
+            return
+
+        # Output path: <cluster_db_path>/ai_report/cluster_analysis_<timestamp>.html.
+        # Falls back to a per-user temp dir when cluster_db_path is read-only.
+        report_dir = common_ai.resolve_report_dir(self.cluster_db_path)
+        output_file = report_dir + '/cluster_analysis_' + datetime.datetime.now().strftime('%Y%m%d_%H%M%S') + '.html'
+
+        lmstat_path = config.lmstat_path if hasattr(config, 'lmstat_path') else 'lmstat'
+        lmstat_bsub_command = config.lmstat_bsub_command if hasattr(config, 'lmstat_bsub_command') else ''
+        embedding_model = config.ai_embedding_model_name if hasattr(config, 'ai_embedding_model_name') else ''
+        embedding_api_base_url = config.ai_embedding_api_base_url if hasattr(config, 'ai_embedding_api_base_url') else ''
+        embedding_api_key = config.ai_embedding_api_key if hasattr(config, 'ai_embedding_api_key') else ''
+
+        self._cluster_analysis_thread = common_ai.ClusterAnalysisThread(
+            api_base_url=config.ai_api_base_url,
+            api_key=config.ai_api_key,
+            model_name=config.ai_model_name,
+            output_file=output_file,
+            tool=self.tool,
+            db_path=self.cluster_db_path,
+            lmstat_path=lmstat_path,
+            lmstat_bsub_command=lmstat_bsub_command,
+            doc_chunks=self.ai_doc_chunks,
+            embedding_model=embedding_model,
+            embedding_api_base_url=embedding_api_base_url,
+            embedding_api_key=embedding_api_key,
+            cluster=self.cluster,
+            debug=self.ai_debug_action.isChecked(),
+        )
+        self._cluster_analysis_canceled = False
+        self._cluster_analysis_thread.finished_signal.connect(self._cluster_analysis_finished)
+        self._cluster_analysis_thread.error_signal.connect(self._cluster_analysis_error)
+        self._cluster_analysis_thread.start()
+
+        # Independent, non-modal info dialog (same style as other bmonitor
+        # dialogs). The Cancel button aborts the analysis.
+        self._cluster_analysis_msgbox = QMessageBox(QMessageBox.Information, 'Cluster Analysis',
+                                                    '正在分析集群状况，请稍候 ...\n'
+                                                    '（耗时通常数十秒到数分钟，完成后会弹出提示并自动打开报告）\n\n'
+                                                    '可点击 Cancel 中止本次分析。',
+                                                    QMessageBox.Cancel, self)
+        self._cluster_analysis_msgbox.setModal(False)
+        self._cluster_analysis_msgbox.buttonClicked.connect(self._cluster_analysis_cancel)
+        self._cluster_analysis_msgbox.show()
+
+    def _cluster_analysis_close_msgbox(self):
+        """Close the cluster analysis progress dialog if it exists."""
+        if hasattr(self, '_cluster_analysis_msgbox') and self._cluster_analysis_msgbox:
+            self._cluster_analysis_msgbox.close()
+            self._cluster_analysis_msgbox = None
+
+    def _cluster_analysis_cancel(self, button=None):
+        """User canceled: ask the thread to stop and suppress the pending result."""
+        self._cluster_analysis_canceled = True
+
+        if getattr(self, '_cluster_analysis_thread', None) is not None:
+            self._cluster_analysis_thread.stop()
+
+        self._cluster_analysis_close_msgbox()
+
+    def _cluster_analysis_finished(self, output_file):
+        """Called when cluster analysis report generation is complete."""
+        self._cluster_analysis_close_msgbox()
+
+        if getattr(self, '_cluster_analysis_canceled', False):
+            return
+
+        opened = self._open_in_browser(output_file)
+
+        if opened:
+            text = f'集群分析完成，报告已在浏览器中打开。\n\n报告路径：\n{output_file}'
+        else:
+            text = f'集群分析完成，但无法自动打开浏览器，请手动打开：\n\n{output_file}'
+
+        # Always announce completion so the result is unmistakable even if the
+        # browser fails to open.
+        QMessageBox.information(self, 'Cluster Analysis', text)
+
+    @staticmethod
+    def _open_in_browser(output_file):
+        """Open a local HTML report in the system browser. Returns True on success.
+
+        The bmonitor launcher prepends $LSFMONITOR_INSTALL_PATH/lib (which ships
+        a custom libsqlite3.so.0) to LD_LIBRARY_PATH. A browser spawned by this
+        process inherits that and loads the wrong libsqlite3, dying silently with
+        no window and no error. So spawn the browser with that lib dir stripped
+        from LD_LIBRARY_PATH, via subprocess (QDesktopServices/webbrowser can't
+        take a custom env).
+        """
+        import shutil
+        import subprocess
+
+        url = QUrl.fromLocalFile(output_file).toString()
+
+        env = os.environ.copy()
+        install_lib = os.path.join(os.environ.get('LSFMONITOR_INSTALL_PATH', ''), 'lib')
+        ld_path = env.get('LD_LIBRARY_PATH', '')
+
+        if ld_path and install_lib:
+            kept = [p for p in ld_path.split(':') if p and os.path.normpath(p) != os.path.normpath(install_lib)]
+
+            if kept:
+                env['LD_LIBRARY_PATH'] = ':'.join(kept)
+            else:
+                env.pop('LD_LIBRARY_PATH', None)
+
+        candidates = []
+        xdg_open = shutil.which('xdg-open')
+
+        if xdg_open:
+            candidates.append([xdg_open, url])
+
+        for browser in (os.environ.get('BROWSER'), 'firefox', 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser'):
+            if browser:
+                browser_path = shutil.which(browser)
+
+                if browser_path:
+                    candidates.append([browser_path, url])
+
+        for command in candidates:
+            try:
+                subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+                return True
+            except Exception:
+                continue
+
+        return False
+
+    def _cluster_analysis_error(self, error_msg):
+        """Called when cluster analysis report generation fails."""
+        self._cluster_analysis_close_msgbox()
+
+        if getattr(self, '_cluster_analysis_canceled', False):
+            return
+
+        QMessageBox.warning(self, 'Error', f'Failed to generate cluster analysis report:\n{error_msg}')
 
     def ai_record_cleanup(self):
         """Clean up AI conversation records by entries limit."""
@@ -6280,19 +6392,6 @@ class CheckIssueReason(QThread):
             common.bprint(f'Getting job {self.issue.lower()} reason for "{self.job}" ...', date_format='%Y-%m-%d %H:%M:%S')
             command = str(command) + ' -j ' + str(self.job)
 
-        os.system(command)
-
-
-class ProcessTracer(QThread):
-    """
-    Start tool process_tracer to trace job process.
-    """
-    def __init__(self, job):
-        super(ProcessTracer, self).__init__()
-        self.job = job
-
-    def run(self):
-        command = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor/tools/process_tracer -j ' + str(self.job)
         os.system(command)
 
 

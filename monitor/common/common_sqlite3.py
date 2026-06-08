@@ -1,12 +1,15 @@
 import os
 import re
 import sys
+import time
 import sqlite3
 
 if 'LSFMONITOR_INSTALL_PATH' in os.environ:
     sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/monitor')
 
 from common import common
+
+JOURNAL_STALE_SECONDS = 600
 
 
 def connect_db_file(db_file, mode='read'):
@@ -19,10 +22,26 @@ def connect_db_file(db_file, mode='read'):
     if mode == 'write':
         journal_db_file = str(db_file) + '-journal'
 
-        if os.path.exists(journal_db_file) and (mode == 'write'):
-            common.bprint(f'Database file "{db_file}" is on another connection, will not connect it.', level='Warning')
-            result = 'locked'
-            return result, conn
+        if os.path.exists(journal_db_file):
+            try:
+                journal_mtime = os.path.getmtime(journal_db_file)
+                journal_age = time.time() - journal_mtime
+            except OSError:
+                journal_age = 0
+
+            if journal_age > JOURNAL_STALE_SECONDS:
+                common.bprint(f'Stale journal file "{journal_db_file}" detected (age: {int(journal_age)}s), removing it.', level='Warning')
+
+                try:
+                    os.remove(journal_db_file)
+                except OSError as error:
+                    common.bprint(f'Failed to remove stale journal file: {error}', level='Error')
+                    result = 'locked'
+                    return result, conn
+            else:
+                common.bprint(f'Database file "{db_file}" is on another connection (journal age: {int(journal_age)}s), will not connect it.', level='Warning')
+                result = 'locked'
+                return result, conn
     elif mode == 'read':
         if not os.path.exists(db_file):
             common.bprint(f'"{db_file}" No such database file.', level='Error')
@@ -31,10 +50,19 @@ def connect_db_file(db_file, mode='read'):
 
     try:
         conn = sqlite3.connect(db_file)
+        conn.execute('PRAGMA busy_timeout=30000')
     except Exception as error:
         common.bprint(f'Failed on connecting database file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
         result = 'failed'
+
+        if conn != '':
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+            conn = ''
 
     return result, conn
 
@@ -48,6 +76,9 @@ def connect_preprocess(db_file, orig_conn, mode='read'):
     else:
         result = 'passed'
         conn = orig_conn
+
+    if result == 'failed' or result == 'locked':
+        return result, conn, None
 
     curs = conn.cursor()
 
@@ -74,12 +105,12 @@ def get_sql_table_list(db_file, orig_conn):
             table_list.append(key)
 
         curs.close()
-
-        if orig_conn == '':
-            conn.close()
     except Exception as error:
         common.bprint(f'Failed on getting table list on db_file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if orig_conn == '':
+            conn.close()
 
     return table_list
 
@@ -102,12 +133,12 @@ def get_sql_table_count(db_file, orig_conn, table_name):
         return_tuple = return_list[0]
         count = return_tuple[0]
         curs.close()
-
+    except Exception as error:
+        common.bprint(f'Failed on getting table count for table "{table_name}" on db_file "' + str(db_file) + '".', level='Error')
+        common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
         if orig_conn == '':
             conn.close()
-    except Exception as error:
-        common.bprint(f'Failed on getting table count fro table "{table_name}" on db_file "' + str(db_file) + '".', level='Error')
-        common.bprint(error, color='red', display_method=1, indent=9)
 
     return count
 
@@ -128,17 +159,17 @@ def get_sql_table_key_list(db_file, orig_conn, table_name, key):
         curs.execute(command)
         key_list = [tuple[0] for tuple in curs.fetchall()]
         curs.close()
-
-        if orig_conn == '':
-            conn.close()
     except Exception as error:
         common.bprint(f'Failed on getting table key list on db_file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if orig_conn == '':
+            conn.close()
 
     return key_list
 
 
-def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condition=''):
+def get_sql_table_data(db_file, orig_conn, table_name, key_list=None, select_condition='', select_params=None):
     """
     With specified db_file-table_name, get all data from specified key_list.
     """
@@ -154,15 +185,15 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condi
         if select_condition:
             command = str(command) + ' ' + str(select_condition)
 
-        results = curs.execute(command)
+        if select_params:
+            results = curs.execute(command, select_params)
+        else:
+            results = curs.execute(command)
         all_items = results.fetchall()
         table_key_list = [tuple[0] for tuple in curs.description]
         curs.close()
 
-        if orig_conn == '':
-            conn.close()
-
-        if len(key_list) == 0:
+        if not key_list:
             key_list = table_key_list
         else:
             for key in key_list:
@@ -186,6 +217,9 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=[], select_condi
     except Exception as error:
         common.bprint(f'Failed on getting table info from table "{table_name}" of db_file "{db_file}".', level='Warning')
         common.bprint(error, color='yellow', display_method=1, indent=11)
+    finally:
+        if orig_conn == '':
+            conn.close()
 
     return data_dic
 
@@ -206,12 +240,12 @@ def delete_sql_table_rows(db_file, orig_conn, table_name, row_id, begin_line, en
 
         if commit:
             conn.commit()
-
-            if orig_conn == '':
-                conn.close()
     except Exception as error:
         common.bprint(f'Failed on deleting table "{table_name}" lines {begin_line}-{end_line}.', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if commit and orig_conn == '':
+            conn.close()
 
 
 def cleanup_sql_table(db_file, orig_conn, table_name, commit=True):
@@ -230,12 +264,12 @@ def cleanup_sql_table(db_file, orig_conn, table_name, commit=True):
 
         if commit:
             conn.commit()
-
-            if orig_conn == '':
-                conn.close()
     except Exception as error:
         common.bprint(f'Failed on cleaning up table "{table_name}" from db_file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if commit and orig_conn == '':
+            conn.close()
 
 
 def drop_sql_table(db_file, orig_conn, table_name, commit=True):
@@ -254,12 +288,12 @@ def drop_sql_table(db_file, orig_conn, table_name, commit=True):
 
         if commit:
             conn.commit()
-
-            if orig_conn == '':
-                conn.close()
     except Exception as error:
         common.bprint(f'Failed on drop table "{table_name}" from db_file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if commit and orig_conn == '':
+            conn.close()
 
 
 def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
@@ -278,12 +312,12 @@ def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
 
         if commit:
             conn.commit()
-
-            if orig_conn == '':
-                conn.close()
     except Exception as error:
         common.bprint(f'Failed on creating table "{table_name}" on db file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if commit and orig_conn == '':
+            conn.close()
 
 
 def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=True):
@@ -302,12 +336,12 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
 
         if commit:
             conn.commit()
-
-            if orig_conn == '':
-                conn.close()
     except Exception as error:
         common.bprint(f'Failed on inserting specified values into table "{table_name}" on db file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
+    finally:
+        if commit and orig_conn == '':
+            conn.close()
 
 
 def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', where_condition='', commit=True):
@@ -327,15 +361,15 @@ def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', wher
 
             if commit:
                 conn.commit()
-
-                if orig_conn == '':
-                    conn.close()
         except Exception as error:
             common.bprint(f'Failed on updating table "{table_name}" on db file "{db_file}".', level='Error')
             common.bprint(error, color='red', display_method=1, indent=9)
+        finally:
+            if commit and orig_conn == '':
+                conn.close()
 
 
-def gen_sql_table_key_string(key_list, key_type_list=[]):
+def gen_sql_table_key_string(key_list, key_type_list=None):
     """
     Switch the input key_list into the sqlite table key string.
     """
@@ -344,7 +378,7 @@ def gen_sql_table_key_string(key_list, key_type_list=[]):
     for i in range(len(key_list)):
         key = key_list[i]
 
-        if len(key_type_list) == len(key_list):
+        if key_type_list and len(key_type_list) == len(key_list):
             key_type = key_type_list[i]
         else:
             key_type = 'TEXT'

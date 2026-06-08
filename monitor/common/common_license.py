@@ -20,6 +20,7 @@ class GetLicenseInfo():
         self.specified_feature = specified_feature
         self.lmstat_path = lmstat_path
         self.bsub_command = bsub_command
+        self.specified_servers = specified_servers
 
         if specified_servers or excluded_servers:
             server_list = os.environ['LM_LICENSE_FILE'].split(':')
@@ -42,8 +43,6 @@ class GetLicenseInfo():
 
         if specified_server:
             lmstat_command = str(lmstat_command) + ' -c ' + str(specified_server)
-        elif self.specified_server:
-            lmstat_command = str(lmstat_command) + ' -c ' + str(self.specified_server)
 
         if self.specified_feature:
             lmstat_command = str(lmstat_command) + ' ' + str(self.specified_feature)
@@ -87,7 +86,7 @@ class GetLicenseInfo():
             stdout_list = []
             lm_license_file_list = os.environ['LM_LICENSE_FILE'].split(':')
 
-            with ProcessPoolExecutor(max_workers=len(lm_license_file_list)) as executor:
+            with ProcessPoolExecutor(max_workers=min(len(lm_license_file_list), 16)) as executor:
                 job_list = []
 
                 for lm_license_file in lm_license_file_list:
@@ -96,9 +95,10 @@ class GetLicenseInfo():
                         job_list.append(executor.submit(common.run_command, lmstat_command))
 
                 for job in as_completed(job_list):
-                    for tuple_line in job.result():
-                        if isinstance(tuple_line, bytes):
-                            stdout_list.extend(str(tuple_line, 'unicode_escape').split('\n'))
+                    (return_code, stdout, stderr) = job.result()
+
+                    if isinstance(stdout, bytes):
+                        stdout_list.extend(str(stdout, 'unicode_escape').split('\n'))
         else:
             lmstat_command = self.get_lmstat_command()
             (return_code, stdout, stderr) = common.run_command(lmstat_command)
@@ -518,6 +518,7 @@ def switch_start_time(start_time, compare_second='', format=''):
             start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
         except Exception:
             common.bprint(f'Value of variable "start_time_with_year" is "{start_time_with_year}", not follow the time format "%Y %a %m/%d %H:%M".', level='Error')
+            return new_start_time
 
         if not compare_second:
             compare_second = time.time()
@@ -557,7 +558,13 @@ def switch_start_time_to_seconds(start_time):
     if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
         current_year = datetime.date.today().year
         start_time_with_year = str(current_year) + ' ' + str(start_time)
-        start_seconds = int(time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M')))
+
+        try:
+            start_seconds = int(time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M')))
+        except Exception:
+            common.bprint(f'Value of variable "start_time_with_year" is "{start_time_with_year}", not follow the time format "%Y %a %m/%d %H:%M".', level='Error')
+            return start_seconds
+
         current_seconds = int(time.time())
 
         if start_seconds > current_seconds:

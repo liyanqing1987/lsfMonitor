@@ -98,7 +98,7 @@ class PredictModel:
                 logger.error("Error: %s" % str(error))
                 predict_memory = 1
 
-        lsf_unit_for_limits = common_lsf.get_lsf_unit_for_limits()
+        lsf_unit_for_limits = 'MB'
         result_prediction = common.memory_unit_from_gb_other(predict_memory, unit=lsf_unit_for_limits)
 
         logger.info("predict max memory is %s %s" % (str(result_prediction), lsf_unit_for_limits))

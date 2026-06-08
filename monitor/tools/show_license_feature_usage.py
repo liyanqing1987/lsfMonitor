@@ -16,15 +16,9 @@ from common import common_license
 from common import common_lsf
 from common import common
 
-# Import local config file if exists.
-local_config_dir = str(os.environ['HOME']) + '/.lsfMonitor/conf'
-local_config = str(local_config_dir) + '/config.py'
+from common import common_config
 
-if os.path.exists(local_config):
-    sys.path.append(local_config_dir)
-    import config
-else:
-    from conf import config
+config = common_config.load_config()
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -140,6 +134,7 @@ class ShowLicenseFreatureUsage(QMainWindow):
                 start_second = time.mktime(time.strptime(submit_time_with_year, '%Y %b %d %H:%M'))
             except Exception:
                 common.bprint(f'*Warning*: Variable "submit_time_with_year", value is "{submit_time_with_year}", not follow the time format "%Y %b %d %H:%M".')
+                return new_submit_time
 
             if not compare_second:
                 compare_second = time.time()

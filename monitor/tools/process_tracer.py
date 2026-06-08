@@ -59,6 +59,10 @@ class ProcessTracer(QMainWindow):
         command = 'bjobs -UF ' + str(job)
         job_dic = common_lsf.get_lsf_bjobs_uf_info(command)
 
+        if job not in job_dic:
+            common.bprint(f'Job "{job}" is not found.', level='Error')
+            sys.exit(1)
+
         if job_dic[job]['status'] != 'RUN':
             common.bprint(f'Job "{job}" is not running, cannot get process status.', level='Error')
             sys.exit(1)
@@ -101,7 +105,7 @@ class ProcessTracer(QMainWindow):
                        'command': [],
                       }
 
-        command = 'ps -o ruser=userForLongName -o pid,%cpu,%mem,stat,start,command -f' + ','.join(self.pid_list)
+        command = 'ps -o ruser=userForLongName -o pid,%cpu,%mem,stat,start,command -f -p ' + ','.join(self.pid_list)
 
         if self.job:
             bsub_command = self.get_bsub_command()

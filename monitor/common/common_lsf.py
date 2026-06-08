@@ -624,7 +624,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
     my_dic = {}
     job = ''
     pending_mark = False
-    lsf_unit_for_limits = 'MB'
+    lsf_unit_for_limits = get_lsf_unit_for_limits()
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -985,8 +985,13 @@ def get_host_queue_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
 def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
     """
     Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
+    Try "badmin showconf mbd all" first, fall back to reading lsf.conf via $LSF_ENVDIR.
+    LSF default is MB, volclava/openlava default is KB.
     """
-    lsf_unit_for_limits = 'MB'
+    unit_map = {'K': 'KB', 'M': 'MB', 'G': 'GB', 'T': 'TB',
+                'KB': 'KB', 'MB': 'MB', 'GB': 'GB', 'TB': 'TB'}
+
+    # Try badmin command (works in LSF).
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -994,10 +999,42 @@ def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
 
         if re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line):
             my_match = re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line)
-            lsf_unit_for_limits = my_match.group(1)
-            break
+            value = my_match.group(1).upper()
+            return unit_map.get(value, value)
 
-    return lsf_unit_for_limits
+    # Fallback: read lsf.conf from $LSF_ENVDIR or $LSF_CONFDIR.
+    lsf_conf = ''
+
+    for env_var in ['LSF_ENVDIR', 'LSF_CONFDIR']:
+        env_path = os.environ.get(env_var, '')
+
+        if env_path:
+            candidate = os.path.join(env_path, 'lsf.conf')
+
+            if os.path.exists(candidate):
+                lsf_conf = candidate
+                break
+
+    if lsf_conf:
+        try:
+            with open(lsf_conf, 'r') as f:
+                for line in f:
+                    line = line.strip()
+
+                    if re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line):
+                        my_match = re.match(r'^\s*LSF_UNIT_FOR_LIMITS\s*=\s*(\S+)\s*$', line)
+                        value = my_match.group(1).upper()
+                        return unit_map.get(value, value)
+        except Exception:
+            pass
+
+    # Default: LSF=MB, but if we can't determine, use KB (safer for volclava/openlava).
+    (tool, tool_version, cluster, master) = get_lsid_info()
+
+    if tool == 'LSF':
+        return 'MB'
+    else:
+        return 'KB'
 
 
 def switch_bjobs_uf_time(bjobs_uf_time, format=''):
