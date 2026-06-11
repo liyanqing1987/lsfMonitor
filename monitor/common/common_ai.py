@@ -1982,7 +1982,7 @@ def render_cluster_dashboard(metrics):
     )
 
     # ---- 集群现状: a single section; 主机状态/队列负载/作业与用户分析 are sub-parts ----
-    parts.append('<h2>集群现状</h2>')
+    parts.append('<h2 id="sec-status">集群现状</h2>')
 
     # 总揽: 主机数 / 总核数 / 总slots / 总内存 / 总作业数 (job summary last).
     run_n = metrics.get('jobs_run')
@@ -2005,7 +2005,7 @@ def render_cluster_dashboard(metrics):
     parts.append('<div class="panel"><div class="panel-h">利用率</div>' + gauges + '</div>')
 
     # ---- 主机状态 (sub-part): CSS bar chart + collapsible per-host detail ----
-    parts.append('<h3>主机状态</h3>')
+    parts.append('<h3 id="sec-hosts">主机状态</h3>')
     bar_order = [
         ('ok', open_n, 'ok'),
         ('closed_Admin', states.get('closed_Admin', 0), 'warn'),
@@ -2055,7 +2055,7 @@ def render_cluster_dashboard(metrics):
         )
 
     # ---- 队列负载 (sub-part): table + composition bars; >10 queues collapse ----
-    parts.append('<h3>队列负载</h3>')
+    parts.append('<h3 id="sec-queues">队列负载</h3>')
 
     if queues:
         head = ('<tr><th>队列名</th><th>优先级</th><th>状态</th><th>队列slots</th>'
@@ -2136,19 +2136,19 @@ def render_cluster_dashboard(metrics):
     users = metrics.get('active_users', [])
 
     if reasons or users:
-        parts.append('<h3>作业与用户分析</h3>')
+        parts.append('<h3 id="sec-jobs">作业与用户分析</h3>')
         parts.append('<div class="two-col">')
 
         # Pending reasons.
         block = ['<div class="panel"><div class="panel-h">排队原因 Top</div>']
 
         if reasons:
-            rr = ['<table><tr><th>排队原因</th><th class="r">作业数</th></tr>']
+            rr = ['<table class="sortable"><thead><tr><th>排队原因</th><th class="r">作业数</th></tr></thead><tbody>']
 
             for item in reasons:
                 rr.append(f'<tr><td>{esc(item["reason"])}</td><td class="r">{item["count"]}</td></tr>')
 
-            rr.append('</table>')
+            rr.append('</tbody></table>')
             block.append(''.join(rr))
         else:
             block.append('<p>无排队作业。</p>')
@@ -2160,13 +2160,13 @@ def render_cluster_dashboard(metrics):
         block = ['<div class="panel"><div class="panel-h">活跃用户 Top</div>']
 
         if users:
-            uu = ['<table><tr><th>用户</th><th class="r">运行</th><th class="r">排队</th><th class="r">总作业</th></tr>']
+            uu = ['<table class="sortable"><thead><tr><th>用户</th><th class="r">运行</th><th class="r">排队</th><th class="r">总作业</th></tr></thead><tbody>']
 
             for u in users:
                 uu.append(f'<tr><td>{esc(u["user"])}</td><td class="r">{u["run"]}</td>'
                           f'<td class="r">{u["pend"]}</td><td class="r">{u["njobs"]}</td></tr>')
 
-            uu.append('</table>')
+            uu.append('</tbody></table>')
             block.append(''.join(uu))
         else:
             block.append('<p>当前无活跃作业。</p>')
@@ -2332,8 +2332,20 @@ def resolve_report_dir(db_path):
 
 def wrap_html_report(content, heading='集群分析报告', meta_line=''):
     """Wrap an HTML fragment into a full styled HTML page."""
+    import re as _re
+
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     meta = meta_line if meta_line else f'Generated: {timestamp}'
+
+    # Inject id attributes into LLM-generated h2 headings that lack them.
+    _heading_id_map = {'集群问题': 'sec-issues', '分析汇总': 'sec-summary'}
+
+    for h_text, h_id in _heading_id_map.items():
+        content = _re.sub(
+            r'<h2(?!\s[^>]*id=)([^>]*)>' + _re.escape(h_text) + r'</h2>',
+            rf'<h2 id="{h_id}"\1>{h_text}</h2>',
+            content
+        )
 
     # Click-to-sort for tables marked .sortable: numeric columns sort by value,
     # others by string. Self-contained vanilla JS (offline-safe, no deps).
@@ -2388,11 +2400,45 @@ def wrap_html_report(content, heading='集群分析报告', meta_line=''):
     });
     th.setAttribute('data-dir', asc ? 'asc' : 'desc');
   }
-  document.querySelectorAll('table.sortable').forEach(function (table) {
+  document.querySelectorAll('table').forEach(function (table) {
     var thead = table.tHead;
     if (!thead || !thead.rows.length) return;
+    table.classList.add('sortable');
     Array.prototype.forEach.call(thead.rows[0].cells, function (th, idx) {
       th.addEventListener('click', function () { sortTable(table, idx, th); });
+    });
+  });
+})();
+</script>
+<script>
+(function () {
+  var nav = document.querySelector('.side-nav');
+  if (!nav) return;
+  var links = nav.querySelectorAll('a[href^="#"]');
+  var sections = [];
+  links.forEach(function (a) {
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({ el: el, link: a });
+  });
+  if (!sections.length) return;
+  function onScroll() {
+    var scrollY = window.scrollY || window.pageYOffset;
+    var active = sections[0];
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].el.offsetTop - 80 <= scrollY) active = sections[i];
+    }
+    links.forEach(function (a) { a.classList.remove('active'); });
+    if (active) active.link.classList.add('active');
+  }
+  window.addEventListener('scroll', onScroll);
+  onScroll();
+  // Smooth scroll on nav click
+  links.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      var id = a.getAttribute('href').slice(1);
+      var target = document.getElementById(id);
+      if (target) { e.preventDefault(); target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
     });
   });
 })();
@@ -2418,7 +2464,8 @@ def wrap_html_report(content, heading='集群分析报告', meta_line=''):
 body {{ font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: var(--ink);
         margin: 0; padding: 0; background: var(--bg); line-height: 1.7;
         -webkit-font-smoothing: antialiased; }}
-.wrap {{ max-width: 1080px; margin: 0 auto; padding: 32px 28px 60px; }}
+.wrap {{ max-width: 1080px; margin: 0 auto; padding: 32px 28px 60px 28px; }}
+@media (min-width: 1360px) {{ .wrap {{ margin-left: 260px; }} }}
 h1 {{ color: var(--ink); font-size: 26px; margin: 0 0 6px; letter-spacing: .01em; }}
 h2 {{ color: var(--ink); font-size: 19px; margin: 38px 0 14px; padding: 2px 0 9px 13px;
       border-left: 4px solid var(--blue); border-bottom: 1px solid var(--line);
@@ -2569,9 +2616,32 @@ pre {{ background: #1f2b38; color: #ecf0f1; padding: 12px 14px; border-radius: 8
 pre code {{ background: none; color: inherit; padding: 0; }}
 ul, ol {{ padding-left: 22px; }}
 li {{ margin: 6px 0; }}
+
+/* 左侧导航栏 */
+.side-nav {{ position: fixed; top: 0; left: 0; width: 220px; height: 100vh; overflow-y: auto;
+            background: var(--surface); border-right: 1px solid var(--line); padding: 24px 0;
+            box-shadow: 2px 0 8px var(--shadow); z-index: 100; }}
+.side-nav .nav-title {{ font-size: 14px; font-weight: 700; color: var(--ink); padding: 0 18px 14px;
+                       border-bottom: 1px solid var(--line); margin-bottom: 10px; }}
+.side-nav a {{ display: block; padding: 9px 18px; font-size: 13px; color: var(--muted);
+              text-decoration: none; border-left: 3px solid transparent; transition: all .15s; }}
+.side-nav a:hover {{ color: var(--ink); background: var(--surface-2); }}
+.side-nav a.active {{ color: var(--blue-d); border-left-color: var(--blue); font-weight: 600;
+                     background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }}
+.side-nav a.sub {{ padding-left: 32px; font-size: 12.5px; }}
+@media (max-width: 1359px) {{ .side-nav {{ display: none; }} }}
 </style>
 </head>
 <body>
+<nav class="side-nav">
+<div class="nav-title">{heading}</div>
+<a href="#sec-status">集群现状</a>
+<a href="#sec-hosts" class="sub">主机状态</a>
+<a href="#sec-queues" class="sub">队列负载</a>
+<a href="#sec-jobs" class="sub">作业与用户分析</a>
+<a href="#sec-issues">集群问题</a>
+<a href="#sec-summary">分析汇总</a>
+</nav>
 <div class="wrap">
 <h1>{heading}</h1>
 <div class="header-info">{meta}</div>
@@ -2666,4 +2736,3 @@ class ClusterAnalysisThread(QThread):
                 return
 
             self.error_signal.emit(str(error))
-

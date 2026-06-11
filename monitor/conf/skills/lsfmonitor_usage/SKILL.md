@@ -122,6 +122,7 @@ monitor/bin/bsample [选项]
 | `-u` | 采集用户作业统计 | `bjobs -u all -d -UF` |
 | `-U` | 采集利用率（slot/cpu/mem） | `lsload/bhosts/lshosts` |
 | `-UD` | 计算并保存日利用率 | 基于 -U 数据统计 |
+| `-A` | 生成 AI 集群分析 HTML 报告（需配置 AI） | 大模型调用 |
 | `-c` | 按条目上限清理数据库 | — |
 
 ### 4.3 推荐 crontab 配置
@@ -137,6 +138,7 @@ monitor/bin/bsample [选项]
 30 11,23 * * * /path/to/monitor/bin/bsample -u     # 用户（一天两次）
 */10 * * * * /path/to/monitor/bin/bsample -U       # 利用率
 55 23 * * * /path/to/monitor/bin/bsample -UD       # 日利用率
+5 8 * * * /path/to/monitor/bin/bsample -A         # AI集群分析报告（每天一次）
 ```
 
 > 注意：crontab 中需设置 PATH 和 LSF_* 环境变量，否则 bjobs 等命令无法执行。
@@ -157,6 +159,7 @@ monitor/bin/bsample [选项]
 | `user/{date}` | 用户作业统计 | `bsample -u` |
 | `utilization.db` | slot/cpu/mem 利用率 | `bsample -U` |
 | `utilization_day.db` | 按天汇聚的利用率 | `bsample -UD` |
+| `ai_report/cluster_analysis_*.html` | AI 集群分析报告 | `bsample -A` |
 
 AI 相关数据存储在 `{db_path}/ai/` 下（不按 cluster 分）。
 
