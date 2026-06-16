@@ -38,7 +38,7 @@ config = common_config.load_config()
 
 # Constants
 VERSION = 'V2.3'
-VERSION_DATE = '2026.06.06'
+VERSION_DATE = '2026.06.16'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -5919,7 +5919,8 @@ Please contact with liyanqing1987@163.com with any question."""
             QMessageBox.warning(self, 'Warning', 'AI log database is not initialized.')
             return
 
-        self.ai_search_window = AiRecordSearchWindow(self.ai_log_db_file)
+        restrict_user = '' if USER in ('root', 'lsfadmin') else USER
+        self.ai_search_window = AiRecordSearchWindow(self.ai_log_db_file, restrict_user=restrict_user)
         self.ai_search_window.show()
 
     def ai_problem_analysis(self):
@@ -5932,8 +5933,9 @@ Please contact with liyanqing1987@163.com with any question."""
             QMessageBox.warning(self, 'Warning', 'AI is not configured. Cannot generate analysis report.')
             return
 
-        # Get all conversations.
-        data = common_ai_log.get_all_conversations(self.ai_log_db_file)
+        # Get all conversations (non-admin users only see their own).
+        restrict_user = '' if USER in ('root', 'lsfadmin') else USER
+        data = common_ai_log.get_all_conversations(self.ai_log_db_file, user=restrict_user)
 
         if not data or 'question' not in data or len(data['question']) == 0:
             QMessageBox.information(self, 'Info', 'No conversation records found. Please use the AI helpdesk first.')
@@ -5958,15 +5960,12 @@ Please contact with liyanqing1987@163.com with any question."""
         self._ai_report_thread.error_signal.connect(self._ai_report_error)
         self._ai_report_thread.start()
 
-        # Estimate time: ~1.5min per batch of 50 records.
         total = len(data['question'])
-        batch_count = (total + 49) // 50
-        est_minutes = max(1, round(batch_count * 1.5))
 
         # Show non-modal info dialog (user can dismiss it anytime).
         self._ai_report_msgbox = QMessageBox(QMessageBox.Information, 'Problem Analysis',
                                              f'Generating analysis report ({total} conversations) ...\n'
-                                             f'Approximately {est_minutes} min, will auto-open when done.\n\n'
+                                             f'Will auto-open when done.\n\n'
                                              f'You can close this dialog and continue working.',
                                              QMessageBox.Close, self)
         self._ai_report_msgbox.setModal(False)
@@ -6145,7 +6144,11 @@ Please contact with liyanqing1987@163.com with any question."""
             QMessageBox.warning(self, 'Warning', 'AI log database is not initialized.')
             return
 
-        user_list = common_ai_log.get_user_list(self.ai_log_db_file)
+        # Non-admin users can only clean up their own records.
+        if USER in ('root', 'lsfadmin'):
+            user_list = common_ai_log.get_user_list(self.ai_log_db_file)
+        else:
+            user_list = [USER]
 
         if not user_list:
             QMessageBox.information(self, 'Info', 'No conversation records found.')
@@ -6197,9 +6200,10 @@ class AiInputBox(QTextEdit):
 class AiRecordSearchWindow(QWidget):
     """Window for searching and browsing AI conversation records."""
 
-    def __init__(self, db_file):
+    def __init__(self, db_file, restrict_user=''):
         super().__init__()
         self.db_file = db_file
+        self.restrict_user = restrict_user
         self._search_results = {}
         self.setWindowTitle('AI Record Search')
         self.resize(1000, 700)
@@ -6219,6 +6223,12 @@ class AiRecordSearchWindow(QWidget):
         filter_layout.addWidget(QLabel('User:'))
         self.user_edit = QLineEdit()
         self.user_edit.setFixedWidth(100)
+
+        if self.restrict_user:
+            self.user_edit.setText(self.restrict_user)
+            self.user_edit.setReadOnly(True)
+            self.user_edit.setStyleSheet('background-color: #e0e0e0;')
+
         filter_layout.addWidget(self.user_edit)
 
         filter_layout.addWidget(QLabel('From:'))
@@ -6251,7 +6261,10 @@ class AiRecordSearchWindow(QWidget):
         self.result_table.setHorizontalHeaderLabels(['Time', 'User', 'Question', 'Status'])
         self.result_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.result_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.result_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.result_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.result_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.result_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.result_table.clicked.connect(self._on_row_clicked)
         self.result_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.result_table.customContextMenuRequested.connect(self._show_context_menu)
@@ -6270,10 +6283,12 @@ class AiRecordSearchWindow(QWidget):
 
     def _do_search(self):
         """Execute search with current filter values."""
+        user_filter = self.restrict_user if self.restrict_user else self.user_edit.text().strip()
+
         self._search_results = common_ai_log.search_conversations(
             db_file=self.db_file,
             keyword=self.keyword_edit.text().strip(),
-            user=self.user_edit.text().strip(),
+            user=user_filter,
             date_start=self.date_start_edit.text().strip(),
             date_end=self.date_end_edit.text().strip(),
             resolution=self.resolution_combo.currentText(),

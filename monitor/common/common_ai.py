@@ -733,7 +733,7 @@ class AiChatThread(QThread):
                  db_path='', license_dic=None, lmstat_path='lmstat', lmstat_bsub_command='',
                  dangerous_commands=None, doc_chunks=None, skills=None,
                  embedding_model='', embedding_api_base_url='', embedding_api_key='',
-                 debug=False, confirm_mode='signal', max_tokens=None):
+                 debug=False, confirm_mode='signal', max_tokens=None, max_loops=None):
         super().__init__()
         self.api_base_url = api_base_url.rstrip('/')
         self.api_key = api_key
@@ -752,6 +752,7 @@ class AiChatThread(QThread):
         self.debug = debug
         self.confirm_mode = confirm_mode
         self.max_tokens = max_tokens
+        self.max_loops = max_loops
         self._stop_flag = False
         self._confirm_event = threading.Event()
         self._confirm_result = False
@@ -983,7 +984,7 @@ class AiChatThread(QThread):
             self.error_signal.emit('openai package is not installed. Run: pip install openai')
             return
 
-        max_loops = 10
+        max_loops = self.max_loops if self.max_loops else 10
 
         for loop_i in range(max_loops):
             if self._stop_flag:
@@ -1263,7 +1264,7 @@ class AiChatThread(QThread):
             self.error_signal.emit('anthropic package is not installed. Run: pip install anthropic')
             return
 
-        max_loops = 10
+        max_loops = self.max_loops if self.max_loops else 10
 
         for loop_i in range(max_loops):
             if self._stop_flag:
@@ -1479,6 +1480,75 @@ class AiChatThread(QThread):
 # Cluster analysis report (shared by bsample headless + bmonitor GUI).
 # ============================================================
 
+
+def _collect_raw_data(tool='lsf'):
+    """
+    Parallel collection of all LSF data needed by compute_cluster_metrics and
+    collect_cluster_snapshot. Eliminates redundant serial command execution.
+    Returns a dict with all raw results.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from common import common_lsf
+
+    results = {}
+
+    def _safe_call(key, func, *args, **kwargs):
+        try:
+            return key, func(*args, **kwargs)
+        except Exception as e:
+            return key, e
+
+    def _safe_command(key, command, max_lines=120):
+        try:
+            returncode, stdout, stderr = common.run_command(command)
+            text = (stdout.decode('utf-8', 'ignore') + stderr.decode('utf-8', 'ignore')).strip()
+
+            if not text:
+                return key, '(no output)'
+
+            lines = text.splitlines()
+
+            if len(lines) > max_lines:
+                lines = lines[:max_lines] + [f'... ({len(lines) - max_lines} more lines omitted)']
+
+            return key, '\n'.join(lines)
+        except Exception as e:
+            return key, f'(failed: {e})'
+
+    lsload_kwargs = {'command': 'lsload -l'} if tool == 'openlava' else {}
+
+    tasks = [
+        ('lsid', common_lsf.get_lsid_info),
+        ('bhosts', common_lsf.get_bhosts_info),
+        ('bqueues', common_lsf.get_bqueues_info),
+        ('lsload', lambda: common_lsf.get_lsload_info(**lsload_kwargs)),
+        ('lshosts', common_lsf.get_lshosts_info),
+        ('busers', common_lsf.get_busers_info),
+        ('queue_host', common_lsf.get_queue_host_info),
+    ]
+
+    command_tasks = [
+        ('bjobs_raw', 'bjobs -u all -w'),
+        ('bjobs_pend_raw', 'bjobs -u all -p'),
+        ('bqueues_l_raw', 'bqueues -l'),
+    ]
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = []
+
+        for key, func in tasks:
+            futures.append(executor.submit(_safe_call, key, func))
+
+        for key, command in command_tasks:
+            futures.append(executor.submit(_safe_command, key, command))
+
+        for future in as_completed(futures):
+            key, value = future.result()
+            results[key] = value
+
+    return results
+
+
 def _render_dict_table(data_dic, max_rows=60):
     """Render a {column: [values]} dict (from common_lsf getters) as a compact text table."""
     if not data_dic:
@@ -1517,7 +1587,7 @@ def _render_command_output(command, max_lines=120, timeout=None):
     return '\n'.join(lines)
 
 
-def collect_cluster_snapshot(tool='lsf'):
+def collect_cluster_snapshot(tool='lsf', raw_data=None):
     """
     Collect a high-level, read-only cluster snapshot for the analysis report.
     Covers queues / hosts / load / lshosts / busers / jobs / pending-reasons /
@@ -1526,42 +1596,88 @@ def collect_cluster_snapshot(tool='lsf'):
     Jobs / pending-reasons / queue-config are pre-collected here (rather than left
     for the agent to drill into) so the report can be produced in 1-2 LLM round trips
     instead of 6-7 — ~60% fewer tokens and ~half the wall time, with no quality loss.
+
+    If raw_data is provided (from _collect_raw_data), uses it directly to avoid
+    redundant command execution.
     """
     from common import common_lsf
 
     sections = []
 
-    try:
-        tool_name, tool_version, cluster, master = common_lsf.get_lsid_info()
-        sections.append(f"[Cluster] tool={tool_name} version={tool_version} cluster={cluster} master={master}")
-    except Exception as error:
-        sections.append(f"[Cluster] (failed to get lsid info: {error})")
+    if raw_data:
+        # Use pre-collected data.
+        lsid = raw_data.get('lsid')
 
-    collectors = [
-        ('Queues (bqueues -w)', common_lsf.get_bqueues_info, {}),
-        ('Hosts (bhosts -w)', common_lsf.get_bhosts_info, {}),
-        ('Load (lsload)', common_lsf.get_lsload_info, ({'command': 'lsload -l'} if tool == 'openlava' else {})),
-        ('Host config (lshosts -w)', common_lsf.get_lshosts_info, {}),
-        ('Users (busers all)', common_lsf.get_busers_info, {}),
-    ]
+        if isinstance(lsid, tuple):
+            tool_name, tool_version, cluster, master = lsid
+            sections.append(f"[Cluster] tool={tool_name} version={tool_version} cluster={cluster} master={master}")
+        elif isinstance(lsid, Exception):
+            sections.append(f"[Cluster] (failed to get lsid info: {lsid})")
+        else:
+            sections.append("[Cluster] (no data)")
 
-    for title, func, kwargs in collectors:
+        dict_items = [
+            ('Queues (bqueues -w)', 'bqueues'),
+            ('Hosts (bhosts -w)', 'bhosts'),
+            ('Load (lsload)', 'lsload'),
+            ('Host config (lshosts -w)', 'lshosts'),
+            ('Users (busers all)', 'busers'),
+        ]
+
+        for title, key in dict_items:
+            data = raw_data.get(key)
+
+            if isinstance(data, Exception):
+                sections.append(f"[{title}] (failed: {data})")
+            elif data:
+                sections.append(f"[{title}]\n{_render_dict_table(data)}")
+            else:
+                sections.append(f"[{title}] (no data)")
+
+        command_items = [
+            ('Jobs (bjobs -u all -w)', 'bjobs_raw'),
+            ('Pending reasons (bjobs -u all -p)', 'bjobs_pend_raw'),
+            ('Queue config (bqueues -l)', 'bqueues_l_raw'),
+        ]
+
+        for title, key in command_items:
+            output = raw_data.get(key, '(no data)')
+
+            if isinstance(output, Exception):
+                sections.append(f"[{title}] (failed: {output})")
+            else:
+                sections.append(f"[{title}]\n{output}")
+    else:
+        # Original serial collection (backward compatible).
         try:
-            data_dic = func(**kwargs)
-            sections.append(f"[{title}]\n{_render_dict_table(data_dic)}")
+            tool_name, tool_version, cluster, master = common_lsf.get_lsid_info()
+            sections.append(f"[Cluster] tool={tool_name} version={tool_version} cluster={cluster} master={master}")
         except Exception as error:
-            sections.append(f"[{title}] (failed: {error})")
+            sections.append(f"[Cluster] (failed to get lsid info: {error})")
 
-    # Pre-collect the data the agent would otherwise drill into one command per
-    # LLM loop: running/pending jobs, pending reasons, and full queue config.
-    raw_commands = [
-        ('Jobs (bjobs -u all -w)', 'bjobs -u all -w'),
-        ('Pending reasons (bjobs -u all -p)', 'bjobs -u all -p'),
-        ('Queue config (bqueues -l)', 'bqueues -l'),
-    ]
+        collectors = [
+            ('Queues (bqueues -w)', common_lsf.get_bqueues_info, {}),
+            ('Hosts (bhosts -w)', common_lsf.get_bhosts_info, {}),
+            ('Load (lsload)', common_lsf.get_lsload_info, ({'command': 'lsload -l'} if tool == 'openlava' else {})),
+            ('Host config (lshosts -w)', common_lsf.get_lshosts_info, {}),
+            ('Users (busers all)', common_lsf.get_busers_info, {}),
+        ]
 
-    for title, command in raw_commands:
-        sections.append(f"[{title}]\n{_render_command_output(command)}")
+        for title, func, kwargs in collectors:
+            try:
+                data_dic = func(**kwargs)
+                sections.append(f"[{title}]\n{_render_dict_table(data_dic)}")
+            except Exception as error:
+                sections.append(f"[{title}] (failed: {error})")
+
+        raw_commands = [
+            ('Jobs (bjobs -u all -w)', 'bjobs -u all -w'),
+            ('Pending reasons (bjobs -u all -p)', 'bjobs -u all -p'),
+            ('Queue config (bqueues -l)', 'bqueues -l'),
+        ]
+
+        for title, command in raw_commands:
+            sections.append(f"[{title}]\n{_render_command_output(command)}")
 
     return '\n\n'.join(sections)
 
@@ -1591,10 +1707,13 @@ def _lsf_size_to_mb(value):
     return number * factor
 
 
-def compute_cluster_metrics(tool='lsf'):
+def compute_cluster_metrics(tool='lsf', raw_data=None):
     """
     Compute EXACT, deterministic cluster aggregates for the analysis report's data
     sections (so they never depend on the LLM counting a truncated snapshot).
+
+    If raw_data is provided (from _collect_raw_data), uses it directly to avoid
+    redundant command execution.
 
     Reuses the slot/cpu/mem utilization algorithm proven in
     bsample.py:sample_utilization_info. Every aggregate degrades to None ('N/A')
@@ -1626,20 +1745,30 @@ def compute_cluster_metrics(tool='lsf'):
     }
 
     # ---- Cluster identity (lsid) ----
-    try:
-        t_name, t_ver, cluster, master = common_lsf.get_lsid_info()
+    if raw_data and 'lsid' in raw_data and isinstance(raw_data['lsid'], tuple):
+        t_name, t_ver, cluster, master = raw_data['lsid']
         metrics['tool'] = t_name
         metrics['tool_version'] = t_ver
         metrics['cluster'] = cluster
         metrics['master'] = master
-    except Exception:
-        pass
+    else:
+        try:
+            t_name, t_ver, cluster, master = common_lsf.get_lsid_info()
+            metrics['tool'] = t_name
+            metrics['tool_version'] = t_ver
+            metrics['cluster'] = cluster
+            metrics['master'] = master
+        except Exception:
+            pass
 
     # ---- Hosts: state counts + slot totals (bhosts -w) ----
-    try:
-        bhosts_dic = common_lsf.get_bhosts_info()
-    except Exception:
-        bhosts_dic = {}
+    if raw_data and 'bhosts' in raw_data and not isinstance(raw_data['bhosts'], Exception):
+        bhosts_dic = raw_data['bhosts']
+    else:
+        try:
+            bhosts_dic = common_lsf.get_bhosts_info()
+        except Exception:
+            bhosts_dic = {}
 
     host_names = bhosts_dic.get('HOST_NAME', [])
     metrics['host_total'] = len(host_names)
@@ -1690,20 +1819,26 @@ def compute_cluster_metrics(tool='lsf'):
         metrics['jobs_susp'] = susp
 
     # ---- Queues: per-queue rows + cluster run/pend totals (bqueues -w) ----
-    try:
-        bqueues_dic = common_lsf.get_bqueues_info()
-    except Exception:
-        bqueues_dic = {}
+    if raw_data and 'bqueues' in raw_data and not isinstance(raw_data['bqueues'], Exception):
+        bqueues_dic = raw_data['bqueues']
+    else:
+        try:
+            bqueues_dic = common_lsf.get_bqueues_info()
+        except Exception:
+            bqueues_dic = {}
 
     queue_names = bqueues_dic.get('QUEUE_NAME', [])
 
     # Per-queue total slots = sum of member-host MAX slots (same as the SLOTS
     # column on bmonitor's QUEUES page). bqueues' own MAX field is a per-queue
     # slot *limit* and is usually '-' (unlimited), so it is not what we want.
-    try:
-        queue_host_dic = common_lsf.get_queue_host_info()
-    except Exception:
-        queue_host_dic = {}
+    if raw_data and 'queue_host' in raw_data and not isinstance(raw_data['queue_host'], Exception):
+        queue_host_dic = raw_data['queue_host']
+    else:
+        try:
+            queue_host_dic = common_lsf.get_queue_host_info()
+        except Exception:
+            queue_host_dic = {}
 
     queue_slots_map = {}
 
@@ -1743,10 +1878,13 @@ def compute_cluster_metrics(tool='lsf'):
         metrics['jobs_pend'] = pend_total
 
     # ---- CPU utilization: average lsload 'ut' across hosts ----
-    try:
-        lsload_dic = common_lsf.get_lsload_info(command='lsload -l') if tool == 'openlava' else common_lsf.get_lsload_info(command='lsload')
-    except Exception:
-        lsload_dic = {}
+    if raw_data and 'lsload' in raw_data and not isinstance(raw_data['lsload'], Exception):
+        lsload_dic = raw_data['lsload']
+    else:
+        try:
+            lsload_dic = common_lsf.get_lsload_info(command='lsload -l') if tool == 'openlava' else common_lsf.get_lsload_info(command='lsload')
+        except Exception:
+            lsload_dic = {}
 
     ut_values = []
 
@@ -1758,10 +1896,13 @@ def compute_cluster_metrics(tool='lsf'):
         metrics['util_cpu'] = round(sum(ut_values) / len(ut_values), 1)
 
     # ---- Memory utilization: aggregate (sum(maxmem-mem) / sum(maxmem)) ----
-    try:
-        lshosts_dic = common_lsf.get_lshosts_info()
-    except Exception:
-        lshosts_dic = {}
+    if raw_data and 'lshosts' in raw_data and not isinstance(raw_data['lshosts'], Exception):
+        lshosts_dic = raw_data['lshosts']
+    else:
+        try:
+            lshosts_dic = common_lsf.get_lshosts_info()
+        except Exception:
+            lshosts_dic = {}
 
     # Total physical cores (lshosts ncpus).
     cores_total = sum(v for v in (_lsf_int(c) for c in lshosts_dic.get('ncpus', [])) if v is not None)
@@ -1838,8 +1979,15 @@ def compute_cluster_metrics(tool='lsf'):
         metrics['pending_reasons'] = []
 
     # ---- Active users (busers all): top by running + pending ----
+    if raw_data and 'busers' in raw_data and not isinstance(raw_data['busers'], Exception):
+        busers_dic = raw_data['busers']
+    else:
+        try:
+            busers_dic = common_lsf.get_busers_info()
+        except Exception:
+            busers_dic = {}
+
     try:
-        busers_dic = common_lsf.get_busers_info()
         users = []
 
         for i, user in enumerate(busers_dic.get('USER/GROUP', [])):
@@ -2216,16 +2364,25 @@ def generate_cluster_analysis_report(api_base_url, api_key, model_name, tool='ls
     on_thread_created: optional callback receiving the inner AiChatThread so a caller
     (e.g. the GUI) can request cancellation via thread.stop().
     """
+    import time as _time
     from PyQt5.QtCore import QCoreApplication
+
+    _t_total_start = _time.time()
 
     # AiChatThread is a QThread (QObject); ensure an application object exists for headless use.
     if QCoreApplication.instance() is None:
         generate_cluster_analysis_report._app = QCoreApplication([])
 
+    # Parallel data collection: all LSF commands run concurrently, results shared
+    # between compute_cluster_metrics and collect_cluster_snapshot (no duplication).
+    _t_collect = _time.time()
+    raw_data = _collect_raw_data(tool)
+    _t_collect_end = _time.time()
+
     # Exact, deterministic data sections (集群现状/主机状态/队列负载) are computed and
     # rendered in Python so they never vary run-to-run. The LLM only writes the
     # analysis sections (集群问题/分析汇总) from these authoritative numbers.
-    metrics = compute_cluster_metrics(tool)
+    metrics = compute_cluster_metrics(tool, raw_data=raw_data)
     dashboard_html = render_cluster_dashboard(metrics)
 
     states = metrics.get('host_states', {})
@@ -2244,7 +2401,7 @@ def generate_cluster_analysis_report(api_base_url, api_key, model_name, tool='ls
         )
     )
 
-    snapshot = collect_cluster_snapshot(tool)
+    snapshot = collect_cluster_snapshot(tool, raw_data=raw_data)
 
     user_prompt = (
         "下面提供两部分输入：(A) 系统已精确计算的权威指标，(B) 集群原始快照数据。\n"
@@ -2278,6 +2435,7 @@ def generate_cluster_analysis_report(api_base_url, api_key, model_name, tool='ls
         debug=debug,
         confirm_mode='auto_reject',
         max_tokens=16384,
+        max_loops=3,
     )
 
     if on_thread_created is not None:
@@ -2289,15 +2447,31 @@ def generate_cluster_analysis_report(api_base_url, api_key, model_name, tool='ls
     thread.error_signal.connect(errors.append)
 
     # Run the agent loop synchronously in the current thread.
+    _t_llm = _time.time()
     thread.run()
+    _t_llm_end = _time.time()
 
     analysis_html = extract_final_text(thread.messages)
 
     if not analysis_html and errors:
         raise RuntimeError(errors[-1])
 
+    _t_total_end = _time.time()
+
+    # Timing summary appended to the report.
+    timing_stats = thread._timing_stats
+    timing_html = (
+        f'<div class="header-info" style="margin-top:40px; padding-top:12px; border-top:1px solid var(--line, #e0e0e0);">'
+        f'<p>耗时统计 — '
+        f'数据采集 {_t_collect_end - _t_collect:.1f}s | '
+        f'LLM分析 {_t_llm_end - _t_llm:.1f}s '
+        f'(调用{timing_stats["llm_calls"]}次, 首token最大延迟{timing_stats["llm_first_token_max"]:.1f}s, '
+        f'生成{timing_stats["output_tokens"]}tokens) | '
+        f'总耗时 {_t_total_end - _t_total_start:.1f}s</p></div>'
+    )
+
     # Deterministic data sections first, then the LLM's analysis sections.
-    return dashboard_html + '\n' + analysis_html
+    return dashboard_html + '\n' + analysis_html + '\n' + timing_html
 
 
 def resolve_report_dir(db_path):
@@ -2634,7 +2808,7 @@ li {{ margin: 6px 0; }}
 </head>
 <body>
 <nav class="side-nav">
-<div class="nav-title">{heading}</div>
+<div class="nav-title">目录导航</div>
 <a href="#sec-status">集群现状</a>
 <a href="#sec-hosts" class="sub">主机状态</a>
 <a href="#sec-queues" class="sub">队列负载</a>

@@ -697,9 +697,26 @@ class AiReportThread(QThread):
         self.conversations_data = conversations_data
         self.output_file = output_file
 
+    _HEADING_ID_MAP = {'概览': 'sec-overview', '详细分析': 'sec-detail', '总结与建议': 'sec-summary'}
+
     def run(self):
+        import time as _time
+
         try:
+            _t_start = _time.time()
             analysis_content = self._generate_analysis()
+            _t_llm_end = _time.time()
+
+            analysis_content = self._inject_heading_ids(analysis_content)
+
+            # Append timing info.
+            timing_html = (
+                f'<div class="header-info" style="margin-top:40px; padding-top:12px; border-top:1px solid #e0e0e0;">'
+                f'<p>耗时统计 — LLM分析 {_t_llm_end - _t_start:.1f}s | '
+                f'总耗时 {_t_llm_end - _t_start:.1f}s</p></div>'
+            )
+            analysis_content += '\n' + timing_html
+
             html = self._wrap_html(analysis_content)
 
             with open(self.output_file, 'w', encoding='utf-8') as f:
@@ -709,27 +726,83 @@ class AiReportThread(QThread):
         except Exception as e:
             self.error_signal.emit(str(e))
 
-    def _build_summaries(self):
-        """Build conversation summaries, batching if too many."""
+    def _inject_heading_ids(self, content):
+        """Inject id attributes into h2 headings that lack them, and strip any LLM-generated h1."""
+        content = re.sub(r'<h1[^>]*>.*?</h1>\s*', '', content)
+
+        for h_text, h_id in self._HEADING_ID_MAP.items():
+            content = re.sub(
+                r'<h2(?!\s[^>]*id=)([^>]*)>' + re.escape(h_text) + r'</h2>',
+                rf'<h2 id="{h_id}"\1>{h_text}</h2>',
+                content
+            )
+
+        return content
+
+    def _build_statistics(self):
+        """Build local statistics from conversation data."""
         data = self.conversations_data
 
         if not data or 'question' not in data:
-            return []
+            return '', []
 
-        summaries = []
         count = len(data['question'])
 
+        # Resolution distribution.
+        resolution_count = {}
+
         for i in range(count):
-            question = data['question'][i] or ''
-            answer = data['answer'][i] or ''
+            res = data.get('resolution', ['unknown'] * count)[i] or 'unknown'
+            resolution_count[res] = resolution_count.get(res, 0) + 1
+
+        # Time distribution (by date).
+        date_count = {}
+
+        for i in range(count):
+            ts = data.get('timestamp', [''] * count)[i] or ''
+            date = ts[:10] if len(ts) >= 10 else 'unknown'
+            date_count[date] = date_count.get(date, 0) + 1
+
+        # Tool usage frequency.
+        tool_count = {}
+
+        for i in range(count):
+            tc_json = data.get('tool_calls', ['[]'] * count)[i] or '[]'
+
+            try:
+                calls = json.loads(tc_json) if isinstance(tc_json, str) else tc_json
+            except (json.JSONDecodeError, TypeError):
+                continue
+
+            for call in calls:
+                if isinstance(call, dict) and call.get('name'):
+                    name = call['name']
+                    tool_count[name] = tool_count.get(name, 0) + 1
+
+        # Build statistics text.
+        stats_lines = []
+        stats_lines.append(f'Total conversations: {count}')
+        stats_lines.append(f'Resolution: {", ".join(f"{k}={v}" for k, v in sorted(resolution_count.items(), key=lambda x: x[1], reverse=True))}')
+
+        if date_count:
+            sorted_dates = sorted(date_count.keys())
+
+            if sorted_dates:
+                stats_lines.append(f'Date range: {sorted_dates[0]} ~ {sorted_dates[-1]}')
+
+        if tool_count:
+            top_tools = sorted(tool_count.items(), key=lambda x: x[1], reverse=True)[:10]
+            stats_lines.append(f'Top tools: {", ".join(f"{k}({v})" for k, v in top_tools)}')
+
+        # Build compact one-line summaries.
+        compact_summaries = []
+
+        for i in range(count):
+            question = (data['question'][i] or '').replace('\n', ' ')[:100]
             resolution = data.get('resolution', ['unknown'] * count)[i] or 'unknown'
-            tool_calls = data.get('tool_calls', ['[]'] * count)[i] or '[]'
+            compact_summaries.append(f'[{resolution}] {question}')
 
-            # Truncate for LLM context.
-            summary = f"Q: {question[:300]}\nA: {answer[:500]}\nResolution: {resolution}\nTools: {tool_calls[:200]}"
-            summaries.append(summary)
-
-        return summaries
+        return '\n'.join(stats_lines), compact_summaries
 
     def _call_llm(self, prompt):
         """Call LLM API and return the text response."""
@@ -756,59 +829,72 @@ class AiReportThread(QThread):
             return response.choices[0].message.content
 
     def _generate_analysis(self):
-        """Generate analysis by calling LLM (batch if needed)."""
-        summaries = self._build_summaries()
+        """Generate analysis with a single LLM call using local statistics + compact summaries."""
+        statistics, compact_summaries = self._build_statistics()
 
-        if not summaries:
+        if not compact_summaries:
             return 'No conversation records found.'
 
-        batch_size = 50
-        all_analysis = []
+        # Build the conversation list for LLM. Cap at ~800 lines to stay within context limits.
+        max_lines = 800
 
-        for start in range(0, len(summaries), batch_size):
-            batch = summaries[start:start + batch_size]
-            batch_text = '\n---\n'.join(batch)
+        if len(compact_summaries) <= max_lines:
+            conversations_text = '\n'.join(compact_summaries)
+        else:
+            conversations_text = '\n'.join(compact_summaries[:max_lines])
+            conversations_text += f'\n... ({len(compact_summaries) - max_lines} more conversations omitted)'
 
-            prompt = f"""请分析以下 {len(batch)} 条HPC集群AI助手的对话记录，生成一份分类分析报告。
+        prompt = f"""请分析以下HPC集群AI助手的对话记录，生成一份分类分析报告。
 
-对话记录:
-{batch_text}
+## 统计摘要
+{statistics}
 
-请按以下格式输出（直接输出HTML内容，不要markdown代码块）:
+## 对话列表（每行格式: [解决状态] 问题摘要）
+{conversations_text}
 
-<h2>概览</h2>
-<table border="1" cellpadding="5" cellspacing="0">
-<tr><th>问题分类</th><th>数量</th><th>占比</th></tr>
-<!-- 列出所有问题分类及统计 -->
+请严格按以下格式输出（直接输出HTML内容，不要markdown代码块，不要输出任何h1标题）。
+注意：三个h2章节必须全部输出，每个分类的每个字段都必须有实际内容（不能为空），不要出现"其他"这种模糊分类。
+
+<h2 id="sec-overview">概览</h2>
+<table>
+<tr><th>问题分类</th><th class="r">数量</th><th class="r">占比</th><th class="r">解决率</th></tr>
+<!-- 每行: <tr><td>分类名</td><td class="r">数量</td><td class="r">百分比</td><td class="r">解决率</td></tr> -->
 </table>
 
-<h2>详细分析</h2>
-<!-- 每个分类: -->
-<h3>分类名称</h3>
-<p><b>常见原因:</b> ...</p>
-<p><b>典型案例:</b> ...</p>
-<p><b>推荐解决方案:</b> ...</p>
+<h2 id="sec-detail">详细分析</h2>
+<!-- 每个分类用一张 issue 卡片，格式如下: -->
+<div class="issue mid">
+<p><span class="badge mid">分类名</span><b>分类标题（含数量）</b></p>
+<p><b>常见原因：</b>具体原因描述</p>
+<p><b>典型案例：</b>具体案例描述</p>
+<p><b>推荐解决方案：</b>具体解决方案</p>
+</div>
+<!-- badge 颜色规则: 占比>=30% 用 high, 占比>=15% 用 mid, 其余用 low -->
+<!-- issue 的 class 对应: high/mid/low -->
 
-<h2>总结与建议</h2>
-<p>...</p>
+<h2 id="sec-summary">总结与建议</h2>
+<div class="card-panel assess"><b>总体评估：</b>一句话总结问题趋势</div>
+<div class="card-panel">
+<b>改进建议：</b>
+<ul>
+<li>具体可执行的建议1</li>
+<li>具体可执行的建议2</li>
+</ul>
+</div>
 """
-            result = self._call_llm(prompt)
-            all_analysis.append(result)
-
-        if len(all_analysis) == 1:
-            return all_analysis[0]
-
-        # Merge multiple batch results.
-        merge_prompt = f"""请将以下 {len(all_analysis)} 份分析报告合并为一份完整报告，保持相同的HTML格式。去重合并分类，重新统计数量和占比。
-
-{"---REPORT---".join(all_analysis)}
-"""
-        return self._call_llm(merge_prompt)
+        return self._call_llm(prompt)
 
     def _wrap_html(self, content):
-        """Wrap analysis content into a full HTML page."""
+        """Wrap analysis content into a full HTML page with side navigation."""
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         total = len(self.conversations_data.get('question', []))
+
+        # Build nav links dynamically from actual h2 headings in content.
+        nav_links = ''
+
+        for match in re.finditer(r'<h2[^>]*id="([^"]+)"[^>]*>(.*?)</h2>', content):
+            h_id, h_text = match.group(1), match.group(2)
+            nav_links += f'<a href="#{h_id}">{h_text}</a>\n'
 
         return f"""<!DOCTYPE html>
 <html>
@@ -816,23 +902,128 @@ class AiReportThread(QThread):
 <meta charset="utf-8">
 <title>AI Problem Analysis Report</title>
 <style>
-body {{ font-family: "Microsoft YaHei", Arial, sans-serif; margin: 40px; background: #f9f9f9; }}
-h1 {{ color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}
-h2 {{ color: #2980b9; margin-top: 30px; }}
-h3 {{ color: #27ae60; }}
-table {{ border-collapse: collapse; width: 100%; margin: 15px 0; }}
-th {{ background-color: #3498db; color: white; padding: 10px; }}
-td {{ padding: 8px; border: 1px solid #ddd; }}
-tr:nth-child(even) {{ background-color: #f2f2f2; }}
-p {{ line-height: 1.8; }}
-.header-info {{ color: #7f8c8d; font-size: 14px; margin-bottom: 20px; }}
+:root {{ --blue:#3498db; --blue-d:#2980b9; --ink:#2c3e50; --muted:#7f8c8d;
+        --red:#e74c3c; --orange:#e67e22; --green:#27ae60; --line:#e3e8ee;
+        --bg:#eef2f6; --surface:#ffffff; --surface-2:#f6f9fc; --surface-3:#fafcfe;
+        --shadow:rgba(15,30,50,.06); --code-bg:#eef2f7; }}
+@media (prefers-color-scheme: dark) {{
+  :root {{ --blue:#4aa3df; --blue-d:#5dade2; --ink:#e6edf3; --muted:#94a3b3;
+          --red:#ef6e63; --orange:#ec9b4d; --green:#3fc77a; --line:#283341;
+          --bg:#0e131a; --surface:#161d27; --surface-2:#1b232f; --surface-3:#1b232f;
+          --shadow:rgba(0,0,0,.45); --code-bg:#202a37; }}
+}}
+* {{ box-sizing: border-box; }}
+body {{ font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif; color: var(--ink);
+       margin: 0; padding: 0; background: var(--bg); line-height: 1.7;
+       -webkit-font-smoothing: antialiased; }}
+.wrap {{ max-width: 1080px; margin: 0 auto; padding: 32px 28px 60px 28px; }}
+@media (min-width: 1360px) {{ .wrap {{ margin-left: 260px; }} }}
+
+h1 {{ color: var(--ink); font-size: 26px; margin: 0 0 6px; letter-spacing: .01em; }}
+h2 {{ color: var(--ink); font-size: 19px; margin: 38px 0 14px; padding: 2px 0 9px 13px;
+     border-left: 4px solid var(--blue); border-bottom: 1px solid var(--line);
+     letter-spacing: .02em; }}
+h3 {{ color: var(--ink); font-size: 15.5px; font-weight: 600; margin: 26px 0 10px;
+     padding-left: 11px; border-left: 3px solid var(--green); opacity: .92; }}
+p {{ margin: 10px 0; font-size: 14.5px; }}
+b {{ color: var(--ink); }}
+ul, ol {{ padding-left: 22px; }}
+li {{ margin: 6px 0; }}
+
+.header-info {{ color: var(--muted); font-size: 13px; margin-bottom: 8px; }}
+
+/* 表格 */
+table {{ border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px;
+        background: var(--surface); border-radius: 10px; overflow: hidden;
+        box-shadow: 0 1px 3px var(--shadow); }}
+th {{ background: linear-gradient(135deg, var(--blue), var(--blue-d)); color: #fff;
+     padding: 10px 12px; text-align: left; font-weight: 600; letter-spacing: .02em; }}
+td {{ padding: 9px 12px; border-bottom: 1px solid var(--line); }}
+tr:last-child td {{ border-bottom: none; }}
+tr:nth-child(even) td {{ background: var(--surface-2); }}
+td.r, th.r {{ text-align: right; font-variant-numeric: tabular-nums; }}
+
+/* 问题卡片与严重度标记 */
+.issue {{ background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--blue);
+         border-radius: 10px; padding: 14px 18px; margin: 12px 0;
+         box-shadow: 0 1px 3px var(--shadow); }}
+.issue.high {{ border-left-color: var(--red); }}
+.issue.mid {{ border-left-color: var(--orange); }}
+.issue.low {{ border-left-color: var(--green); }}
+.badge {{ display: inline-block; font-size: 12px; font-weight: 600; color: #fff;
+         padding: 2px 9px; border-radius: 11px; margin-right: 8px; vertical-align: middle; }}
+.badge.high {{ background: var(--red); }}
+.badge.mid {{ background: var(--orange); }}
+.badge.low {{ background: var(--green); }}
+
+/* 卡片面板 */
+.card-panel {{ background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+              padding: 20px 24px; margin-bottom: 18px; box-shadow: 0 1px 3px var(--shadow); }}
+.card-panel.assess {{ background: color-mix(in srgb, var(--blue) 7%, var(--surface));
+                     border-left: 4px solid var(--blue); }}
+
+code {{ background: var(--code-bg); padding: 2px 5px; border-radius: 4px; font-size: 13px;
+       font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }}
+pre {{ background: #1f2b38; color: #ecf0f1; padding: 12px 14px; border-radius: 8px;
+      overflow-x: auto; font-size: 13px; line-height: 1.5; }}
+pre code {{ background: none; color: inherit; padding: 0; }}
+
+/* 左侧导航栏 */
+.side-nav {{ position: fixed; top: 0; left: 0; width: 220px; height: 100vh; overflow-y: auto;
+            background: var(--surface); border-right: 1px solid var(--line); padding: 24px 0;
+            box-shadow: 2px 0 8px var(--shadow); z-index: 100; }}
+.side-nav .nav-title {{ font-size: 14px; font-weight: 700; color: var(--ink); padding: 0 18px 14px;
+                       border-bottom: 1px solid var(--line); margin-bottom: 10px; }}
+.side-nav a {{ display: block; padding: 9px 18px; font-size: 13px; color: var(--muted);
+              text-decoration: none; border-left: 3px solid transparent; transition: all .15s; }}
+.side-nav a:hover {{ color: var(--ink); background: var(--surface-2); }}
+.side-nav a.active {{ color: var(--blue-d); border-left-color: var(--blue); font-weight: 600;
+                     background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }}
+@media (max-width: 1359px) {{ .side-nav {{ display: none; }} }}
 </style>
 </head>
 <body>
+<nav class="side-nav">
+<div class="nav-title">目录导航</div>
+{nav_links}</nav>
+<div class="wrap">
 <h1>用户常见LSF问题分析及解决方案</h1>
 <div class="header-info">
 <p>Generated: {timestamp} | Total conversations: {total}</p>
 </div>
 {content}
+</div>
+<script>
+(function () {{
+  var nav = document.querySelector('.side-nav');
+  if (!nav) return;
+  var links = nav.querySelectorAll('a[href^="#"]');
+  var sections = [];
+  links.forEach(function (a) {{
+    var id = a.getAttribute('href').slice(1);
+    var el = document.getElementById(id);
+    if (el) sections.push({{ el: el, link: a }});
+  }});
+  if (!sections.length) return;
+  function onScroll() {{
+    var scrollY = window.scrollY || window.pageYOffset;
+    var active = sections[0];
+    for (var i = 0; i < sections.length; i++) {{
+      if (sections[i].el.offsetTop - 80 <= scrollY) active = sections[i];
+    }}
+    links.forEach(function (a) {{ a.classList.remove('active'); }});
+    if (active) active.link.classList.add('active');
+  }}
+  window.addEventListener('scroll', onScroll);
+  onScroll();
+  links.forEach(function (a) {{
+    a.addEventListener('click', function (e) {{
+      var id = a.getAttribute('href').slice(1);
+      var target = document.getElementById(id);
+      if (target) {{ e.preventDefault(); target.scrollIntoView({{ behavior: 'smooth', block: 'start' }}); }}
+    }});
+  }});
+}})();
+</script>
 </body>
 </html>"""
