@@ -38,7 +38,7 @@ config = common_config.load_config()
 
 # Constants
 VERSION = 'V2.3'
-VERSION_DATE = '2026.06.16'
+VERSION_DATE = '2026.07.28'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -241,6 +241,27 @@ class MainWindow(QMainWindow):
 
                 time.sleep(0.01)
                 my_show_message.terminate()
+
+    def _parse_queue_full_name(self, full_name):
+        """
+        正确拆分 '{cluster}-{queue}' 格式，处理集群名含 '-' 的情况。
+        返回 (cluster, queue_name)，无法识别则返回 (None, full_name)。
+        """
+        # 优先匹配当前集群
+        prefix = self.cluster + '-'
+        if full_name.startswith(prefix):
+            return (self.cluster, full_name[len(prefix):])
+
+        # 遍历 DB 中所有已知集群
+        db_root_path = Path(config.db_path)
+        if db_root_path.exists() and db_root_path.is_dir():
+            for entry in os.scandir(db_root_path):
+                if entry.is_dir() and entry.name != 'log' and entry.name != self.cluster:
+                    prefix = entry.name + '-'
+                    if full_name.startswith(prefix):
+                        return (entry.name, full_name[len(prefix):])
+
+        return (None, full_name)
 
     def get_license_dic(self):
         if self.disable_license:
@@ -1116,14 +1137,14 @@ Please contact with liyanqing1987@163.com with any question."""
                     for i in range(len(sample_time_list)):
                         sample_time = sample_time_list[i]
                         current_time = datetime.datetime.strptime(str(sample_time), '%Y%m%d_%H%M%S').timestamp()
-                        runtime = int((current_time-first_sample_time)/60)
+                        runtime = int((current_time - first_sample_time) / 60)
                         runtime_list.append(runtime)
                         mem = mem_list[i]
 
                         if mem == '':
                             mem = '0'
 
-                        real_mem = round(float(mem)/1024, 1)
+                        real_mem = round(float(mem) / 1024, 1)
                         real_mem_list.append(real_mem)
 
                 job_mem_db_conn.close()
@@ -1507,12 +1528,12 @@ Please contact with liyanqing1987@163.com with any question."""
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "User" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem(job_dic[job]['user'])
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Status" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
 
@@ -1528,23 +1549,23 @@ Please contact with liyanqing1987@163.com with any question."""
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Queue" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem(job_dic[job]['queue'])
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Host" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem(job_dic[job]['started_on'])
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Started" item.
-            j = j+1
+            j = j + 1
             start_time = common_lsf.switch_bjobs_uf_time(job_dic[job]['started_time'], '%Y-%m-%d %H:%M:%S')
             item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Project" item.
-            j = j+1
+            j = j + 1
 
             if str(job_dic[job]['project']) != '':
                 item = QTableWidgetItem()
@@ -1552,7 +1573,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Slot" item.
-            j = j+1
+            j = j + 1
 
             if str(job_dic[job]['processors_requested']) != '':
                 item = QTableWidgetItem()
@@ -1560,7 +1581,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "IDLE" item.
-            j = j+1
+            j = j + 1
             idle_value = ''
 
             if str(job_dic[job]['idle_factor']) != '':
@@ -1571,22 +1592,22 @@ Please contact with liyanqing1987@163.com with any question."""
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Rusage" item.
-            j = j+1
+            j = j + 1
             rusage_mem_value = 0
 
             if str(job_dic[job]['rusage_mem']) != '':
                 item = QTableWidgetItem()
-                rusage_mem_value = round(float(job_dic[job]['rusage_mem'])/1024, 1)
+                rusage_mem_value = round(float(job_dic[job]['rusage_mem']) / 1024, 1)
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Mem" item.
-            j = j+1
+            j = j + 1
             mem_value = ''
 
             if (job_dic[job]['status'] != 'DONE') and (job_dic[job]['status'] != 'EXIT'):
                 if str(job_dic[job]['mem']) != '':
-                    mem_value = round(float(job_dic[job]['mem'])/1024, 1)
+                    mem_value = round(float(job_dic[job]['mem']) / 1024, 1)
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, mem_value)
@@ -1596,18 +1617,18 @@ Please contact with liyanqing1987@163.com with any question."""
                 item.setBackground(QBrush(Qt.red))
 
             # Fill "MaxMem" item.
-            j = j+1
+            j = j + 1
             max_mem_value = ''
 
             if str(job_dic[job]['max_mem']) != '':
-                max_mem_value = round(float(job_dic[job]['max_mem'])/1024, 1)
+                max_mem_value = round(float(job_dic[job]['max_mem']) / 1024, 1)
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, max_mem_value)
             self.jobs_tab_table.setItem(i, j, item)
 
             # Fill "Command" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
 
@@ -2022,7 +2043,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Status" item.
-            j = j+1
+            j = j + 1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             status = self.bhosts_dic['STATUS'][index]
             item = QTableWidgetItem(status)
@@ -2039,7 +2060,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Queue" item.
-            j = j+1
+            j = j + 1
             queues = ''
 
             if host in self.host_queue_dic.keys():
@@ -2053,7 +2074,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "MAX" item.
-            j = j+1
+            j = j + 1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             max = self.bhosts_dic['MAX'][index]
 
@@ -2070,7 +2091,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Njobs" item.
-            j = j+1
+            j = j + 1
             index = self.bhosts_dic['HOST_NAME'].index(host)
             njobs = self.bhosts_dic['NJOBS'][index]
 
@@ -2088,7 +2109,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Ut" item.
-            j = j+1
+            j = j + 1
             ut = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
@@ -2112,7 +2133,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "MaxMem" item with unit "GB".
-            j = j+1
+            j = j + 1
             maxmem = '0'
 
             if host in self.lshosts_dic['HOST_NAME']:
@@ -2130,7 +2151,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
             # Fill "aMem" item with unit "GB".
             # "aMem" means avaliable mem, it is from "lsload -l" command, same with "free -g" result.
-            j = j+1
+            j = j + 1
 
             if ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
                 index = self.lsload_dic['HOST_NAME'].index(host)
@@ -2142,14 +2163,14 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, mem)
 
-            if fatal_error or (maxmem and (float(mem)/float(maxmem) < 0.1)):
+            if fatal_error or (maxmem and (float(mem) / float(maxmem) < 0.1)):
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "saMem" item with unit "GB".
             # "saMem" means scheduling avaliable mem, it is from "bhosts -l" command.
-            j = j+1
+            j = j + 1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
                 mem = self.bhosts_load_dic[host]['Total']['mem']
@@ -2160,13 +2181,13 @@ Please contact with liyanqing1987@163.com with any question."""
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, mem)
 
-            if fatal_error or (maxmem and (float(mem)/float(maxmem) < 0.1)):
+            if fatal_error or (maxmem and (float(mem) / float(maxmem) < 0.1)):
                 item.setBackground(QBrush(Qt.red))
 
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "MaxSwp" item with unit "GB".
-            j = j+1
+            j = j + 1
             maxswp = '0'
 
             if host in self.lshosts_dic['HOST_NAME']:
@@ -2183,7 +2204,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Swp" item with unit "GB".
-            j = j+1
+            j = j + 1
             swp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
@@ -2202,7 +2223,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.hosts_tab_table.setItem(i, j, item)
 
             # Fill "Tmp" item with unit "GB".
-            j = j+1
+            j = j + 1
             tmp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
@@ -3000,72 +3021,72 @@ Please contact with liyanqing1987@163.com with any question."""
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Job_Num" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(user_dic[user]['job_num']))
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Pass_Rate" item.
-            j = j+1
+            j = j + 1
             pass_rate = 0
 
             if user_dic[user]['job_num']:
-                pass_rate = round((100*float(user_dic[user]['done_num'])/float(user_dic[user]['job_num'])), 1)
+                pass_rate = round((100 * float(user_dic[user]['done_num']) / float(user_dic[user]['job_num'])), 1)
 
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, pass_rate)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Rusage_Mem" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
-            total_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024, 1)
+            total_rusage_mem = round(float(user_dic[user]['rusage_mem']) / 1024, 1)
             item.setData(Qt.DisplayRole, total_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Rusage_Mem" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
             avg_rusage_mem = 0
 
             if user_dic[user]['job_num']:
-                avg_rusage_mem = round(float(user_dic[user]['rusage_mem'])/1024/float(user_dic[user]['job_num']), 1)
+                avg_rusage_mem = round(float(user_dic[user]['rusage_mem']) / 1024 / float(user_dic[user]['job_num']), 1)
 
             item.setData(Qt.DisplayRole, avg_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Max_Mem" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
-            total_max_mem = round(float(user_dic[user]['max_mem'])/1024, 1)
+            total_max_mem = round(float(user_dic[user]['max_mem']) / 1024, 1)
             item.setData(Qt.DisplayRole, total_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Max_Mem" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
             avg_max_mem = 0
 
             if user_dic[user]['job_num']:
-                avg_max_mem = round(float(user_dic[user]['max_mem'])/1024/float(user_dic[user]['job_num']), 1)
+                avg_max_mem = round(float(user_dic[user]['max_mem']) / 1024 / float(user_dic[user]['job_num']), 1)
 
             item.setData(Qt.DisplayRole, avg_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Total_Mem_Waste" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
-            total_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024, 1)
+            total_mem_waste = round((float(user_dic[user]['rusage_mem']) - float(user_dic[user]['max_mem'])) / 1024, 1)
             item.setData(Qt.DisplayRole, total_mem_waste)
             self.users_tab_table.setItem(i, j, item)
 
             # Fill "Avg_Mem_Waste" item.
-            j = j+1
+            j = j + 1
             item = QTableWidgetItem()
             avg_mem_waste = 0
 
             if user_dic[user]['job_num']:
-                avg_mem_waste = round((float(user_dic[user]['rusage_mem'])-float(user_dic[user]['max_mem']))/1024/float(user_dic[user]['job_num']), 1)
+                avg_mem_waste = round((float(user_dic[user]['rusage_mem']) - float(user_dic[user]['max_mem'])) / 1024 / float(user_dic[user]['job_num']), 1)
 
             item.setData(Qt.DisplayRole, avg_mem_waste)
             self.users_tab_table.setItem(i, j, item)
@@ -3249,7 +3270,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.queues_tab_table.setRowCount(0)
 
         if 'QUEUE_NAME' in self.bqueues_dic:
-            self.queues_tab_table.setRowCount(len(self.bqueues_dic['QUEUE_NAME'])+1)
+            self.queues_tab_table.setRowCount(len(self.bqueues_dic['QUEUE_NAME']) + 1)
             queue_list = copy.deepcopy(self.bqueues_dic['QUEUE_NAME'])
         else:
             self.queues_tab_table.setRowCount(1)
@@ -3265,7 +3286,7 @@ Please contact with liyanqing1987@163.com with any question."""
             queue = queue_list[i]
             index = 0
 
-            if i < len(queue_list)-1:
+            if i < len(queue_list) - 1:
                 index = self.bqueues_dic['QUEUE_NAME'].index(queue)
 
             # Fill "QUEUE" item.
@@ -3275,7 +3296,7 @@ Please contact with liyanqing1987@163.com with any question."""
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "SLOTS" item.
-            j = j+1
+            j = j + 1
             total = 0
 
             if queue == 'ALL':
@@ -3307,9 +3328,9 @@ Please contact with liyanqing1987@163.com with any question."""
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "PEND" item.
-            j = j+1
+            j = j + 1
 
-            if i == len(queue_list)-1:
+            if i == len(queue_list) - 1:
                 pend = str(pend_sum)
             else:
                 pend = self.bqueues_dic['PEND'][index]
@@ -3325,9 +3346,9 @@ Please contact with liyanqing1987@163.com with any question."""
             self.queues_tab_table.setItem(i, j, item)
 
             # Fill "RUN" item.
-            j = j+1
+            j = j + 1
 
-            if i == len(queue_list)-1:
+            if i == len(queue_list) - 1:
                 run = str(run_sum)
             else:
                 run = self.bqueues_dic['RUN'][index]
@@ -3605,9 +3626,9 @@ Please contact with liyanqing1987@163.com with any question."""
                         for date in tmp_date_dic.keys():
                             queue_date_dic.setdefault(date, {})
                             queue_date_dic[date].setdefault(queue, {'total': [], 'pend': [], 'run': []})
-                            queue_date_dic[date][queue]['total'] = int(sum(tmp_date_dic[date]['total'])/len(tmp_date_dic[date]['total']))
-                            queue_date_dic[date][queue]['pend'] = int(sum(tmp_date_dic[date]['pend'])/len(tmp_date_dic[date]['pend']))
-                            queue_date_dic[date][queue]['run'] = int(sum(tmp_date_dic[date]['run'])/len(tmp_date_dic[date]['run']))
+                            queue_date_dic[date][queue]['total'] = int(sum(tmp_date_dic[date]['total']) / len(tmp_date_dic[date]['total']))
+                            queue_date_dic[date][queue]['pend'] = int(sum(tmp_date_dic[date]['pend']) / len(tmp_date_dic[date]['pend']))
+                            queue_date_dic[date][queue]['run'] = int(sum(tmp_date_dic[date]['run']) / len(tmp_date_dic[date]['run']))
 
                 queue_db_conn.close()
 
@@ -3867,7 +3888,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     continue
 
                 if '-' in queue:
-                    q_cluster = queue.split('-', 1)[0]
+                    q_cluster, _ = self._parse_queue_full_name(queue)
 
                     if q_cluster == self.cluster:
                         checked_queue_list.append(queue)
@@ -3923,7 +3944,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                 # 获取队列所属集群
                 if '-' in queue_name:
-                    queue_cluster = queue_name.split('-', 1)[0]
+                    queue_cluster, _ = self._parse_queue_full_name(queue_name)
 
                     if queue_cluster in selected_clusters:
                         qBox.setChecked(True)
@@ -4072,7 +4093,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
         for i in range(len(all_change_times) - 1):
             slice_start = max(all_change_times[i], begin_second)
-            slice_end = min(all_change_times[i+1], end_second)
+            slice_end = min(all_change_times[i + 1], end_second)
 
             if slice_start >= slice_end:
                 continue
@@ -4210,9 +4231,9 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if '-' in q:
-                cluster, queue_name = q.split('-', 1)
+                cluster, queue_name = self._parse_queue_full_name(q)
 
-                if cluster in selected_clusters:
+                if cluster and cluster in selected_clusters:
                     if cluster not in queue_cluster_map:
                         queue_cluster_map[cluster] = []
 
@@ -4337,7 +4358,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 df_cluster['time_key'] = df_cluster['sample_second'].apply(lambda x: time.strftime('%Y%m%d_%H%M%S', time.localtime(x)))
                 df_cluster['ts'] = df_cluster['sample_second']
             else:
-                df_cluster['ts'] = pd.to_datetime(df_cluster['sample_date'], format='%Y%m%d').astype(np.int64) // 10**9 + 12*3600
+                df_cluster['ts'] = pd.to_datetime(df_cluster['sample_date'], format='%Y%m%d').astype(np.int64) // 10**9 + 12 * 3600
                 df_cluster['time_key'] = df_cluster['sample_date']
 
             # 处理当前集群的每个时间切片
@@ -4523,7 +4544,7 @@ Please contact with liyanqing1987@163.com with any question."""
                         queue_name = q
 
                         if '-' in q:
-                            q_cluster, queue_name = q.split('-', 1)
+                            q_cluster, queue_name = self._parse_queue_full_name(q)
 
                             if q_cluster != self.cluster:
                                 has_na = True
@@ -4554,13 +4575,13 @@ Please contact with liyanqing1987@163.com with any question."""
                 else:
                     # 检查是否是跨集群队列
                     if '-' in queue:
-                        q_cluster = queue.split('-', 1)[0]
+                        q_cluster, _ = self._parse_queue_full_name(queue)
 
                         if q_cluster != self.cluster:
                             total = 'N/A'
                         else:
                             # 同集群的带前缀队列，提取队列名查询
-                            queue_name = queue.split('-', 1)[1]
+                            _, queue_name = self._parse_queue_full_name(queue)
 
                             if queue_name in self.queue_host_dic:
                                 for queue_host in self.queue_host_dic[queue_name]:
@@ -4611,7 +4632,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     if is_deleted:
                         item.setForeground(QBrush(Qt.gray))
 
-                    self.utilization_tab_table.setItem(row, i+2, item)
+                    self.utilization_tab_table.setItem(row, i + 2, item)
 
         self.utilization_tab_table.setSortingEnabled(True)
 
