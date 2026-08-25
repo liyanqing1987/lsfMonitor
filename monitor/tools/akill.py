@@ -88,7 +88,9 @@ class AutoKill():
             elif re.match(r'^\d+$', jobid):
                 self.jobid_list.append(jobid)
             elif re.search(r'\*', jobid):
-                self.jobid_list.append(re.sub(r'\*', '.*', jobid))
+                # Keep the raw pattern with '*'; conversion to '.*' happens once
+                # in kill_base_jobid to avoid double-conversion (123* -> 123.* -> 123..*).
+                self.jobid_list.append(jobid)
             elif re.match(r'^(\d+)-(\d+)$', jobid):
                 my_match = re.match(r'^(\d+)-(\d+)$', jobid)
                 start_jobid = int(my_match.group(1))
@@ -129,30 +131,30 @@ class AutoKill():
     def kill_base_job_name(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for job_name in self.job_name_list:
-                if re.search(r'\*', job_name):
-                    job_name = re.sub(r'\*', '.*', job_name)
+                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                job_name_pattern = re.escape(job_name).replace(r'\*', '.*')
 
-                if job_dic['job_name'] and re.match(job_name, job_dic['job_name']):
+                if job_dic['job_name'] and re.match(job_name_pattern, job_dic['job_name']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 
     def kill_base_command(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for command in self.command_list:
-                if re.search(r'\*', command):
-                    command = re.sub(r'\*', '.*', command)
+                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                command_pattern = re.escape(command).replace(r'\*', '.*')
 
-                if job_dic['command'] and re.match(command, job_dic['command']):
+                if job_dic['command'] and re.match(command_pattern, job_dic['command']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 
     def kill_base_submit_time(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for submit_time in self.submit_time_list:
-                if re.search(r'\*', submit_time):
-                    submit_time = re.sub(r'\*', '.*', submit_time)
+                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                submit_time_pattern = re.escape(submit_time).replace(r'\*', '.*')
 
-                if job_dic['submitted_time'] and re.search(submit_time, job_dic['submitted_time']):
+                if job_dic['submitted_time'] and re.search(submit_time_pattern, job_dic['submitted_time']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 

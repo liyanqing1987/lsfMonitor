@@ -27,7 +27,8 @@ from common import common_sqlite3
 
 # Default dangerous commands that require user confirmation.
 DEFAULT_DANGEROUS_COMMANDS = ['bkill', 'badmin', 'brestart', 'bstop', 'bresume', 'bswitch',
-                              'rm', 'kill', 'killall', 'shutdown', 'reboot', 'mkfs', 'dd']
+                              'rm', 'kill', 'killall', 'shutdown', 'reboot', 'mkfs', 'dd',
+                              'eval', 'source', 'xargs']
 
 SYSTEM_PROMPT = """You are an LSF/OpenLava/Volclava HPC cluster AI assistant in lsfMonitor.
 
@@ -2076,8 +2077,10 @@ def render_cluster_dashboard(metrics):
     def fmt_mem(gb):
         if gb is None:
             return 'N/A'
+
         if gb >= 1024:
             return f'{gb / 1024:.1f} TB'
+
         return f'{gb:.0f} GB'
 
     def card(value, label, cls='', sub=''):
@@ -2092,6 +2095,7 @@ def render_cluster_dashboard(metrics):
         else:
             width, text = percent, f'{percent}%'
             cls = 'bad' if percent >= 85 else ('warn' if percent >= 60 else 'ok')
+
         bar_cls = ('bar ' + cls).strip()
         return (f'<div class="bar-row"><span class="name">{esc(label)}</span>'
                 f'<div class="{bar_cls}"><span style="width:{width}%"></span></div>'
@@ -2119,8 +2123,10 @@ def render_cluster_dashboard(metrics):
         banner_cls, verdict = 'ok', '集群运行正常'
 
     meta_bits = []
+
     if metrics.get('cluster'):
         meta_bits.append(f"{esc(metrics['cluster'])}")
+
     meta_bits.append(f"{total} 主机（open {open_n} / closed {closed_n}）")
     meta_bits.append(f"slot 利用率 {pct(metrics.get('util_slot'))}")
     meta_bits.append(f"运行 {num(metrics.get('jobs_run'))} / 排队 {num(metrics.get('jobs_pend'))}")
@@ -2177,8 +2183,10 @@ def render_cluster_dashboard(metrics):
         def metric_cell(value, threshold=90):
             if value is None:
                 return '<td class="r">N/A</td>'
+
             if value >= threshold:
                 return f'<td class="r"><span class="hot">{value}%</span></td>'
+
             return f'<td class="r">{value}%</td>'
 
         host_head = ('<tr><th>主机</th><th>状态</th><th class="r">slots总量</th>'

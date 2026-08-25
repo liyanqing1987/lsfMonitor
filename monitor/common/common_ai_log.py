@@ -367,6 +367,7 @@ def auto_judge_resolution(question, answer, tool_calls=None):
                     continue
 
                 result = (call.get('result', '') or '').lower()
+
                 # Command returned error indicators.
                 if re.search(r'(error|failed|permission denied|not found|no such|command not found|traceback|exception)', result):
                     error_count += 1
@@ -1008,8 +1009,10 @@ pre code {{ background: none; color: inherit; padding: 0; }}
   function onScroll() {{
     var scrollY = window.scrollY || window.pageYOffset;
     var active = sections[0];
+
     for (var i = 0; i < sections.length; i++) {{
       if (sections[i].el.offsetTop - 80 <= scrollY) active = sections[i];
+
     }}
     links.forEach(function (a) {{ a.classList.remove('active'); }});
     if (active) active.link.classList.add('active');

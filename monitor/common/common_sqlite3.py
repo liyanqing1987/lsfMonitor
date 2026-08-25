@@ -189,6 +189,7 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=None, select_con
             results = curs.execute(command, select_params)
         else:
             results = curs.execute(command)
+
         all_items = results.fetchall()
         table_key_list = [tuple[0] for tuple in curs.description]
         curs.close()

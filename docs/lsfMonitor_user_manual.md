@@ -252,6 +252,8 @@ optional arguments:
   -q, --queue           Sample queue info with command "bqueues".
   -qH, --queue_host_mapping
                         Sample queue-host mapping info with command "bqueues -l".
+  -gH, --group_host_mapping
+                        Sample host group-host mapping info with command "bmgroup -w -r".
   -H, --host            Sample host info with command "bhosts".
   -l, --load            Sample host load (ut/tmp/swp/mem) info with command "lsload".
   -u, --user            Sample user (finished) job info with command "bjobs -u all -d -UF".
@@ -267,6 +269,7 @@ optional arguments:
 - `--job_mem`: 采集job的MEM和idle_factor(cputime/runtime)信息并存储。
 - `--queue`: 采集queue信息并存储。
 - `--queue_host_mapping`: 采集queue跟host的映射关系。
+- `--group_host_mapping`: 采集host group跟host的映射关系,数据落 group_host_mapping.db,仅成员变化时写。
 - `--host`: 采集host信息并存储。（bmonitor暂时不需要）
 - `--load`: 采集host load信息并存储。
 - `--user`: 采集user信息并存储。
@@ -306,7 +309,8 @@ LSF_TOP=/ic/software/tools/lsf
 10 11,23 * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -j
 */5 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -m
 */5 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -q
-*/10 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -qH
+*/30 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -qH
+*/30 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -gH
 */5 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -H
 */5 * * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -l
 30 11,23 * * * /ic/software/tools/lsfMonitor/monitor/bin/bsample -u
@@ -348,7 +352,7 @@ IC1_CLUSTER
 
 ```bash
 ls -p db/IC1_CLUSTER/
-host.db  job/  job_data/  job_mem/  load.db  queue.db  queue_host_mapping.db  user/  utilization_day.db  utilization.db
+host.db  group_host_mapping.db  job/  job_data/  job_mem/  load.db  queue.db  queue_host_mapping.db  user/  utilization_day.db  utilization.db
 ```
 
 - `host.db`: 记录host的静态信息，由"bsample -H"生成。
@@ -358,6 +362,7 @@ host.db  job/  job_data/  job_mem/  load.db  queue.db  queue_host_mapping.db  us
 - `load.db`：记录host的load信息，由"bsample -l"生成。
 - `queue.db`：记录queue的run/pend slot信息，由"bsample -q"生成。
 - `queue_host_mapping.db`：记录queue跟host的映射关系，由"bsample -qH"生成。
+- `group_host_mapping.db`：记录host group跟host的映射关系，由"bsample -gH"生成，仅供UTILIZATION页按Group维度统计时使用。
 - `user/<date>`：记录用户的job关键信息，由"bsample -u"生成。
 - `utilization_day.db`：记录slot/cpu/mem的utilization信息，按天汇聚，由"bsample -UD"生成。
 - `utilization.db`：记录slot/cpu/mem的utilization信息，由"bsample -U"生成。
@@ -512,6 +517,8 @@ HOSTS页主要用于查看hosts的静态和动态信息。
 说明：
 
 - 点击任意列标题，可以排序列内容。
+- Queue列展示host所属的queue（一个host可属于多个queue，以空格分隔）；Group列展示host所属的host group（来自`bmgroup`配置，同样可能为多个）。二者是不同维度，一个queue可能由一个或多个host group构成，一个host group也可能跨越多个queue。
+- 顶部筛选区在Queue下拉复选框之后提供了Group下拉复选框，可按host group维度筛选机器；同时选择Queue和Group时取两者交集（即只显示既属于选中queue、又属于选中group的host）。
 - 如果host的Status异常（unavail/unreach/closed_LIM），Status状态背景色会变红。
 - 如果host的Ut使用率超过90%，Ut值背景色会变红。
 - 如果host的aMem或者saMem不足MaxMem的10%，对应值的背景色会变红。
@@ -575,8 +582,14 @@ UTILIZATION页主要用来查看slot/cpu/memory等资源的使用率统计信息
 
 说明：
 
+- 页面提供 Queue 和 Group 两个下拉复选框，二者互斥，按以下规则决定生效维度：
+  - 两者均为 "ALL"（或均未选）时，默认按 Queue 维度展示全部。
+  - 选中其中一者的非 ALL 项时，另一者会被自动置回 "ALL"，按所选项的维度统计。
+  - 将其中一者完全取消选择（连 ALL 也取消，即空选）时，视为把维度交给另一者：例如 Queue 空选而 Group 停在 ALL 时，自动按 Group 维度展示全部 host group，无需逐个勾选。
+  - 两者都选了具体项时，后选择的那个生效，另一者自动置回 "ALL"。
+- Group 维度的成员关系取自历史采样库 `group_host_mapping.db`（由 `bsample -gH` 生成），与 Queue 维度一样可追溯成员的历史变更；库缺失时临时回退到当前 `bmgroup` 快照。
 - 点击任意列标题，可以排序列内容。
-- 点击QUEUE列的内容，可以展示queue的slot/cpu/mem使用率的变化曲线。
+- 点击首列（Queue 或 Group）的内容，可以展示其 slot/cpu/mem 使用率的变化曲线。
 - 左侧和右侧的utilization统计值有可能会有所差别，尤其是在队列机器有变更（增加/减少）的情况，这是因为左侧结果是按照 "sum(服务器利用率)/len(服务器数目)"计算出来的，右侧结果是按照"sum(整体按天汇聚利用率)/天数"计算出来的。
 
 #### 4.2.11 LICENSE页
@@ -938,6 +951,7 @@ HOSTS页中的Mem值跟LOAD页中的mem值信息来源不一样，作用也不�
 | V2.1 | 2026.03 | queue-host映射采样；动态utilization计算；懒加载；Modify Rusage Mem | |
 | V2.2 | 2026.05 | AI页面，支持知识检索/信息查询/状态分析/任务执行 | 新增RAG和skills，建议重新安装 |
 | V2.3 | 2026.06 | bsample -m增加IDLE_FACTOR采样；bmonitor JOB页增加IDLE_FACTOR曲线展示；Cluster Analysis集群分析（AI一键体检报告，GUI菜单及bsample -A） | job_data目录取代job_mem目录 |
+| V2.4 | 2026.08 | host group支持：bsample -gH采样host group映射(落group_host_mapping.db)；HOSTS页增加GROUP列及Group下拉复选框(与Queue取交集筛选)；UTILIZATION页增加Group下拉复选框(与Queue互斥),支持按Queue/Group两个维度统计utilization；Queue/Group一方空选时自动切换到另一方维度(便于按Group维度展示全部) | 需在crontab中补充`bsample -gH`调度 |
 
 ### 附2. LSF任务exit code含义
 

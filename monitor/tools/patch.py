@@ -75,6 +75,7 @@ class Patch():
             'monitor/tools/check_issue_reason',
             'monitor/tools/patch',
             'monitor/tools/process_tracer',
+            'monitor/tools/rag_builder',
             'monitor/tools/seedb',
             'monitor/tools/show_license_feature_usage'
         ]
@@ -142,6 +143,7 @@ class Patch():
             # Also prune if the full relative path is excluded.
             if rel_dir:
                 parts = rel_dir.split(os.sep)
+
                 if parts[0] in self.exclude_dirs or '__pycache__' in parts:
                     dirs[:] = []
                     continue
@@ -480,7 +482,9 @@ if [ -z "$QT_IM_MODULE" ]; then
         export QT_IM_MODULE=ibus
     elif pgrep -x fcitx > /dev/null 2>&1 || pgrep -x fcitx5 > /dev/null 2>&1; then
         export QT_IM_MODULE=fcitx
+
     fi
+
 fi
 
 # Execute {tool_name}.py

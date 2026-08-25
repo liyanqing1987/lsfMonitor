@@ -180,6 +180,7 @@ class QComboCheckBox(QComboBox):
         self.setLineEdit(self.qLineEdit)
 
         self.checkBoxList = []
+        self.itemDataList = []
 
         self.dropDownBoxWidthPixel = self.width()
 
@@ -213,9 +214,13 @@ class QComboCheckBox(QComboBox):
         for text in text_list:
             self.addCheckBoxItem(text)
 
-    def addCheckBoxItem(self, text, update_width=False):
+    def addCheckBoxItem(self, text, data=None, update_width=False):
         """
         Add QCheckBox format item into QListWidget(QComboCheckBox).
+
+        Args:
+            text: 显示文本(可不同于内部值)。
+            data: 内部值(可选)。为 None 时回退为 text,selectedData() 返回 text。
         """
         if self.enableFilter:
             self._ensureFilterItem()
@@ -224,6 +229,7 @@ class QComboCheckBox(QComboBox):
         qBox = MyCheckBox(text)
         qBox.stateChanged.connect(self.qBoxStateChanged)
         self.checkBoxList.append(qBox)
+        self.itemDataList.append(data)
         self.qListWidget.setItemWidget(qItem, qBox)
         qItem.setSizeHint(qBox.sizeHint())
 
@@ -313,6 +319,26 @@ class QComboCheckBox(QComboBox):
 
         return selectedItemDic
 
+    def itemData(self, index):
+        """Get internal data value of item at given index (falls back to text if data is None)."""
+        if 0 <= index < len(self.itemDataList):
+            data = self.itemDataList[index]
+
+            return data if data is not None else self.checkBoxList[index].text()
+
+        return None
+
+    def selectedData(self):
+        """Get all selected items' internal data values (falls back to text if data is None)."""
+        selectedItemDic = {}
+
+        for (i, qBox) in enumerate(self.checkBoxList):
+            if qBox.isChecked() is True:
+                data = self.itemDataList[i] if i < len(self.itemDataList) else None
+                selectedItemDic.setdefault(i, data if data is not None else qBox.text())
+
+        return selectedItemDic
+
     def selectAllItems(self):
         """
         Select all items.
@@ -337,6 +363,7 @@ class QComboCheckBox(QComboBox):
 
         self.qListWidget.clear()
         self.checkBoxList.clear()
+        self.itemDataList.clear()
 
         self._hasFilterItem = False
         self._filterLineEdit = None
@@ -535,4 +562,5 @@ class NavigationToolbar2QT(NavigationToolbar2QT):
                         info_string = '[%s]\n%s' % (xdata_string, info_string)
 
                     return info_string
+
         return ''

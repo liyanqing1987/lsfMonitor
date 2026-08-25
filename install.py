@@ -171,7 +171,7 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
 db_path = "{db_path}"
 
 # Data retention days for cleanup (bsample --cleanup).
-cleanup_expire_days = {{'job': 90, 'job_data': 90, 'user': 365, 'queue': 365, 'queue_host_mapping': 365, 'host': 365, 'load': 365, 'utilization': 365, 'utilization_day': 365}}
+cleanup_expire_days = {{'job': 90, 'job_data': 90, 'user': 365, 'queue': 365, 'queue_host_mapping': 365, 'group_host_mapping': 365, 'host': 365, 'load': 365, 'utilization': 365, 'utilization_day': 365}}
 
 # Specify EDA license administrators.
 license_administrators = "all"

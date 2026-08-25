@@ -4,7 +4,7 @@ An open-source HPC cluster monitoring tool for **LSF**, **volclava**, and **Open
 
 **Author:** liyanqing1987@163.com
 
-**Version:** V2.3
+**Version:** V2.4
 
 **License:** GPL-3.0
 
@@ -63,7 +63,8 @@ Set up crontab for periodic data collection:
 10 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -j    # jobs history
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -m       # job memory & idle_factor
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -q       # queues
-*/10 * * * * <INSTALL_PATH>/monitor/bin/bsample -qH     # queue-host mapping
+*/30 * * * * <INSTALL_PATH>/monitor/bin/bsample -qH     # queue-host mapping
+*/30 * * * * <INSTALL_PATH>/monitor/bin/bsample -gH     # host group-host mapping
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -H       # hosts
 */5 * * * * <INSTALL_PATH>/monitor/bin/bsample -l       # load
 30 11,23 * * * <INSTALL_PATH>/monitor/bin/bsample -u    # users
@@ -143,3 +144,4 @@ bmonitor -j 12345   # jump to JOB tab for specific job
 | V2.1    | 2026.03 | Queue-host mapping, dynamic utilization, lazy loading, Modify Rusage Mem |
 | V2.2    | 2026.04 | AI tab with LLM helpdesk and RAG document search |
 | V2.3    | 2026.06 | IDLE_FACTOR sampling in bsample -m; IDLE_FACTOR chart in bmonitor JOB tab; AI Cluster Analysis report (GUI menu and bsample -A) |
+| V2.4    | 2026.08 | Host group support: bsample -gH samples host group mapping (group_host_mapping.db); HOSTS tab adds GROUP column and Group combo (intersection with Queue); UTILIZATION tab adds Group combo (mutually exclusive with Queue) for Queue/Group dual-dimension utilization stats; clearing one of Queue/Group combos auto-switches to the other dimension (handy for showing all groups) |

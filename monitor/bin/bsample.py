@@ -47,6 +47,10 @@ def read_args():
                         action="store_true",
                         default=False,
                         help='Sample queue-host mapping info with command "bqueues -l".')
+    parser.add_argument("-gH", "--group_host_mapping",
+                        action="store_true",
+                        default=False,
+                        help='Sample host group-host mapping info with command "bmgroup -w -r".')
     parser.add_argument("-H", "--host",
                         action="store_true",
                         default=False,
@@ -74,11 +78,11 @@ def read_args():
 
     args = parser.parse_args()
 
-    if not any([args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day, args.analysis]):
-        common.bprint('At least one argument of "cleanup/job/job_mem/queue/queue_host_mapping/host/load/user/utilization/utilization_day/analysis" must be selected.', level='Error')
+    if not any([args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.group_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day, args.analysis]):
+        common.bprint('At least one argument of "cleanup/job/job_mem/queue/queue_host_mapping/group_host_mapping/host/load/user/utilization/utilization_day/analysis" must be selected.', level='Error')
         sys.exit(1)
 
-    return args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day, args.analysis
+    return args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.group_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day, args.analysis
 
 
 class Sampling:
@@ -86,12 +90,13 @@ class Sampling:
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
     Save the infomation into sqlite3 DB.
     """
-    def __init__(self, cleanup, job_sampling, job_mem_sampling, queue_sampling, queue_host_mapping_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_sampling, analysis_sampling):
+    def __init__(self, cleanup, job_sampling, job_mem_sampling, queue_sampling, queue_host_mapping_sampling, group_host_mapping_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_sampling, analysis_sampling):
         self.cleanup = cleanup
         self.job_sampling = job_sampling
         self.job_mem_sampling = job_mem_sampling
         self.queue_sampling = queue_sampling
         self.queue_host_mapping_sampling = queue_host_mapping_sampling
+        self.group_host_mapping_sampling = group_host_mapping_sampling
         self.host_sampling = host_sampling
         self.load_sampling = load_sampling
         self.user_sampling = user_sampling
@@ -122,6 +127,7 @@ class Sampling:
             'user': 365,
             'queue': 365,
             'queue_host_mapping': 365,
+            'group_host_mapping': 365,
             'host': 365,
             'load': 365,
             'utilization': 365,
@@ -281,7 +287,7 @@ class Sampling:
         by deleting rows older than expire_days.
         Uses sample_second (INTEGER PK) for most dbs, sample_date (TEXT PK) for utilization_day.
         """
-        item_list = ['queue', 'queue_host_mapping', 'host', 'load', 'utilization', 'utilization_day']
+        item_list = ['queue', 'queue_host_mapping', 'group_host_mapping', 'host', 'load', 'utilization', 'utilization_day']
 
         for item in item_list:
             item_db_file = str(self.db_path) + '/' + str(item) + '.db'
@@ -744,6 +750,73 @@ class Sampling:
             finally:
                 queue_host_mapping_db_conn.close()
 
+    def sample_host_group_mapping_info(self):
+        """
+        Sample host group-host mapping info and save into sqlite db.
+        Each host group has its own table named 'group_<group_name>'.
+        Only saves if the mapping is different from the last recorded entry for that group.
+        """
+        common.bprint('>>> Sampling host group-host mapping info ...', date_format='%Y-%m-%d %H:%M:%S')
+
+        # Get current host group-host mapping info.
+        current_group_host_dic = common_lsf.get_bmgroup_info()
+
+        host_group_mapping_db_file = str(self.db_path) + '/group_host_mapping.db'
+        (result, host_group_mapping_db_conn) = common_sqlite3.connect_db_file(host_group_mapping_db_file, mode='write')
+
+        if result == 'passed':
+            try:
+                host_group_mapping_table_list = common_sqlite3.get_sql_table_list(host_group_mapping_db_file, host_group_mapping_db_conn)
+
+                saved_count = 0
+                skipped_count = 0
+
+                for group, host_list in current_group_host_dic.items():
+                    # Generate table name for this group.
+                    table_name = 'group_' + str(group)
+                    hosts_string = ' '.join(host_list)
+
+                    # Generate sql table if not exists.
+                    if table_name not in host_group_mapping_table_list:
+                        key_list = ['sample_second', 'sample_time', 'hosts']
+                        key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
+                        key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
+                        common_sqlite3.create_sql_table(host_group_mapping_db_file, host_group_mapping_db_conn, table_name, key_string, commit=False)
+
+                    # Check if current mapping is same as last recorded mapping for this group.
+                    skip_save = False
+
+                    # Get the last recorded entry for this group.
+                    last_data = common_sqlite3.get_sql_table_data(host_group_mapping_db_file, host_group_mapping_db_conn, table_name, ['hosts'], 'ORDER BY sample_second DESC LIMIT 1')
+
+                    if last_data and 'hosts' in last_data and len(last_data['hosts']) > 0:
+                        last_hosts_string = last_data['hosts'][0]
+                        # Sort hosts for comparison.
+                        last_hosts = sorted(last_hosts_string.split())
+                        current_hosts = sorted(host_list)
+
+                        if current_hosts == last_hosts:
+                            skip_save = True
+                            skipped_count += 1
+
+                    # Insert sql table value only if mapping changed or no previous data.
+                    if not skip_save:
+                        value_list = [self.sample_second, self.sample_time, hosts_string]
+                        value_string = common_sqlite3.gen_sql_table_value_string(value_list)
+                        common_sqlite3.insert_into_sql_table(host_group_mapping_db_file, host_group_mapping_db_conn, table_name, value_string, commit=False)
+                        saved_count += 1
+
+                host_group_mapping_db_conn.commit()
+
+                if saved_count > 0:
+                    common.bprint(f'Saved host group-host mapping for {saved_count} groups ({skipped_count} unchanged).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+                else:
+                    common.bprint(f'Host group-host mapping unchanged for all {skipped_count} groups, skipping save.', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+            except Exception as error:
+                common.bprint(f'Failed on sampling host group-host mapping info: {error}', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            finally:
+                host_group_mapping_db_conn.close()
+
     def sample_utilization_info(self):
         """
         Sample host resource utilization info and save it into sqlite db.
@@ -1038,6 +1111,11 @@ class Sampling:
             p.start()
             process_list.append(p)
 
+        if self.group_host_mapping_sampling:
+            p = Process(target=self.sample_host_group_mapping_info)
+            p.start()
+            process_list.append(p)
+
         if self.host_sampling:
             p = Process(target=self.sample_host_info)
             p.start()
@@ -1089,8 +1167,8 @@ class Sampling:
 # Main Function #
 #################
 def main():
-    (cleanup, job, job_mem, queue, queue_host_mapping, host, load, user, utilization, utilization_day, analysis) = read_args()
-    my_sampling = Sampling(cleanup, job, job_mem, queue, queue_host_mapping, host, load, user, utilization, utilization_day, analysis)
+    (cleanup, job, job_mem, queue, queue_host_mapping, group_host_mapping, host, load, user, utilization, utilization_day, analysis) = read_args()
+    my_sampling = Sampling(cleanup, job, job_mem, queue, queue_host_mapping, group_host_mapping, host, load, user, utilization, utilization_day, analysis)
     my_sampling.sampling()
 
 

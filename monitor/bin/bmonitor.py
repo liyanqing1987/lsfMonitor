@@ -37,8 +37,8 @@ config = common_config.load_config()
 
 
 # Constants
-VERSION = 'V2.3'
-VERSION_DATE = '2026.07.28'
+VERSION = 'V2.4'
+VERSION_DATE = '2026.08.24'
 USER = getpass.getuser()
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
@@ -162,6 +162,7 @@ class MainWindow(QMainWindow):
         self.lshosts_dic = {}
         self.queue_host_dic = {}
         self.host_queue_dic = {}
+        self.host_group_dic = {}
         self.bhosts_load_dic = {}
 
         # Set self.lsf_info_dic for how to get LSF information.
@@ -172,6 +173,7 @@ class MainWindow(QMainWindow):
                              'lshosts': {'exec_cmd': 'self.lshosts_dic = common_lsf.get_lshosts_info()', 'update_second': 0},
                              'queue_host': {'exec_cmd': 'self.queue_host_dic = common_lsf.get_queue_host_info()', 'update_second': 0},
                              'host_queue': {'exec_cmd': 'self.host_queue_dic = common_lsf.get_host_queue_info()', 'update_second': 0},
+                             'host_group': {'exec_cmd': 'self.host_group_dic = common_lsf.get_host_group_info()', 'update_second': 0},
                              'bhosts_load': {'exec_cmd': 'self.bhosts_load_dic = common_lsf.get_bhosts_load_info()', 'update_second': 0}}
 
         # Just update specified_job info if specified_job argument is specified.
@@ -249,19 +251,29 @@ class MainWindow(QMainWindow):
         """
         # 优先匹配当前集群
         prefix = self.cluster + '-'
+
         if full_name.startswith(prefix):
             return (self.cluster, full_name[len(prefix):])
 
         # 遍历 DB 中所有已知集群
         db_root_path = Path(config.db_path)
+
         if db_root_path.exists() and db_root_path.is_dir():
             for entry in os.scandir(db_root_path):
                 if entry.is_dir() and entry.name != 'log' and entry.name != self.cluster:
                     prefix = entry.name + '-'
+
                     if full_name.startswith(prefix):
                         return (entry.name, full_name[len(prefix):])
 
         return (None, full_name)
+
+    def _parse_group_full_name(self, full_name):
+        """
+        正确拆分 '{cluster}-{group}' 格式,语义与 _parse_queue_full_name 相同,
+        仅为 host group 维度的可读性而存在。
+        """
+        return self._parse_queue_full_name(full_name)
 
     def get_license_dic(self):
         if self.disable_license:
@@ -1050,8 +1062,10 @@ Please contact with liyanqing1987@163.com with any question."""
         else:
             idle_value = ''
             idle_factor = job_dic.get('idle_factor', '')
+
             if idle_factor != '':
                 idle_value = str(round(float(idle_factor), 2))
+
             self.job_tab_idle_factor_line.setText(idle_value)
             self.job_tab_idle_factor_line.setCursorPosition(0)
 
@@ -1927,6 +1941,14 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_queue_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0, enableFilter=True)
         self.set_hosts_tab_queue_combo()
 
+        # "Group" item.
+        hosts_tab_group_label = QLabel('Group', self.hosts_tab_frame0)
+        hosts_tab_group_label.setStyleSheet("font-weight: bold;")
+        hosts_tab_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.hosts_tab_group_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0, enableFilter=True)
+        self.set_hosts_tab_group_combo()
+
         # "MAX" item.
         hosts_tab_max_label = QLabel('MAX', self.hosts_tab_frame0)
         hosts_tab_max_label.setStyleSheet("font-weight: bold;")
@@ -1970,13 +1992,15 @@ Please contact with liyanqing1987@163.com with any question."""
         hosts_tab_frame0_grid.addWidget(self.hosts_tab_status_combo, 0, 1)
         hosts_tab_frame0_grid.addWidget(hosts_tab_queue_label, 0, 2)
         hosts_tab_frame0_grid.addWidget(self.hosts_tab_queue_combo, 0, 3)
-        hosts_tab_frame0_grid.addWidget(hosts_tab_max_label, 0, 4)
-        hosts_tab_frame0_grid.addWidget(self.hosts_tab_max_combo, 0, 5)
-        hosts_tab_frame0_grid.addWidget(hosts_tab_maxmem_label, 0, 6)
-        hosts_tab_frame0_grid.addWidget(self.hosts_tab_maxmem_combo, 0, 7)
-        hosts_tab_frame0_grid.addWidget(hosts_tab_host_label, 0, 8)
-        hosts_tab_frame0_grid.addWidget(self.hosts_tab_host_line, 0, 9)
-        hosts_tab_frame0_grid.addWidget(hosts_tab_check_button, 0, 10)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_group_label, 0, 4)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_group_combo, 0, 5)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_max_label, 0, 6)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_max_combo, 0, 7)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_maxmem_label, 0, 8)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_maxmem_combo, 0, 9)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_host_label, 0, 10)
+        hosts_tab_frame0_grid.addWidget(self.hosts_tab_host_line, 0, 11)
+        hosts_tab_frame0_grid.addWidget(hosts_tab_check_button, 0, 12)
 
         hosts_tab_frame0_grid.setColumnStretch(0, 1)
         hosts_tab_frame0_grid.setColumnStretch(1, 1)
@@ -1989,6 +2013,8 @@ Please contact with liyanqing1987@163.com with any question."""
         hosts_tab_frame0_grid.setColumnStretch(8, 1)
         hosts_tab_frame0_grid.setColumnStretch(9, 1)
         hosts_tab_frame0_grid.setColumnStretch(10, 1)
+        hosts_tab_frame0_grid.setColumnStretch(11, 1)
+        hosts_tab_frame0_grid.setColumnStretch(12, 1)
 
         self.hosts_tab_frame0.setLayout(hosts_tab_frame0_grid)
 
@@ -1997,33 +2023,36 @@ Please contact with liyanqing1987@163.com with any question."""
         self.hosts_tab_table.setShowGrid(True)
         self.hosts_tab_table.setSortingEnabled(False)
         self.hosts_tab_table.setColumnCount(0)
-        self.hosts_tab_table.setColumnCount(12)
-        self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'aMem (G)', 'saMem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
+        self.hosts_tab_table.setColumnCount(13)
+        self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'Group', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'aMem (G)', 'saMem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
         self.hosts_tab_table.setHorizontalHeaderLabels(self.hosts_tab_table_title_list)
 
         self.hosts_tab_table.setColumnWidth(0, 150)
         self.hosts_tab_table.setColumnWidth(1, 90)
+        # Queue 与 Group 均分剩余空间(Queue 内容通常更多,但 Group 列也需自适应)。
         self.hosts_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.hosts_tab_table.setColumnWidth(3, 60)
+        self.hosts_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.hosts_tab_table.setColumnWidth(4, 60)
         self.hosts_tab_table.setColumnWidth(5, 60)
-        self.hosts_tab_table.setColumnWidth(6, 100)
-        self.hosts_tab_table.setColumnWidth(7, 85)
-        self.hosts_tab_table.setColumnWidth(8, 90)
-        self.hosts_tab_table.setColumnWidth(9, 100)
-        self.hosts_tab_table.setColumnWidth(10, 75)
+        self.hosts_tab_table.setColumnWidth(6, 60)
+        self.hosts_tab_table.setColumnWidth(7, 100)
+        self.hosts_tab_table.setColumnWidth(8, 85)
+        self.hosts_tab_table.setColumnWidth(9, 90)
+        self.hosts_tab_table.setColumnWidth(10, 100)
         self.hosts_tab_table.setColumnWidth(11, 75)
+        self.hosts_tab_table.setColumnWidth(12, 75)
 
         # Fill self.hosts_tab_table items.
         hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
         self.hosts_tab_table.setRowCount(0)
         self.hosts_tab_table.setRowCount(len(hosts_tab_specified_host_list))
 
-        # Fresh LSF bhosts/lsload/lshosts/host_queue/bhosts_load information.
+        # Fresh LSF bhosts/lsload/lshosts/host_queue/host_group/bhosts_load information.
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('lsload')
         self.fresh_lsf_info('lshosts')
         self.fresh_lsf_info('host_queue')
+        self.fresh_lsf_info('host_group')
         self.fresh_lsf_info('bhosts_load')
 
         for (i, host) in enumerate(hosts_tab_specified_host_list):
@@ -2067,6 +2096,20 @@ Please contact with liyanqing1987@163.com with any question."""
                 queues = ' '.join(self.host_queue_dic[host])
 
             item = QTableWidgetItem(queues)
+
+            if fatal_error:
+                item.setBackground(QBrush(Qt.red))
+
+            self.hosts_tab_table.setItem(i, j, item)
+
+            # Fill "Group" item.
+            j = j + 1
+            groups = ''
+
+            if host in self.host_group_dic.keys():
+                groups = ' '.join(self.host_group_dic[host])
+
+            item = QTableWidgetItem(groups)
 
             if fatal_error:
                 item.setBackground(QBrush(Qt.red))
@@ -2318,15 +2361,17 @@ Please contact with liyanqing1987@163.com with any question."""
         """
         specified_status_list = self.hosts_tab_status_combo.currentText().strip().split()
         specified_queue_list = self.hosts_tab_queue_combo.currentText().strip().split()
+        specified_group_list = self.hosts_tab_group_combo.currentText().strip().split()
         specified_max_list = self.hosts_tab_max_combo.currentText().strip().split()
         specified_maxmem_list = self.hosts_tab_maxmem_combo.currentText().strip().split()
         specified_host = self.hosts_tab_host_line.text().strip()
         hosts_tab_specified_host_list = []
 
-        # Fresh LSF bhosts/lshosts/host_queue information.
+        # Fresh LSF bhosts/lshosts/host_queue/host_group information.
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('lshosts')
         self.fresh_lsf_info('host_queue')
+        self.fresh_lsf_info('host_group')
 
         if 'HOST_NAME' in self.bhosts_dic:
             for host in self.bhosts_dic['HOST_NAME']:
@@ -2351,6 +2396,18 @@ Please contact with liyanqing1987@163.com with any question."""
 
                     for specified_queue in specified_queue_list:
                         if (host in self.host_queue_dic) and (specified_queue in self.host_queue_dic[host]):
+                            continue_mark = False
+                            break
+
+                    if continue_mark:
+                        continue
+
+                # Filter with specified_group_list(与 Queue 取交集)。
+                if 'ALL' not in specified_group_list:
+                    continue_mark = True
+
+                    for specified_group in specified_group_list:
+                        if (host in self.host_group_dic) and (specified_group in self.host_group_dic[host]):
                             continue_mark = False
                             break
 
@@ -2411,13 +2468,13 @@ Please contact with liyanqing1987@163.com with any question."""
         if item is not None:
             current_row = self.hosts_tab_table.currentRow()
             host = self.hosts_tab_table.item(current_row, 0).text().strip()
-            njobs_num = self.hosts_tab_table.item(current_row, 4).text().strip()
+            njobs_num = self.hosts_tab_table.item(current_row, 5).text().strip()
 
             if item.column() == 0:
                 self.load_tab_host_line.setText(host)
                 self.update_load_tab_load_info()
                 self.main_tab.setCurrentWidget(self.load_tab)
-            elif item.column() == 4:
+            elif item.column() == 5:
                 if int(njobs_num) > 0:
                     self.set_jobs_tab_status_combo()
                     self.set_jobs_tab_queue_combo()
@@ -2473,6 +2530,29 @@ Please contact with liyanqing1987@163.com with any question."""
         for (i, qBox) in enumerate(self.hosts_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.hosts_tab_queue_combo.checkBoxList[i].setChecked(True)
+
+    def set_hosts_tab_group_combo(self, checked_group_list=['ALL', ]):
+        """Set (initialize) self.hosts_tab_group_combo."""
+        self.hosts_tab_group_combo.clear()
+        self.fresh_lsf_info('host_group')
+
+        # 从 host_group_dic(host->[groups])收集所有 group 名。
+        group_set = set()
+
+        for groups in self.host_group_dic.values():
+            for group in groups:
+                group_set.add(group)
+
+        group_list = sorted(group_set)
+        group_list.insert(0, 'ALL')
+
+        for group in group_list:
+            self.hosts_tab_group_combo.addCheckBoxItem(group)
+
+        # Set to checked status for checked_group_list.
+        for (i, qBox) in enumerate(self.hosts_tab_group_combo.checkBoxList):
+            if (qBox.text() in checked_group_list) and (qBox.isChecked() is False):
+                self.hosts_tab_group_combo.checkBoxList[i].setChecked(True)
 
     def set_hosts_tab_max_combo(self, checked_max_list=['ALL', ]):
         """
@@ -3742,6 +3822,7 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_cluster_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_cluster_combo()
         self.utilization_tab_cluster_combo.currentTextChanged.connect(self.update_utilization_tab_queue_combo_by_cluster)
+        self.utilization_tab_cluster_combo.currentTextChanged.connect(self.update_utilization_tab_group_combo_by_cluster)
 
         # "Queue" item.
         utilization_tab_queue_label = QLabel('Queue', self.utilization_tab_frame0)
@@ -3750,6 +3831,18 @@ Please contact with liyanqing1987@163.com with any question."""
 
         self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_queue_combo()
+        # Queue 与 Group 互斥:选中 Queue 非 ALL 项时,Group 强制回到 ALL。
+        self.utilization_tab_queue_combo.currentTextChanged.connect(self.enforce_utilization_tab_group_all)
+
+        # "Group" item.
+        utilization_tab_group_label = QLabel('Group', self.utilization_tab_frame0)
+        utilization_tab_group_label.setStyleSheet("font-weight: bold;")
+        utilization_tab_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.utilization_tab_group_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
+        self.set_utilization_tab_group_combo()
+        # Group 与 Queue 互斥:选中 Group 非 ALL 项时,Queue 强制回到 ALL。
+        self.utilization_tab_group_combo.currentTextChanged.connect(self.enforce_utilization_tab_queue_all)
 
         # "Resource" item.
         utilization_tab_resource_label = QLabel('Resource', self.utilization_tab_frame0)
@@ -3796,14 +3889,16 @@ Please contact with liyanqing1987@163.com with any question."""
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_cluster_combo, 0, 1)
         utilization_tab_frame0_grid.addWidget(utilization_tab_queue_label, 0, 2)
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_queue_combo, 0, 3)
-        utilization_tab_frame0_grid.addWidget(utilization_tab_resource_label, 0, 4)
-        utilization_tab_frame0_grid.addWidget(self.utilization_tab_resource_combo, 0, 5)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_group_label, 0, 4)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_group_combo, 0, 5)
         utilization_tab_frame0_grid.addWidget(utilization_tab_check_button, 0, 6)
         utilization_tab_frame0_grid.addWidget(utilization_tab_begin_date_label, 1, 0)
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_begin_date_edit, 1, 1)
         utilization_tab_frame0_grid.addWidget(utilization_tab_end_date_label, 1, 2)
         utilization_tab_frame0_grid.addWidget(self.utilization_tab_end_date_edit, 1, 3)
-        utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 4, 1, 3)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_resource_label, 1, 4)
+        utilization_tab_frame0_grid.addWidget(self.utilization_tab_resource_combo, 1, 5)
+        utilization_tab_frame0_grid.addWidget(utilization_tab_empty_label, 1, 6)
 
         utilization_tab_frame0_grid.setColumnStretch(0, 1)
         utilization_tab_frame0_grid.setColumnStretch(1, 2)
@@ -3872,11 +3967,23 @@ Please contact with liyanqing1987@163.com with any question."""
 
                             conn.close()
 
-        queue_list.sort()
+        # 按 (cluster, queue_name) 二级排序,使同一 cluster 的 queue 连续显示。
+        def _queue_sort_key(q):
+            c, n = self._parse_queue_full_name(q)
+
+            return (c or '', n or '')
+
+        queue_list.sort(key=_queue_sort_key)
         queue_list.insert(0, 'ALL')
 
         for queue in queue_list:
-            self.utilization_tab_queue_combo.addCheckBoxItem(queue)
+            if queue == 'ALL':
+                display_text = 'ALL'
+            else:
+                q_cluster, q_name = self._parse_queue_full_name(queue)
+                display_text = f"{q_name}  ({q_cluster})" if q_cluster else queue
+
+            self.utilization_tab_queue_combo.addCheckBoxItem(display_text, data=queue, update_width=True)
 
         # 处理默认选中逻辑
         if checked_queue_list is None:
@@ -3893,11 +4000,13 @@ Please contact with liyanqing1987@163.com with any question."""
                     if q_cluster == self.cluster:
                         checked_queue_list.append(queue)
 
-        # Set to checked status for checked_queue_list.
+        # Set to checked status for checked_queue_list(按内部值 data 匹配)。
         for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
-            if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
+            data = self.utilization_tab_queue_combo.itemData(i)
+
+            if (data in checked_queue_list) and (qBox.isChecked() is False):
                 self.utilization_tab_queue_combo.checkBoxList[i].setChecked(True)
-            elif (qBox.text() not in checked_queue_list) and (qBox.isChecked() is True):
+            elif (data not in checked_queue_list) and (qBox.isChecked() is True):
                 self.utilization_tab_queue_combo.checkBoxList[i].setChecked(False)
 
     def update_utilization_tab_queue_combo_by_cluster(self):
@@ -3921,7 +4030,7 @@ Please contact with liyanqing1987@163.com with any question."""
                     if entry.is_dir() and entry.name != 'log':
                         selected_clusters.append(entry.name)
 
-        # 调整队列选中状态
+        # 调整队列选中状态(按内部值 data 匹配)。
         if not selected_clusters:
             # 没有选中任何集群时，所有队列都不选中
             for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
@@ -3929,13 +4038,13 @@ Please contact with liyanqing1987@163.com with any question."""
         elif select_all:
             # 选中Cluster的ALL时，Queue只需要选中ALL即可，不需要选中所有队列
             for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
-                if qBox.text() == 'ALL':
+                if self.utilization_tab_queue_combo.itemData(i) == 'ALL':
                     qBox.setChecked(True)
                 else:
                     qBox.setChecked(False)
         else:
             for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
-                queue_name = qBox.text()
+                queue_name = self.utilization_tab_queue_combo.itemData(i)
 
                 if queue_name == 'ALL':
                     # 选中部分集群时ALL保持选中
@@ -3952,6 +4061,174 @@ Please contact with liyanqing1987@163.com with any question."""
                         qBox.setChecked(False)
                 else:
                     # 特殊队列（如lost_and_found）默认不选中
+                    qBox.setChecked(False)
+
+    def set_utilization_tab_group_combo(self, checked_group_list=None):
+        """
+        Set (initialize) self.utilization_tab_group_combo.
+        优先从 group_host_mapping.db 读取历史 group 列表;库缺失时 fallback 实时 bmgroup。
+        """
+        self.utilization_tab_group_combo.clear()
+        db_root_path = Path(config.db_path)
+        group_list = []
+
+        # 获取所有集群的所有 host group。
+        if db_root_path.exists() and db_root_path.is_dir():
+            for entry in os.scandir(db_root_path):
+                if entry.is_dir() and entry.name != 'log':
+                    cluster = entry.name
+                    cluster_db_path = db_root_path / cluster
+                    host_group_mapping_db = cluster_db_path / 'group_host_mapping.db'
+
+                    if host_group_mapping_db.exists():
+                        (result, conn) = common_sqlite3.connect_db_file(str(host_group_mapping_db))
+
+                        if result == 'passed':
+                            table_list = common_sqlite3.get_sql_table_list(str(host_group_mapping_db), conn)
+                            cluster_groups = [re.sub(r'^group_', '', table) for table in table_list if table.startswith('group_')]
+
+                            for group in cluster_groups:
+                                group_list.append(f"{cluster}-{group}")
+
+                            conn.close()
+
+        # 库为空时 fallback 实时 bmgroup(当前集群)。
+        if not group_list:
+            self.fresh_lsf_info('host_group')
+
+            for host, groups in self.host_group_dic.items():
+                for group in groups:
+                    group_list.append(f"{self.cluster}-{group}")
+
+        # 按 (cluster, group_name) 二级排序,使同一 cluster 的 group 连续显示。
+        def _group_sort_key(g):
+            c, n = self._parse_group_full_name(g)
+
+            return (c or '', n or '')
+
+        group_list = sorted(set(group_list), key=_group_sort_key)
+        group_list.insert(0, 'ALL')
+
+        for group in group_list:
+            if group == 'ALL':
+                display_text = 'ALL'
+            else:
+                g_cluster, g_name = self._parse_group_full_name(group)
+                display_text = f"{g_name}  ({g_cluster})" if g_cluster else group
+
+            self.utilization_tab_group_combo.addCheckBoxItem(display_text, data=group, update_width=True)
+
+        # 处理默认选中逻辑:默认只选 ALL。
+        if checked_group_list is None:
+            checked_group_list = ['ALL']
+
+        # Set to checked status for checked_group_list(按内部值 data 匹配)。
+        for (i, qBox) in enumerate(self.utilization_tab_group_combo.checkBoxList):
+            data = self.utilization_tab_group_combo.itemData(i)
+
+            if (data in checked_group_list) and (qBox.isChecked() is False):
+                self.utilization_tab_group_combo.checkBoxList[i].setChecked(True)
+            elif (data not in checked_group_list) and (qBox.isChecked() is True):
+                self.utilization_tab_group_combo.checkBoxList[i].setChecked(False)
+
+    def _utilization_tab_has_non_all(self, combo):
+        """检查指定 QComboCheckBox 是否选中了非 ALL 的项。"""
+        selected_dic = combo.selectedItems()
+
+        for text in selected_dic.values():
+            if text != 'ALL':
+                return True
+
+        return False
+
+    def _utilization_tab_combo_is_empty(self, combo):
+        """检查指定 QComboCheckBox 是否完全未选(连 ALL 也没勾)。"""
+        return not combo.selectedItems()
+
+    def _utilization_tab_group_active(self):
+        """
+        判断是否按 Group 维度展示,依据 Queue/Group 两侧选择状态:
+        1. 都 ALL 或都空选 → 默认 Queue 维度。
+        2. 一侧空选,另一侧有选(ALL 或具体项) → 走有选的那侧;另一侧为 Group 时即 Group 维度。
+        3. 任一侧选了非 ALL 项 → 该侧生效(互斥已由 enforce_* 保证另一侧回 ALL)。
+        即:Group 选了非 ALL,或 Queue 空选而 Group 有选 → Group 维度。
+        """
+        queue_empty = self._utilization_tab_combo_is_empty(self.utilization_tab_queue_combo)
+        group_has_selection = not self._utilization_tab_combo_is_empty(self.utilization_tab_group_combo)
+
+        if self._utilization_tab_has_non_all(self.utilization_tab_group_combo):
+            return True
+
+        # Queue 空选且 Group 有选(ALL 或具体项) → 交给 Group 维度。
+        if queue_empty and group_has_selection:
+            return True
+
+        return False
+
+    def _utilization_tab_reset_to_all(self, combo):
+        """将指定 QComboCheckBox 强制回到仅 ALL 选中状态。"""
+        for (i, qBox) in enumerate(combo.checkBoxList):
+            if qBox.text() == 'ALL':
+                if not qBox.isChecked():
+                    combo.checkBoxList[i].setChecked(True)
+            else:
+                if qBox.isChecked():
+                    combo.checkBoxList[i].setChecked(False)
+
+    def enforce_utilization_tab_group_all(self):
+        """Queue 选中非 ALL 项时,Group 强制回到 ALL(互斥)。"""
+        if self._utilization_tab_has_non_all(self.utilization_tab_queue_combo):
+            self._utilization_tab_reset_to_all(self.utilization_tab_group_combo)
+
+    def enforce_utilization_tab_queue_all(self):
+        """Group 选中非 ALL 项时,Queue 强制回到 ALL(互斥)。"""
+        if self._utilization_tab_has_non_all(self.utilization_tab_group_combo):
+            self._utilization_tab_reset_to_all(self.utilization_tab_queue_combo)
+
+    def update_utilization_tab_group_combo_by_cluster(self):
+        """
+        Update group checked state when cluster selection changes.
+        仅调整 Group 选中状态,不修改 group 列表,与 queue 联动逻辑对称。
+        """
+        selected_cluster_dic = self.utilization_tab_cluster_combo.selectedItems()
+        selected_clusters = sorted(list(selected_cluster_dic.values())) if selected_cluster_dic else []
+        select_all = False
+
+        if 'ALL' in selected_clusters:
+            select_all = True
+            selected_clusters = []
+            db_root_path = Path(config.db_path)
+
+            if db_root_path.exists() and db_root_path.is_dir():
+                for entry in os.scandir(db_root_path):
+                    if entry.is_dir() and entry.name != 'log':
+                        selected_clusters.append(entry.name)
+
+        if not selected_clusters:
+            for (i, qBox) in enumerate(self.utilization_tab_group_combo.checkBoxList):
+                qBox.setChecked(False)
+        elif select_all:
+            for (i, qBox) in enumerate(self.utilization_tab_group_combo.checkBoxList):
+                if self.utilization_tab_group_combo.itemData(i) == 'ALL':
+                    qBox.setChecked(True)
+                else:
+                    qBox.setChecked(False)
+        else:
+            for (i, qBox) in enumerate(self.utilization_tab_group_combo.checkBoxList):
+                group_name = self.utilization_tab_group_combo.itemData(i)
+
+                if group_name == 'ALL':
+                    qBox.setChecked(True)
+                    continue
+
+                if '-' in group_name:
+                    group_cluster, _ = self._parse_group_full_name(group_name)
+
+                    if group_cluster in selected_clusters:
+                        qBox.setChecked(True)
+                    else:
+                        qBox.setChecked(False)
+                else:
                     qBox.setChecked(False)
 
     def set_utilization_tab_resource_combo(self):
@@ -4110,6 +4387,142 @@ Please contact with liyanqing1987@163.com with any question."""
 
         return sorted(list(all_queues)), mapping_matrix, current_queue_list
 
+    def get_historical_host_group_mapping(self, db_path, begin_second, end_second):
+        """
+        Get all host group-host mappings in the specified time range.
+        与 get_historical_queue_host_mapping 对称,数据源为 group_host_mapping.db(表 group_<name>)。
+        Returns:
+            - group_list: all groups existed in the time range
+            - mapping_matrix: list of (start_second, end_second, {group: [hosts]})
+            - current_group_list: current existing groups (to mark deleted groups)
+        """
+        host_group_mapping_db_file = str(db_path) + '/group_host_mapping.db'
+        mapping_matrix = []
+        all_groups = set()
+        group_change_points = []
+
+        # 库缺失时 fallback 实时 host_group_dic(当前集群快照)。
+        if not os.path.exists(host_group_mapping_db_file):
+            common.bprint(f'Host group-host mapping database "{host_group_mapping_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            self.fresh_lsf_info('host_group')
+
+            # host_group_dic 是 {host: [groups]},反转为 {group: [hosts]}。
+            current_group_host_dic = {}
+
+            for host, groups in self.host_group_dic.items():
+                for group in groups:
+                    current_group_host_dic.setdefault(group, []).append(host)
+
+            return list(current_group_host_dic.keys()), [(begin_second, end_second, current_group_host_dic)], list(current_group_host_dic.keys())
+
+        (result, conn) = common_sqlite3.connect_db_file(host_group_mapping_db_file)
+
+        if result == 'failed':
+            common.bprint('Failed to connect host group-host mapping database.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            self.fresh_lsf_info('host_group')
+
+            current_group_host_dic = {}
+
+            for host, groups in self.host_group_dic.items():
+                for group in groups:
+                    current_group_host_dic.setdefault(group, []).append(host)
+
+            return list(current_group_host_dic.keys()), [(begin_second, end_second, current_group_host_dic)], list(current_group_host_dic.keys())
+
+        # Get all group tables.
+        table_list = common_sqlite3.get_sql_table_list(host_group_mapping_db_file, conn)
+        group_list = [re.sub(r'^group_', '', table) for table in table_list if table.startswith('group_')]
+
+        # Collect all change points.
+        for group in group_list:
+            table_name = f'group_{group}'
+            data = common_sqlite3.get_sql_table_data(
+                host_group_mapping_db_file, conn, table_name,
+                ['sample_second', 'hosts'],
+                f"WHERE sample_second BETWEEN {begin_second - 86400} AND {end_second + 86400} ORDER BY sample_second"
+            )
+
+            if data and data['sample_second']:
+                for i, sample_second in enumerate(data['sample_second']):
+                    hosts = data['hosts'][i].split()
+                    group_change_points.append((int(sample_second), group, hosts))
+
+                all_groups.add(group)
+
+        # 当前集群才标记 deleted(用实时 bmgroup 判断 group 是否仍存在);其他集群默认视为存在。
+        current_cluster_db_path = str(self.cluster_db_path)
+
+        if db_path == current_cluster_db_path:
+            self.fresh_lsf_info('host_group')
+            current_group_set = set()
+
+            for groups in self.host_group_dic.values():
+                for group in groups:
+                    current_group_set.add(group)
+
+            current_group_list = list(current_group_set)
+        else:
+            current_group_list = list(all_groups)
+
+        # Sort change points by time.
+        group_change_points.sort(key=lambda x: x[0])
+
+        # Generate time slices.
+        if not group_change_points:
+            current_group_host_dic = {}
+
+            for host, groups in self.host_group_dic.items():
+                for group in groups:
+                    current_group_host_dic.setdefault(group, []).append(host)
+
+            return list(all_groups) if all_groups else list(current_group_host_dic.keys()), [(begin_second, end_second, current_group_host_dic)], current_group_list
+
+        # Build mapping matrix.
+        current_mapping = {}
+
+        # Initialize mapping: use the latest record before begin_second for each group.
+        for group in group_list:
+            table_name = f'group_{group}'
+            data = common_sqlite3.get_sql_table_data(
+                host_group_mapping_db_file, conn, table_name,
+                ['sample_second', 'hosts'],
+                f"WHERE sample_second <= {begin_second} ORDER BY sample_second DESC LIMIT 1"
+            )
+
+            if data and data['hosts']:
+                current_mapping[group] = data['hosts'][0].split()
+            else:
+                earliest_data = common_sqlite3.get_sql_table_data(
+                    host_group_mapping_db_file, conn, table_name,
+                    ['sample_second', 'hosts'],
+                    "ORDER BY sample_second ASC LIMIT 1"
+                )
+
+                if earliest_data and earliest_data['hosts']:
+                    current_mapping[group] = earliest_data['hosts'][0].split()
+
+        # Process change points to build time slices.
+        all_change_times = sorted(list(set([cp[0] for cp in group_change_points] + [begin_second, end_second])))
+
+        for i in range(len(all_change_times) - 1):
+            slice_start = max(all_change_times[i], begin_second)
+            slice_end = min(all_change_times[i + 1], end_second)
+
+            if slice_start >= slice_end:
+                continue
+
+            # Update mapping for this slice.
+            for cp_time, group, hosts in group_change_points:
+                if cp_time == all_change_times[i]:
+                    current_mapping[group] = hosts
+
+            # Add to matrix.
+            mapping_matrix.append((slice_start, slice_end, copy.deepcopy(current_mapping)))
+
+        conn.close()
+
+        return sorted(list(all_groups)), mapping_matrix, current_group_list
+
     def get_queue_utilization_info(self):
         """
         Get queue utilization info from sqlite database using historical queue-host mapping, support multi-cluster.
@@ -4143,12 +4556,23 @@ Please contact with liyanqing1987@163.com with any question."""
                     if entry.is_dir() and entry.name != 'log':
                         selected_clusters.append(entry.name)
 
-        # 获取选中的队列
-        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
-        selected_queues = list(selected_queue_dic.values()) if selected_queue_dic else []
+        # 确定当前生效维度:Group 选中了非 ALL 项时按 group 维度统计,否则按 queue 维度。
+        group_active = self._utilization_tab_group_active()
 
-        # Generate cache key (增量查询优化：key包含集群和队列，同条件下复用缓存)
-        cache_base_key = (tuple(selected_clusters), tuple(selected_queues), self.enable_utilization_detail)
+        # 获取选中的队列/Group(二者互斥,生效维度决定数据来源)。取内部值(完整名 {cluster}-{name})。
+        if group_active:
+            selected_entity_dic = self.utilization_tab_group_combo.selectedData()
+        else:
+            selected_entity_dic = self.utilization_tab_queue_combo.selectedData()
+
+        selected_queues = list(selected_entity_dic.values()) if selected_entity_dic else []
+
+        # 生效维度 combo 完全空选时(如双侧都空,或 Group 维度但 Group 也空),视为 ALL 取全部。
+        if not selected_queues:
+            selected_queues = ['ALL']
+
+        # Generate cache key (增量查询优化：key包含集群、维度和队列/group，同条件下复用缓存)
+        cache_base_key = (tuple(selected_clusters), 'group' if group_active else 'queue', tuple(selected_queues), self.enable_utilization_detail)
 
         # Check cache
         current_time = time.time()
@@ -4180,6 +4604,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                                 if begin_second <= ts <= end_second:
                                     vals.append(val)
+
                             if vals:
                                 queue_utilization_dic[queue][res] = round(sum(vals) / len(vals), 1)
                             else:
@@ -4221,7 +4646,8 @@ Please contact with liyanqing1987@163.com with any question."""
             del self.utilization_cache[oldest_key]
 
         # Update message: loading historical mapping
-        # 解析队列和集群的映射
+        # 解析 queue/group 与集群的映射(group_active 时维度为 group)。
+        parse_full_name = self._parse_group_full_name if group_active else self._parse_queue_full_name
         queue_cluster_map = {}
         queue_full_name_map = {}
         only_all_selected = len(selected_queues) == 1 and 'ALL' in selected_queues
@@ -4231,7 +4657,7 @@ Please contact with liyanqing1987@163.com with any question."""
                 continue
 
             if '-' in q:
-                cluster, queue_name = self._parse_queue_full_name(q)
+                cluster, queue_name = parse_full_name(q)
 
                 if cluster and cluster in selected_clusters:
                     if cluster not in queue_cluster_map:
@@ -4257,8 +4683,11 @@ Please contact with liyanqing1987@163.com with any question."""
             my_show_message.start()
             QApplication.processEvents()
 
-            # Get historical mapping for current cluster
-            historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_queue_host_mapping(str(cluster_db_path), original_begin_second, original_end_second)
+            # Get historical mapping for current cluster (queue or group dimension).
+            if group_active:
+                historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_host_group_mapping(str(cluster_db_path), original_begin_second, original_end_second)
+            else:
+                historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_queue_host_mapping(str(cluster_db_path), original_begin_second, original_end_second)
 
             # 确定当前集群要处理的队列
             if only_all_selected or 'ALL' in selected_queues:
@@ -4494,7 +4923,10 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_table.setColumnCount(5)
         self.utilization_tab_table.setRowCount(0)
         self.utilization_tab_table.setRowCount(len(queue_utilization_dic))
-        self.utilization_tab_table_title_list = ['Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
+
+        # 首列标题随生效维度切换:Group 维度显示 Group,否则显示 Queue。
+        group_active = self._utilization_tab_group_active()
+        self.utilization_tab_table_title_list = ['Group' if group_active else 'Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
         self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
 
         self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
@@ -4503,9 +4935,24 @@ Please contact with liyanqing1987@163.com with any question."""
         self.utilization_tab_table.setColumnWidth(3, 60)
         self.utilization_tab_table.setColumnWidth(4, 60)
 
-        # Fresh LSF bhosts/queues/queue_host information.
+        # Fresh LSF bhosts/queues/queue_host/host_group information.
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('queue_host')
+        self.fresh_lsf_info('host_group')
+
+        # 按生效维度选择 entity->hosts 映射:group 维度用 host group,否则用 queue。
+        if group_active:
+            # host_group_dic 是 {host: [groups]},反转为 {group: [hosts]}。
+            entity_host_dic = {}
+
+            for host, groups in self.host_group_dic.items():
+                for group in groups:
+                    entity_host_dic.setdefault(group, []).append(host)
+        else:
+            entity_host_dic = self.queue_host_dic
+
+        # 按生效维度选择 full name 解析函数(queue 或 group),整个表格生成期间不变。
+        parse_full_name = self._parse_group_full_name if group_active else self._parse_queue_full_name
 
         # Fill self.utilization_tab_table items.
         if queue_utilization_dic:
@@ -4516,13 +4963,18 @@ Please contact with liyanqing1987@163.com with any question."""
                 queue_data = queue_utilization_dic[queue]
                 is_deleted = queue_data.get('is_deleted', False) if isinstance(queue_data, dict) else False
 
-                # Fill "Queue" item.
-                queue_display = queue
+                # Fill "Queue/Group" item(显示名 <name>  (<cluster>),内部完整名存 UserRole 供下钻使用)。
+                if queue == 'ALL':
+                    queue_display = 'ALL'
+                else:
+                    e_cluster, e_name = parse_full_name(queue)
+                    queue_display = f"{e_name}  ({e_cluster})" if e_cluster else queue
 
                 if is_deleted:
-                    queue_display = f"{queue} (deleted)"
+                    queue_display = f"{queue_display} (deleted)"
 
                 item = QTableWidgetItem(queue_display)
+                item.setData(Qt.UserRole, queue)
                 item.setFont(QFont('song', 9, QFont.Bold))
 
                 if is_deleted:
@@ -4534,27 +4986,27 @@ Please contact with liyanqing1987@163.com with any question."""
                 total = 0
 
                 if queue == 'ALL':
-                    # Get all selected queues (exclude ALL itself)
-                    selected_queues = [q for q in queue_utilization_dic.keys() if q != 'ALL']
+                    # Get all selected entities (exclude ALL itself)
+                    selected_entities = [q for q in queue_utilization_dic.keys() if q != 'ALL']
                     has_na = False
                     all_hosts = set()
 
-                    for q in selected_queues:
-                        # 检查是否有跨集群队列、已删除队列或不存在的队列
-                        queue_name = q
+                    for q in selected_entities:
+                        # 检查是否有跨集群、已删除或不存在的 entity
+                        entity_name = q
 
                         if '-' in q:
-                            q_cluster, queue_name = self._parse_queue_full_name(q)
+                            q_cluster, entity_name = parse_full_name(q)
 
                             if q_cluster != self.cluster:
                                 has_na = True
                                 break
 
-                        if queue_name not in self.queue_host_dic:
+                        if entity_name not in entity_host_dic:
                             has_na = True
                             break
 
-                        all_hosts.update(self.queue_host_dic[queue_name])
+                        all_hosts.update(entity_host_dic[entity_name])
 
                     if has_na:
                         total = 'N/A'
@@ -4570,24 +5022,24 @@ Please contact with liyanqing1987@163.com with any question."""
 
                                     if re.match(r'^\d+$', host_max):
                                         total += int(host_max)
-                elif queue == 'lost_and_found' or is_deleted:
+                elif (not group_active and queue == 'lost_and_found') or is_deleted:
                     total = 'N/A'
                 else:
-                    # 检查是否是跨集群队列
+                    # 检查是否是跨集群 entity
                     if '-' in queue:
-                        q_cluster, _ = self._parse_queue_full_name(queue)
+                        q_cluster, _ = parse_full_name(queue)
 
                         if q_cluster != self.cluster:
                             total = 'N/A'
                         else:
-                            # 同集群的带前缀队列，提取队列名查询
-                            _, queue_name = self._parse_queue_full_name(queue)
+                            # 同集群的带前缀 entity,提取名称查询
+                            _, entity_name = parse_full_name(queue)
 
-                            if queue_name in self.queue_host_dic:
-                                for queue_host in self.queue_host_dic[queue_name]:
+                            if entity_name in entity_host_dic:
+                                for entity_host in entity_host_dic[entity_name]:
                                     if 'HOST_NAME' in self.bhosts_dic:
-                                        if queue_host in self.bhosts_dic['HOST_NAME']:
-                                            host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                                        if entity_host in self.bhosts_dic['HOST_NAME']:
+                                            host_index = self.bhosts_dic['HOST_NAME'].index(entity_host)
                                             host_max = self.bhosts_dic['MAX'][host_index]
 
                                             if re.match(r'^\d+$', host_max):
@@ -4595,12 +5047,12 @@ Please contact with liyanqing1987@163.com with any question."""
                             else:
                                 total = 'N/A'
                     else:
-                        # 当前集群普通队列
-                        if queue in self.queue_host_dic:
-                            for queue_host in self.queue_host_dic[queue]:
+                        # 当前集群普通 entity
+                        if queue in entity_host_dic:
+                            for entity_host in entity_host_dic[queue]:
                                 if 'HOST_NAME' in self.bhosts_dic:
-                                    if queue_host in self.bhosts_dic['HOST_NAME']:
-                                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                                    if entity_host in self.bhosts_dic['HOST_NAME']:
+                                        host_index = self.bhosts_dic['HOST_NAME'].index(entity_host)
                                         host_max = self.bhosts_dic['MAX'][host_index]
 
                                         if re.match(r'^\d+$', host_max):
@@ -4610,7 +5062,7 @@ Please contact with liyanqing1987@163.com with any question."""
 
                 item = QTableWidgetItem()
 
-                if queue == 'lost_and_found' or is_deleted:
+                if (not group_active and queue == 'lost_and_found') or is_deleted:
                     item.setForeground(QBrush(Qt.gray))
 
                 if total == 'N/A':
@@ -4638,18 +5090,29 @@ Please contact with liyanqing1987@163.com with any question."""
 
     def utilization_tab_check_click(self, item=None):
         """
-        If click QUEUE name, show queue slot/cpu/mem utilization information on UTILIZATION tab.
+        If click QUEUE/GROUP name, show its slot/cpu/mem utilization information on UTILIZATION tab.
         """
         if item is not None:
             current_row = self.utilization_tab_table.currentRow()
-            queue = self.utilization_tab_table.item(current_row, 0).text().strip()
+            # 优先取 UserRole 存的完整名(单元格显示名为 <name>  (<cluster>)),回退到 text。
+            cell_item = self.utilization_tab_table.item(current_row, 0)
+            queue = cell_item.data(Qt.UserRole) if cell_item.data(Qt.UserRole) else cell_item.text().strip()
             # Remove (deleted) suffix if exists
             queue = re.sub(r'\s*\(deleted\)$', '', queue)
 
             if item.column() == 0:
-                common.bprint(f'Checking utilization for queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
+                # 当前生效维度决定下钻到 queue 还是 group。
+                group_active = self._utilization_tab_group_active()
 
-                self.set_utilization_tab_queue_combo(checked_queue_list=[queue, ])
+                if group_active:
+                    common.bprint(f'Checking utilization for group "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
+                    self.set_utilization_tab_group_combo(checked_group_list=[queue, ])
+                    # set_utilization_tab_group_combo 内部不会自动互斥 queue,显式触发一次。
+                    self.enforce_utilization_tab_queue_all()
+                else:
+                    common.bprint(f'Checking utilization for queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
+                    self.set_utilization_tab_queue_combo(checked_queue_list=[queue, ])
+
                 self.update_utilization_tab_info()
 
     def gen_utilization_tab_frame1(self):
@@ -4685,14 +5148,16 @@ Please contact with liyanqing1987@163.com with any question."""
             self.gui_warning(warning_message)
             return
 
-        # Get selected queues
-        selected_queue_dic = self.utilization_tab_queue_combo.selectedItems()
+        # Get selected queues(取内部值)。Group 维度时取 Group combo,Queue 维度时取 Queue combo。
+        if self._utilization_tab_group_active():
+            selected_queue_dic = self.utilization_tab_group_combo.selectedData()
+        else:
+            selected_queue_dic = self.utilization_tab_queue_combo.selectedData()
         selected_queues = list(selected_queue_dic.values()) if selected_queue_dic else []
 
+        # 生效维度 combo 空选时视为 ALL(与取数逻辑一致),否则会误报 "No queue"。
         if not selected_queues:
-            warning_message = 'No queue is specified on UTILIZATION tab.'
-            self.gui_warning(warning_message)
-            return
+            selected_queues = ['ALL']
 
         selected_resource_dic = self.utilization_tab_resource_combo.selectedItems()
         selected_resource_list = list(selected_resource_dic.values())
@@ -5226,6 +5691,7 @@ Please contact with liyanqing1987@163.com with any question."""
                             item.setForeground(QBrush(Qt.gray))
                         else:
                             item.setForeground(QBrush(Qt.red))
+
                         self.license_tab_expires_table.setItem(row, 3, item)
 
         self.license_tab_expires_table.setSortingEnabled(True)

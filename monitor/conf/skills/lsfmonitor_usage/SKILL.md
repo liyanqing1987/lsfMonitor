@@ -117,6 +117,7 @@ monitor/bin/bsample [选项]
 | `-m` | 采集运行中作业内存和idle_factor | `bjobs -u all -r -UF` |
 | `-q` | 采集队列信息 | `bqueues` |
 | `-qH` | 采集队列-主机映射关系 | `bqueues -l` |
+| `-gH` | 采集 host group-主机映射关系（供 UTILIZATION 页按 Group 维度统计） | `bmgroup -w -r` |
 | `-H` | 采集主机状态 | `bhosts` |
 | `-l` | 采集主机负载（ut/tmp/swp/mem） | `lsload` |
 | `-u` | 采集用户作业统计 | `bjobs -u all -d -UF` |
@@ -132,7 +133,8 @@ monitor/bin/bsample [选项]
 10 11,23 * * * /path/to/monitor/bin/bsample -j     # 作业历史（一天两次）
 */5 * * * * /path/to/monitor/bin/bsample -m        # 作业内存和idle_factor
 */5 * * * * /path/to/monitor/bin/bsample -q        # 队列
-*/10 * * * * /path/to/monitor/bin/bsample -qH      # 队列-主机映射
+*/30 * * * * /path/to/monitor/bin/bsample -qH      # 队列-主机映射
+*/30 * * * * /path/to/monitor/bin/bsample -gH      # host group-主机映射
 */5 * * * * /path/to/monitor/bin/bsample -H        # 主机
 */5 * * * * /path/to/monitor/bin/bsample -l        # 负载
 30 11,23 * * * /path/to/monitor/bin/bsample -u     # 用户（一天两次）
@@ -156,6 +158,7 @@ monitor/bin/bsample [选项]
 | `load.db` | 主机负载信息 | `bsample -l` |
 | `queue.db` | 队列 run/pend slot 信息 | `bsample -q` |
 | `queue_host_mapping.db` | 队列-主机映射 | `bsample -qH` |
+| `group_host_mapping.db` | host group-主机映射 | `bsample -gH` |
 | `user/{date}` | 用户作业统计 | `bsample -u` |
 | `utilization.db` | slot/cpu/mem 利用率 | `bsample -U` |
 | `utilization_day.db` | 按天汇聚的利用率 | `bsample -UD` |
@@ -188,11 +191,11 @@ monitor/bin/bmonitor [-j JOBID] [-u USER] [-f FEATURE] [-t TAB] [-d] [--disable_
 |--------|------|
 | **JOB** | 单个作业详情查看（bjobs -UF 格式） |
 | **JOBS** | 作业列表浏览，支持按用户/状态/队列筛选 |
-| **HOSTS** | 集群主机状态总览（bhosts 数据） |
+| **HOSTS** | 集群主机状态总览（bhosts 数据），含 Queue 列和 Group 列（host 所属 host group），并提供 Group 下拉复选框（与 Queue 取交集筛选） |
 | **LOAD** | 主机负载曲线（ut/tmp/swp/mem 历史趋势） |
 | **USERS** | 用户作业统计（懒加载） |
 | **QUEUES** | 队列状态与详情 |
-| **UTILIZATION** | 集群利用率统计与趋势（slot/cpu/mem，懒加载） |
+| **UTILIZATION** | 集群利用率统计与趋势（slot/cpu/mem，懒加载），支持 Queue/Group 两个互斥维度筛选 hosts 后统计 |
 | **LICENSE** | EDA License 使用情况与过期时间（懒加载） |
 | **AI** | AI 智能助手对话界面 |
 

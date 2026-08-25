@@ -982,6 +982,28 @@ def get_host_queue_info(command='bqueues -l', get_hosts_list_command='bhosts -w'
     return host_queue_dic
 
 
+def get_host_group_info(get_bmgroup_info_command='bmgroup -w -r'):
+    """Get host group info of specified hosts with command "bmgroup".
+
+    Returns a reverse mapping {host: [group1, group2, ...]} built from
+    get_bmgroup_info(). A host may belong to multiple host groups.
+    """
+    host_group_dic = {}
+    bmgroup_dic = get_bmgroup_info(get_bmgroup_info_command)
+    group_list = list(bmgroup_dic.keys())
+
+    for group in group_list:
+        host_list = bmgroup_dic[group]
+
+        for host in host_list:
+            if host in host_group_dic.keys():
+                host_group_dic[host].append(group)
+            else:
+                host_group_dic[host] = [group, ]
+
+    return host_group_dic
+
+
 def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
     """
     Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
