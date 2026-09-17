@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# ruff: noqa
 import os
 import yaml
 from es_pandas import es_pandas

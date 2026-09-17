@@ -1,0 +1,23 @@
+# ===== Python =====
+**/__pycache__/
+*.py[oc]
+*.egg-info
+.pytest_cache/
+
+# ===== 编辑器交换/备份文件 =====
+*.swp        # vim 交换文件
+*.swo
+*.swn
+*~           # vim/emacs 备份
+.*.sw?
+\#*\#        # emacs 自动保存
+.\#*
+
+# ===== 操作系统文件 =====
+.DS_Store    # macOS
+Thumbs.db    # Windows
+
+# ===== 数据库 / 运行时数据(绝不该入库) =====
+*.db-journal
+*.db-shm
+*.db-wal

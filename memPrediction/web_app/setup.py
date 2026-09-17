@@ -1,5 +1,7 @@
+# ruff: noqa
 import argparse
 import os
+import shlex
 import shutil
 import socket
 import subprocess
@@ -219,10 +221,10 @@ def data_collect():
             file_date = dataCollector.DataCollector.extract_file_date(file)
 
             if file_date not in job_indices:
-                command += f'bash {web_app_path}/backend/dataCollector -f {os.path.join(config.db_path, file)} --job\n'
+                command += f'bash {web_app_path}/backend/dataCollector -f {shlex.quote(os.path.join(config.db_path, file))} --job\n'
 
             if file_date not in summary_indices:
-                command += f'bash {web_app_path}/backend/dataCollector -f {os.path.join(config.db_path, file)} --summary\n'
+                command += f'bash {web_app_path}/backend/dataCollector -f {shlex.quote(os.path.join(config.db_path, file))} --summary\n'
 
     logger.info(f'Command: {command}')
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)

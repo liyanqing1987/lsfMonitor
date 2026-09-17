@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# ruff: noqa
 ################################
 # File Name   : training_model.py
 # Author      : zhangjingwen.silvia

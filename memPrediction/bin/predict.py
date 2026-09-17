@@ -22,6 +22,24 @@ from common import common, common_model, common_lsf
 
 logger = common.get_logger(name='root', level=logging.DEBUG)
 
+# LSF_UNIT_FOR_LIMITS 在一个集群里是固定的，进程内只检测一次即可
+# (检测会 fork badmin / 读 lsf.conf，不必每个请求都做)。
+_lsf_unit_cache = None
+
+
+def get_lsf_unit():
+    """返回集群 LSF_UNIT_FOR_LIMITS(KB/MB/GB/TB)，进程内缓存。"""
+    global _lsf_unit_cache
+
+    if _lsf_unit_cache is None:
+        try:
+            _lsf_unit_cache = common_lsf.get_lsf_unit_for_limits()
+        except Exception as error:
+            logger.error("Could not get LSF_UNIT_FOR_LIMITS, fallback to MB: %s" % str(error))
+            _lsf_unit_cache = 'MB'
+
+    return _lsf_unit_cache
+
 
 def read_args():
     """
@@ -83,9 +101,54 @@ class PredictModel:
         else:
             logger.error("Could not find user max memory dict in model config, please check!")
 
+    def warmup(self):
+        """
+        预加载 base_model 的 embedding(word2vec/glove) 模型到进程级缓存。
+
+        常驻预测服务(predict_web)启动时在每个 worker 内调用一次，模型加载与
+        LSF 单位检测都在启动时完成，避免首个请求承担几十 MB 模型从磁盘加载的
+        耗时(在线 esub 的 curl 超时仅数秒)。CLI 一次性预测无需调用。
+        """
+        # 预热 LSF 单位检测(内部会 badmin/读 lsf.conf)，结果进程级缓存。
+        get_lsf_unit()
+
+        base_model_cfg = self.config_dic.get('base_model')
+
+        if not base_model_cfg:
+            return
+
+        for column, model_dic in base_model_cfg.items():
+            text_column = r'%s_text' % column
+
+            for model_name, model_cfg in model_dic.items():
+                model_path = model_cfg.get('model_path')
+                emb_size = model_cfg.get('emb_size', 0)
+
+                if model_name == 'word2vec':
+                    common_model.Word2VecModel(text_column, emb_size, model_path)._load_model()
+                elif model_name == 'glove':
+                    common_model.GloVeModel(text_column, emb_size, model_cfg.get('corpus_path'), model_path)._load_model()
+
+    @staticmethod
+    def _to_scalar_int(value):
+        # model 预测结果是 numpy ndarray(如 array([2.514]) )，GB/TB 分支单位换算
+        # 原样透传，会变成 "[2.514]" 这种带方括号的字符串，esub 端
+        # grep '^[[:digit:]]*$' 校验无法识别。统一规整为 python 原生 int 标量。
+        if hasattr(value, 'tolist'):
+            value = value.tolist()
+
+        if isinstance(value, list):
+            value = value[0] if value else 0
+
+        try:
+            return int(round(float(value)))
+        except (TypeError, ValueError):
+            return 1
+
     @common.timer
     def predict(self, debug, job_info_dic):
-        logger.info("predict max memory ... unit: %s" % str(common_lsf.get_lsf_unit_for_limits()))
+        lsf_unit_for_limits = 'MB'
+        logger.info("predict max memory ... unit: %s" % str(lsf_unit_for_limits))
 
         if debug:
             logger.debug("Debug mode, tool maybe crash.")
@@ -98,8 +161,8 @@ class PredictModel:
                 logger.error("Error: %s" % str(error))
                 predict_memory = 1
 
-        lsf_unit_for_limits = 'MB'
         result_prediction = common.memory_unit_from_gb_other(predict_memory, unit=lsf_unit_for_limits)
+        result_prediction = self._to_scalar_int(result_prediction)
 
         logger.info("predict max memory is %s %s" % (str(result_prediction), lsf_unit_for_limits))
 
@@ -246,7 +309,7 @@ class PredictModel:
             job_struct_data[column] = job_struct_data[column].astype('category')
 
         for column in encode_list:
-            job_struct_data[column] = job_struct_data[column].map(lambda s: np.random.choice(self.enc_cats[column].classes_, 1)[0] if s not in self.enc_cats[column].classes_ else s)
+            job_struct_data[column] = job_struct_data[column].map(lambda s, _c=column: np.random.choice(self.enc_cats[_c].classes_, 1)[0] if s not in self.enc_cats[_c].classes_ else s)
             job_struct_data[column] = self.enc_cats[column].transform(list(job_struct_data[column].values))
             job_struct_data[column] = job_struct_data[column].astype('category')
             job_struct_data[column] = job_struct_data[column].astype('int')

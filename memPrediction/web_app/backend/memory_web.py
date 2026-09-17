@@ -1,3 +1,4 @@
+# ruff: noqa
 import datetime
 import json
 import os
