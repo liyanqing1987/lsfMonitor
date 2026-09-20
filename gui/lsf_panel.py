@@ -516,6 +516,7 @@ class LsfPanel(PanelBase):
         if hasattr(self, 'queues_tab_begin_date_edit'):
             if state:
                 self.queues_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
+                self.queues_tab_end_date_edit.setDate(QDate.currentDate())
             else:
                 self.queues_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
@@ -528,6 +529,7 @@ class LsfPanel(PanelBase):
         if hasattr(self, 'utilization_tab_begin_date_edit'):
             if state:
                 self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
+                self.utilization_tab_end_date_edit.setDate(QDate.currentDate())
             else:
                 self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
