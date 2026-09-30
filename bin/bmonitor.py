@@ -3,9 +3,9 @@
 # File Name   : bmonitor.py
 # Author      : liyanqing.1987
 # Created On : 2026-08-25
-# Description : lsfMonitor unified GUI launcher (defaults to the LSF panel).
+# Description : lsfMonitor unified GUI launcher (defaults to the LSF panel)
 #               Thin wrapper: sets up sys.path and delegates to
-#               gui.main_window.main() which focuses the LSF outer tab.
+#               gui.main_window.main() which focuses the LSF outer tab
 ################################
 
 import os

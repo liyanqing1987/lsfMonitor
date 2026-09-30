@@ -3,8 +3,9 @@
 # File Name   : theme.py
 # Author      : liyanqing.1987
 # Created On  : 2026-08-24
-# Description : Global QSS theme for lsfMonitor. Light theme follows Ant Design 5
-#               / Fluent Design style (same palette as PMP).
+# Description : Global QSS theme for lsfMonitor. Light theme follows Ant Design /
+#               Fluent Design layout conventions, with a Tailwind-derived
+#               palette (same palette as PMP)
 ################################
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtGui import QIcon, QPainter, QColor, QPen, QPixmap
@@ -93,7 +94,7 @@ def draw_debug_icon(p, s, c):
     head_r = s * 0.10
     head_cy = cy - r - head_r * 0.2
     p.drawEllipse(QPointF(cx, head_cy), head_r, head_r)
-    # Antennae (two short curved strokes going up/out)
+    # Antennae (two short strokes angled up/out)
     p.setBrush(Qt.NoBrush)
     p.setPen(pen)
     ant_y0 = head_cy - head_r * 0.3
@@ -125,76 +126,83 @@ def debug_icon(color='#8C8C8C', size=16):
     return DEBUG_ICON_CACHE[key]
 
 
-# ==========================================================================
-# Palette (Ant Design Pro 风格蓝白主题)
-# --------------------------------------------------------------------------
-# 设计要点:
-#   * 页面底用冷灰蓝 (#F1F5F9),白卡片浮在上面,形成"纸在桌面"的层次;
-#   * 表头用 AntD primary-50 浅蓝底 (#F0F5FF) + primary-800 深蓝字 (#1E40AF),
-#     而不是无彩灰,让表头既区分数据行又带品牌感;
-#   * 边框加深一档到 #DCE3ED / #C3CDDB,轮廓更清晰,解决"发白无力";
-#   * 侧边栏选中项: 浅蓝底 + 左侧 3px 主色竖条 (AntD 菜单标志性样式);
-#   * Tab 选中下划线加粗到 3px,让当前 tab 一眼可辨;
-#   * 表格行 hover/选中/zebra 都在同一蓝色系里递进,无突兀跳变;
-#   * 状态色 RUN 绿 / EXIT 红 / PEND 蓝 保持高饱和,作为画面"彩色锚点"。
-# ==========================================================================
-PRIMARY = '#2563EB'              # AntD blue-600 主品牌色
-PRIMARY_HOVER = '#4080FF'        # AntD blue-5 (hover 亮一档)
-PRIMARY_PRESSED = '#1D4ED8'      # AntD blue-7
-PRIMARY_BG = '#E8F1FF'           # 选中/按下浅蓝底 (比 #DBEAFE 稍柔和,更 AntD)
-PRIMARY_BG_HOVER = '#BAE0FF'     # 更深一档
-PRIMARY_LIGHT = '#F0F5FF'        # AntD blue-50,表头蓝底
-# JOB页 MEMORY/IDLE_FACTOR 子tab容器底色;比 PRIMARY_LIGHT 更白一档,补偿
-# Box+Raised 阴影叠加带来的偏蓝,使其与主 tab bar 视觉一致
+# ============================================================================
+# Palette (Ant Design Pro inspired blue/white theme)
+# ============================================================================
+# Design notes:
+#   * Cool grey-blue page background (#F1F5F9) with white cards floating on
+#     top, giving a "paper on a desk" layering;
+#   * Header uses a light-blue fill (#F0F5FF) with deep-blue text (#1E40AF)
+#     rather than neutral grey, so it separates data rows and carries brand;
+#   * Borders one step darker (#DCE3ED / #C3CDDB) keep outlines crisp instead
+#     of washed out;
+#   * Sidebar selection: light-blue fill + a 3px primary bar on the left (the
+#     signature AntD menu look);
+#   * Selected tab: a 2px bottom edge in the pane color, so it visually grows
+#     out of the white card;
+#   * Table hover / selected / zebra all step within one blue family, with no
+#     jarring jumps;
+#   * Status colors stay highly saturated (RUN green / EXIT red / PEND blue) as
+#     the picture's color anchors
+# ============================================================================
+PRIMARY = '#2563EB'              # Tailwind blue-600, primary brand color
+PRIMARY_HOVER = '#4080FF'        # one step brighter on hover
+PRIMARY_PRESSED = '#1D4ED8'      # Tailwind blue-700
+PRIMARY_BG = '#E8F1FF'           # Light-blue fill for selected/pressed (slightly softer than #DBEAFE)
+PRIMARY_BG_HOVER = '#BAE0FF'     # one step deeper
+PRIMARY_LIGHT = '#F0F5FF'        # AntD geekblue-1, header fill
+# Container background for the JOB page MEMORY/IDLE_FACTOR sub-tabs; one step
+# whiter than PRIMARY_LIGHT to offset the blue cast from stacked Box+Raised
+# shadows, keeping it visually level with the main tab bar
 CHART_FRAME_BG = '#F5F8FC'
 
-# 大面块色
-HEADER_BG = PRIMARY_LIGHT        # 表头:AntD 蓝-50 浅蓝 (带品牌色,区别于纯白数据行)
+# Large surface colors
+HEADER_BG = PRIMARY_LIGHT        # Header: light blue (brand-tinted, distinct from the pure-white data rows)
 HEADER_BG_HOVER = '#E0EBFF'
-HEADER_TEXT = '#1E40AF'          # 表头字:AntD 蓝-800 深蓝,比灰字更"定调"
+HEADER_TEXT = '#1E40AF'          # Header text: Tailwind blue-800, sets the tone better than grey
 SIDEBAR_SELECTED_BG = '#E8F1FF'
 SIDEBAR_SELECTED_TEXT = PRIMARY_PRESSED
 
-# 层级背景
-BG_PAGE = '#F1F5F9'             # 页面底:slate-100
-BG_SIDEBAR = '#FAFBFC'           # 侧边栏:比白稍灰,区分主区
+# Layered backgrounds
+BG_PAGE = '#F1F5F9'             # Page background: slate-100
+BG_SIDEBAR = '#FAFBFC'           # Sidebar: slightly greyer than white, to separate it from the main area
 BG_WHITE = '#FFFFFF'
 BG_CARD = '#FFFFFF'
-BG_TABLE_ALT = '#FAFBFD'         # 斑马纹:比纯白稍冷一度
-BG_TABLE_HOVER = '#EAF3FF'       # 行 hover:比 primary_bg 更浅
-BG_TABLE_SELECTED = PRIMARY_BG   # 选中行
+BG_TABLE_ALT = '#FAFBFD'         # Zebra striping: a touch cooler than pure white
+BG_TABLE_HOVER = '#EAF3FF'       # Row hover: lighter than primary_bg
+BG_TABLE_SELECTED = PRIMARY_BG   # Selected row
 BG_DISABLED = '#F1F5F9'
 
-# 文字色
-TEXT_PRIMARY = '#0F172A'         # Slate-900
-TEXT_REGULAR = '#1F2937'         # Slate-800
-TEXT_SECONDARY = '#4B5563'       # Slate-600
+# Text colors
+TEXT_PRIMARY = '#0F172A'         # Tailwind slate-900
+TEXT_REGULAR = '#1F2937'         # Tailwind gray-800
+TEXT_SECONDARY = '#4B5563'       # Tailwind gray-600
 TEXT_DISABLED = '#94A3B8'
 TEXT_INVERSE = '#FFFFFF'
 
-# 边框 (加深一档,解决"惨白看不清轮廓")
-BORDER = '#DCE3ED'               # 常规分隔线
-BORDER_STRONG = '#C3CDDB'        # 输入框/按钮/卡片边
+# Borders (one step darker so outlines are not washed out)
+BORDER = '#DCE3ED'               # Regular dividers
+BORDER_STRONG = '#C3CDDB'        # Input / button / card borders
 
 
 # White check mark icon for QCheckBox::indicator:checked (drawn over the blue
-# fill). Stored under data/pictures so QSS image: url() resolves reliably.
+# fill). Stored under data/pictures so QSS image: url() resolves reliably
 CHECK_ICON = _os.path.join(_os.environ.get('LSFMONITOR_INSTALL_PATH', '.'), 'data', 'pictures', 'check.png')
 
-# 状态色:用 Ant Design 6 色板,比旧版稍微沉稳一点
-STATUS_RUN = '#16A34A'     # Green-600 (比 #52C41A 稍深,更耐看)
-STATUS_PEND = PRIMARY     # 排队中 = 品牌蓝
-STATUS_DONE = '#94A3B8'   # 完成 = 中性灰 (Slate-400)
-STATUS_EXIT = '#DC2626'   # 失败 = Red-600 (比 #FF4D4F 稳重)
+# Status colors: 6 semantic colors, a little more subdued than the old set
+STATUS_RUN = '#16A34A'     # Green-600 (a little deeper than #52C41A, easier on the eye)
+STATUS_PEND = PRIMARY     # Pending = brand blue
+STATUS_DONE = '#94A3B8'   # Done = neutral grey (Slate-400)
+STATUS_EXIT = '#DC2626'   # Failed = Red-600 (steadier than #FF4D4F)
 
-# ==========================================================================
-# Chart palette (matplotlib) — aligns chart colors with the AntD-ish UI theme.
+# ============================================================================
+# Chart palette (matplotlib) — aligns chart colors with the AntD-ish UI theme
 # Two parallel dicts keyed by dark_mode bool so drawing code can do
-# CHART_COLORS[bool(self.dark_mode)] and get a coherent palette.
+# CHART_COLORS[bool(self.dark_mode)] and get a coherent palette
 # Kept here (no matplotlib import) so theme.py stays dependency-free; consumed
-# by common_pyqt5.style_axes / apply_chart_style.
-# ==========================================================================
-# Sequential series for multi-line charts (AntD blue-leaning, color-blind safe).
+# by common_pyqt5.style_axes / apply_chart_style
+# ============================================================================
+# Sequential series for multi-line charts (AntD blue-leaning, color-blind safe)
 CHART_SERIES = ['#2563EB', '#16A34A', '#F59E0B', '#8B5CF6', '#06B6D4', '#EC4899']
 
 CHART_COLORS = {
@@ -218,8 +226,8 @@ CHART_COLORS = {
     },
 }
 
-# Semantic colors for single-series charts (mem / idle / ut / run / pend...).
-# Falls back to CHART_SERIES for generic multi-series.
+# Semantic colors for single-series charts (mem / idle / ut / run / pend...)
+# Use CHART_SERIES for generic multi-series charts
 CHART_MEM_COLOR = STATUS_RUN          # memory curve = green-600
 CHART_IDLE_COLOR = PRIMARY             # idle_factor curve = brand blue
 CHART_UT_COLOR = '#2563EB'          # utilization = brand blue
@@ -227,8 +235,8 @@ CHART_RUN_COLOR = STATUS_RUN         # RUN jobs count = green
 CHART_PEND_COLOR = '#F59E0B'          # PEND jobs count = amber-500 (warn)
 CHART_EXIT_COLOR = STATUS_EXIT        # EXIT / over-rusage = red
 
-# Chart line widths — single source of truth so all curves stay consistent.
-# Detail mode (dense sample points, e.g. per-minute ut) uses a thinner line.
+# Chart line widths — single source of truth so all curves stay consistent
+# Detail mode (dense sample points, e.g. per-minute ut) uses a thinner line
 CHART_LINEWIDTH = 1.2
 CHART_LINEWIDTH_DETAIL = 0.6
 
@@ -238,9 +246,9 @@ FONT_FAMILY = (
 )
 FONT_SIZE = 13
 
-# ==========================================================================
+# ============================================================================
 # Sidebar (QListWidget outer navigation)
-# ==========================================================================
+# ============================================================================
 SIDEBAR_LIGHT_QSS = f'''
 QListWidget#navList {{
     background: {BG_SIDEBAR};
@@ -302,9 +310,9 @@ QListWidget#navList::item:hover:!selected {
 }
 '''
 
-# ==========================================================================
+# ============================================================================
 # Light theme (global application QSS)
-# ==========================================================================
+# ============================================================================
 LIGHT_THEME_QSS = f'''
 * {{
     font-family: {FONT_FAMILY};
@@ -379,18 +387,22 @@ QMenu::separator {{
 }}
 
 /* ---- Main panel inner tabs (JOB/JOBS/HOSTS/..., FEATURE/USER/..., RUN/LOG)
-   仅作用于 PanelBase.main_tab (objectName="mainTab"),不影响嵌套的小 tab
-   (例如 JOB tab 里的 chart 子 QTabWidget)。
+   Applies only to PanelBase.main_tab (objectName="mainTab"); nested sub-tabs
+   (e.g. the chart QTabWidget inside the JOB tab) are unaffected.
 
-   视觉 (Chrome / AntD card-type tabs):
-     * tab 条整体是浅蓝底 (AntD primary-50),与页面冷灰底呼应并稍显色;
-     * 每个 tab 是一张独立的白色小卡片,顶部圆角,左右 margin 留出缝隙
-       (缝隙处透出浅蓝底色),形成"一排小白纸飘在蓝底上"的层次;
-     * 未选中 tab: 白底 + 淡灰边 + 顶圆角,底边闭合,独立悬浮;
-     * Hover tab: 浅蓝底反馈;
-     * 选中 tab: 白底 + 深一点的边 + 底边延伸 -1px"咬"掉 pane 顶线,
-       看起来直接"长"在下面的白卡片上,3px 主色下划线强化选中;
-     * pane: 白卡片 + 四周边框,和选中 tab 自然连成一体。*/
+   Look (Chrome / AntD card-type tabs):
+     * The tab strip is light blue overall (AntD primary-50), echoing the cool
+       grey page background while staying slightly tinted;
+     * Each tab is its own white card with a rounded top and side margins that
+       let the light-blue background show through, so a row of small white
+       cards floats on blue;
+     * Unselected tab: white fill + pale grey border + rounded top, closed
+       bottom edge, floating independently;
+     * Hover tab: light-blue feedback;
+     * Selected tab: white fill + a slightly darker border + a -1px bottom
+       edge that bites into the pane top line, so it looks like it grows out
+       of the white card below; a 2px white bottom edge reinforces selection;
+     * Pane: a white card with a border all round, joining the selected tab. */
 /* Give the QTabWidget itself a light-blue background so the tab-strip row
    is blue all the way to the right edge even when the QTabBar does not
    expand to fill (or the style leaves a gap between bar and pane). The
@@ -786,7 +798,7 @@ QComboBox QAbstractItemView::item:hover {{
    Indicator dimensions are explicit so the box renders as a clean square
    inside QComboBox drop-down lists (where item padding otherwise squeezes
    the indicator to a collapsed "two vertical lines" look). Border is
-   1.5px solid gray-400 for the unchecked state, blue fill + white tick
+   1.5px solid {BORDER_STRONG} for the unchecked state, blue fill + white tick
    when checked. */
 QCheckBox, QRadioButton {{
     color: {TEXT_PRIMARY};

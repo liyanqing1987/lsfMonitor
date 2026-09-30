@@ -1,7 +1,16 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : check_issue_reason.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Small GUI that reports why an LSF job is PEND, SLOW or FAIL,
+#               with the reason analysis and suggested handling
+################################
+
 import os
 import re
 import sys
+import shlex
 import yaml
 import argparse
 import subprocess
@@ -86,11 +95,9 @@ class MainWindow(QMainWindow):
         """
         Main process, draw the main graphic frame.
         """
-        # Define main Tab widget
         self.main_tab = QTabWidget(self)
         self.setCentralWidget(self.main_tab)
 
-        # Define sub-frames
         self.select_frame = QFrame(self.main_tab)
         self.info_frame = QFrame(self.main_tab)
 
@@ -99,7 +106,6 @@ class MainWindow(QMainWindow):
         self.info_frame.setFrameShadow(QFrame.Raised)
         self.info_frame.setFrameShape(QFrame.Box)
 
-        # Grid
         main_grid = QGridLayout()
 
         main_grid.addWidget(self.select_frame, 0, 0)
@@ -110,11 +116,9 @@ class MainWindow(QMainWindow):
 
         self.main_tab.setLayout(main_grid)
 
-        # Generate main_table
         self.gen_select_frame()
         self.gen_info_frame()
 
-        # Show main window
         self.setWindowTitle('Check Issue Reason')
         common_pyqt5.auto_resize(self, 600, 300)
         common_pyqt5.center_window(self)
@@ -146,7 +150,6 @@ class MainWindow(QMainWindow):
         empty_label_1 = QLabel(self.select_frame)
         empty_label_2 = QLabel(self.select_frame)
 
-        # self.select_frame - Grid
         select_frame_grid = QGridLayout()
 
         select_frame_grid.addWidget(job_label, 0, 0)
@@ -171,7 +174,6 @@ class MainWindow(QMainWindow):
         # self.info_frame
         self.info_text = QTextEdit(self.info_frame)
 
-        # self.info_frame - Grid
         info_frame_grid = QGridLayout()
         info_frame_grid.addWidget(self.info_text, 0, 0)
         self.info_frame.setLayout(info_frame_grid)
@@ -192,7 +194,7 @@ class MainWindow(QMainWindow):
         if not job:
             self.info_text.append('<font color="#FF0000">*Error*: Please specify "Job" first.</font>')
         else:
-            command = 'bjobs -UF ' + str(job)
+            command = 'bjobs -UF ' + shlex.quote(str(job))
             job_dic = common_lsf.get_bjobs_uf_info(command)
 
             if job not in job_dic:

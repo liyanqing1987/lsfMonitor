@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : common_ai.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : AI helpdesk backend: LLM agent loop (OpenAI / Anthropic), tool
+#               execution with dangerous-command confirmation, RAG retrieval,
+#               and the cluster / user / job / queue analyze HTML reports
+################################
 
 import os
 import re
@@ -22,11 +30,12 @@ from common import common
 from common import common_license
 from common import common_sqlite3
 
-# openai and anthropic are lazy-imported inside their respective methods
-# (_agent_loop_openai / _agent_loop_anthropic) to avoid ~4.8s startup penalty.
-# They are only needed when the user actually starts an AI chat session.
+# openai and anthropic are lazy-imported inside _get_openai_client /
+# _get_anthropic_client (called by the two agent loops) to avoid a ~4.8s
+# startup penalty
+# They are only needed when the user actually starts an AI chat session
 
-# Default dangerous commands that require user confirmation.
+# Default dangerous commands that require user confirmation
 DEFAULT_DANGEROUS_COMMANDS = ['bkill', 'badmin', 'brestart', 'bstop', 'bresume', 'bswitch', 'bmod',
                               'rm', 'kill', 'killall', 'shutdown', 'reboot', 'mkfs', 'dd',
                               'eval', 'source', 'xargs']
@@ -149,7 +158,7 @@ Emit raw HTML fragment ONLY (no <html>/<body>, no markdown code fences, no <h1>)
 -->
 """
 
-# Tool definitions in OpenAI format (also used as canonical format).
+# Tool definitions in OpenAI format (also used as canonical format)
 TOOLS_OPENAI = [
     {
         "type": "function",
@@ -219,7 +228,7 @@ TOOLS_OPENAI = [
     }
 ]
 
-# Tool definitions in Anthropic format.
+# Tool definitions in Anthropic format
 TOOLS_ANTHROPIC = [
     {
         "name": t["function"]["name"],
@@ -272,9 +281,23 @@ def parse_xml_tool_calls(content):
     return results
 
 
-# ============================================================
-# Tool execution functions (shared by both API types).
-# ============================================================
+# ============================================================================
+# Tool execution functions (shared by both API types)
+# ============================================================================
+
+def _safety_check_tokens(command):
+    """Tokenize a command for the ssh-block / dangerous-command check.
+
+    The command runs under shell=True, so the shell JOINS words that are split
+    by quotes or backslash escapes: bki''ll executes as bkill. Strip those
+    characters before splitting so the check sees the same word the shell will
+    run. Over-matching only costs an extra confirmation dialog; a miss would
+    silently skip the confirmation.
+    """
+    normalized = re.sub(r"""[\\'"`$]""", '', command)
+
+    return [token for token in re.split(r'[\s|;&<>(){}]+', normalized) if token]
+
 
 def execute_command(command, dangerous_list, confirm_callback):
     """Execute a command with safety checks."""
@@ -283,11 +306,10 @@ def execute_command(command, dangerous_list, confirm_callback):
 
     # Hard block: ssh/scp/sftp prompts interactively and blocks the tool
     # invisibly in the GUI. Tokenize the same way as the dangerous check below
-    # so it can't hide behind separators/wrappers.
-    ssh_tokens = [token for token in re.split(r'[\s|;&<>()`{}\'"$\\]+', command) if token]
+    # so it can't hide behind separators/wrappers
     ssh_blocked = {'ssh', 'scp', 'sftp'}
 
-    for token in ssh_tokens:
+    for token in _safety_check_tokens(command):
         if (token in ssh_blocked) or (os.path.basename(token) in ssh_blocked):
             return ("Error: ssh/scp/sftp is not allowed via run_command — it can "
                     "block the tool with an invisible interactive prompt. Use "
@@ -296,10 +318,8 @@ def execute_command(command, dangerous_list, confirm_callback):
 
     # Tokenize across all shell separators so dangerous commands can't hide
     # behind ;, &&, ||, |, newlines, $(...), backticks, quotes or wrappers
-    # (xargs/sh -c/env/eval). Runs under shell=True.
-    tokens = [token for token in re.split(r'[\s|;&<>()`{}\'"$\\]+', command) if token]
-
-    for token in tokens:
+    # (xargs/sh -c/env/eval). Runs under shell=True
+    for token in _safety_check_tokens(command):
         if (token in dangerous_list) or (os.path.basename(token) in dangerous_list):
             if not confirm_callback(command):
                 return f"User rejected execution of command: {command}"
@@ -379,6 +399,8 @@ def execute_job_history_query(db_path, job_id='', user='', queue='', status='', 
 
         if not date:
             date = datetime.datetime.now().strftime('%Y%m%d')
+        elif not re.match(r'^\d{8}$', str(date)):
+            return f"Invalid date \"{date}\": expected YYYYMMDD."
 
         db_file = str(job_db_path) + '/' + str(date) + '.db'
 
@@ -441,16 +463,17 @@ def execute_job_history_query(db_path, job_id='', user='', queue='', status='', 
         return f"Error querying job history: {e}"
 
 
-# ============================================================
-# Documentation loading and search (RAG vector + keyword fallback).
-# ============================================================
+# ============================================================================
+# Documentation loading and search (RAG vector + keyword fallback)
+# ============================================================================
 
 def load_ai_documents(docs_dir):
     """
     Load documents from db/ai/rag/ directory.
     Prefers FAISS index (rag_faiss.index + rag_chunks.json).
     Falls back to keyword search if FAISS files are absent.
-    Returns a dict: {"chunks": [...], "faiss_index": faiss.Index or None}
+    Returns a dict: {"chunks": [...], "faiss_index": faiss.Index or None,
+    "metadata": [...]}
     """
     result = {"chunks": [], "faiss_index": None, "metadata": []}
 
@@ -461,7 +484,7 @@ def load_ai_documents(docs_dir):
     faiss_file = os.path.join(docs_dir, 'rag_faiss.index')
     metadata_file = os.path.join(docs_dir, 'rag_metadata.json')
 
-    # Try loading FAISS index.
+    # Try loading FAISS index
     if os.path.exists(chunks_file) and os.path.exists(faiss_file) and FAISS_AVAILABLE:
         try:
             with open(chunks_file, 'r', errors='replace') as f:
@@ -469,7 +492,7 @@ def load_ai_documents(docs_dir):
 
             result["faiss_index"] = faiss.read_index(faiss_file)
 
-            # Load metadata if available and length matches chunks.
+            # Load metadata if available and length matches chunks
             if os.path.exists(metadata_file):
                 try:
                     with open(metadata_file, 'r', errors='replace') as f:
@@ -484,13 +507,13 @@ def load_ai_documents(docs_dir):
         except Exception:
             pass
 
-    # Fallback: load chunks for keyword search.
+    # Fallback: load chunks for keyword search
     if os.path.exists(chunks_file):
         try:
             with open(chunks_file, 'r', errors='replace') as f:
                 result["chunks"] = json.load(f)
 
-            # Load metadata if available and length matches chunks.
+            # Load metadata if available and length matches chunks
             if os.path.exists(metadata_file):
                 try:
                     with open(metadata_file, 'r', errors='replace') as f:
@@ -550,12 +573,12 @@ def execute_documentation_search(doc_data, query, api_base_url='', api_key='', e
     if not query.strip():
         return ("Empty search query.", [])
 
-    # Try FAISS vector search.
+    # Try FAISS vector search
     if faiss_index is not None and api_base_url and api_key and embedding_model:
         query_vec = _get_query_embedding(query, api_base_url, api_key, embedding_model)
 
         if query_vec is not None:
-            # Normalize query vector (index was built with normalized vectors).
+            # Normalize query vector (index was built with normalized vectors)
             norm = np.linalg.norm(query_vec)
 
             if norm > 0:
@@ -592,7 +615,7 @@ def execute_documentation_search(doc_data, query, api_base_url='', api_key='', e
             if results:
                 return ('\n\n---\n\n'.join(results), matched_sources)
 
-    # Fallback: keyword search.
+    # Fallback: keyword search
     keywords = query.lower().split()
     scored = []
 
@@ -640,9 +663,9 @@ class DocLoaderThread(QThread):
         self.finished_signal.emit(doc_data)
 
 
-# ============================================================
-# Skill loading (config/ai/*/SKILL.md).
-# ============================================================
+# ============================================================================
+# Skill loading (config/ai/*/SKILL.md)
+# ============================================================================
 
 def load_skills(skills_dir):
     """
@@ -666,7 +689,7 @@ def load_skills(skills_dir):
         except Exception:
             continue
 
-        # Parse YAML frontmatter for tags.
+        # Parse YAML frontmatter for tags
         tags = []
 
         if text.startswith('---'):
@@ -716,9 +739,9 @@ def match_skills(skills, user_message):
     return ('\n\n'.join(matched_content), matched_names)
 
 
-# ============================================================
-# Message format converters (OpenAI <-> Anthropic).
-# ============================================================
+# ============================================================================
+# Message format converters (OpenAI -> Anthropic)
+# ============================================================================
 
 def openai_messages_to_anthropic(messages):
     """
@@ -765,8 +788,8 @@ def openai_messages_to_anthropic(messages):
                 "content": msg.get('content', '')
             }
 
-            # Anthropic expects tool results inside a user message.
-            # Group consecutive tool results into one user message.
+            # Anthropic expects tool results inside a user message
+            # Group consecutive tool results into one user message
             if anthropic_msgs and anthropic_msgs[-1]['role'] == 'user' and isinstance(anthropic_msgs[-1]['content'], list):
                 anthropic_msgs[-1]['content'].append(tool_result)
             else:
@@ -775,9 +798,9 @@ def openai_messages_to_anthropic(messages):
     return system, anthropic_msgs
 
 
-# ============================================================
-# AiChatThread - supports both OpenAI and Anthropic APIs.
-# ============================================================
+# ============================================================================
+# AiChatThread - supports both OpenAI and Anthropic APIs
+# ============================================================================
 
 class AiChatThread(QThread):
     """Worker thread for AI chat with streaming and tool calling."""
@@ -820,25 +843,25 @@ class AiChatThread(QThread):
         self._sources = {"rag_sources": [], "skills": []}
         self._timing_stats = {"llm_total": 0.0, "llm_first_token_max": 0.0, "llm_generation_total": 0.0, "tool_total": 0.0, "llm_calls": 0, "output_tokens": 0}
 
-        # Auto-detect API type.
+        # Auto-detect API type
         self.api_type = detect_api_type(model_name)
 
         # Copy the system message dict so skill injection doesn't
-        # accumulate across conversations (messages list is shared by reference).
+        # accumulate across conversations (messages list is shared by reference)
         if self.messages and self.messages[0].get('role') == 'system':
             self.messages[0] = dict(self.messages[0])
 
-        # Track system prompt composition for debug output.
+        # Track system prompt composition for debug output
         self._prompt_parts = {}
         _base_len = len(self.messages[0].get('content', '')) if self.messages else 0
         self._prompt_parts['base'] = _base_len
 
-        # Inject matched skill content into system prompt for this conversation.
+        # Inject matched skill content into system prompt for this conversation
         self._inject_skills()
         _after_skills = len(self.messages[0].get('content', '')) if self.messages else 0
         self._prompt_parts['skill'] = _after_skills - _base_len
 
-        # Debug: log injection details.
+        # Debug: log injection details
         if self.debug:
             if self._sources.get("skills"):
                 common.bprint(f'[AI Debug] Injected skills: {self._sources["skills"]}', date_format='%Y-%m-%d %H:%M:%S')
@@ -850,7 +873,7 @@ class AiChatThread(QThread):
         if not self.skills:
             return
 
-        # Find the last user message.
+        # Find the last user message
         user_msg = ''
 
         for msg in reversed(self.messages):
@@ -879,7 +902,7 @@ class AiChatThread(QThread):
 
     def _request_confirmation(self, command):
         """Request user confirmation for dangerous command. Blocks until user responds."""
-        # Headless/read-only mode: reject any state-changing command without prompting.
+        # Headless/read-only mode: reject any state-changing command without prompting
         if self.confirm_mode == 'auto_reject':
             return False
 
@@ -975,7 +998,7 @@ class AiChatThread(QThread):
                 content = msg.get('content', '')
                 fallback.append({"role": "user", "content": f"[Tool result ({tool_id})]:\n{content}"})
             elif role == 'assistant' and msg.get('tool_calls'):
-                # Keep the text content, convert tool_calls to text description.
+                # Keep the text content, convert tool_calls to text description
                 parts = []
                 text_content = msg.get('content') or ''
 
@@ -992,11 +1015,11 @@ class AiChatThread(QThread):
 
         return fallback
 
-    # ==========================================================
-    # OpenAI-compatible API loop (OpenAI, DeepSeek, Ark, vLLM).
-    # ==========================================================
+    # ============================================================================
+    # OpenAI-compatible API loop (OpenAI, DeepSeek, Ark, vLLM)
+    # ============================================================================
 
-    # Class-level cache for SDK clients to avoid repeated import + init cost.
+    # Class-level cache for SDK clients to avoid repeated import + init cost
     _openai_client_cache = {}   # {(base_url, api_key): client}
     _anthropic_client_cache = {}
 
@@ -1062,7 +1085,7 @@ class AiChatThread(QThread):
                 common.bprint(f'[AI Debug] ──── Loop {loop_i} ────', date_format='%Y-%m-%d %H:%M:%S')
                 common.bprint(f'[AI Debug] INPUT: {_msg_count} msgs, system={_sys_len}(base={_parts.get("base", 0)}{_skill_info}), conversation={_non_sys_chars}, total={_total_chars} chars', date_format='%Y-%m-%d %H:%M:%S')
 
-                # Only show message details in first loop; subsequent loops just add tool results.
+                # Only show message details in first loop; subsequent loops just add tool results
                 if loop_i == 0:
                     _trunc_len = 200
 
@@ -1072,7 +1095,7 @@ class AiChatThread(QThread):
                         _content_display = _full_content[:_trunc_len] + '...' if len(_full_content) > _trunc_len else _full_content
                         common.bprint(f'[AI Debug]   [{_mi}] {_role}: {_content_display}', date_format='%Y-%m-%d %H:%M:%S')
                 else:
-                    # Show the last few messages (tool results added since previous loop).
+                    # Show the last few messages (tool results added since previous loop)
                     for _msg in self.messages[-3:]:
                         _role = _msg.get('role', '')
 
@@ -1083,7 +1106,7 @@ class AiChatThread(QThread):
             self.status_signal.emit('Waiting for LLM response')
             _t_api = _time.time()
 
-            # On the last iteration, omit tools and inject a summary instruction.
+            # On the last iteration, omit tools and inject a summary instruction
             is_last_loop = (loop_i == max_loops - 1)
 
             if is_last_loop:
@@ -1106,12 +1129,12 @@ class AiChatThread(QThread):
             try:
                 response = client.chat.completions.create(**_api_kwargs)
             except Exception as e:
-                # Retry once without tools parameter in case API rejects tool messages.
+                # Retry once without tools parameter in case API rejects tool messages
                 if self.debug:
                     common.bprint(f'[AI Debug] API call failed: {e}, retrying without tools ...', date_format='%Y-%m-%d %H:%M:%S')
 
                 try:
-                    # Convert tool messages to user messages for compatibility.
+                    # Convert tool messages to user messages for compatibility
                     fallback_messages = self._convert_tool_messages_for_fallback()
 
                     _fallback_kwargs = dict(
@@ -1149,7 +1172,7 @@ class AiChatThread(QThread):
                     if self._stop_flag:
                         return
 
-                    # Capture usage from the final chunk (requires stream_options={"include_usage": True}).
+                    # Capture usage from the final chunk (requires stream_options={"include_usage": True})
                     if hasattr(chunk, 'usage') and chunk.usage and hasattr(chunk.usage, 'completion_tokens'):
                         _completion_tokens = chunk.usage.completion_tokens
 
@@ -1164,8 +1187,8 @@ class AiChatThread(QThread):
                         full_content += delta.content
                         _chunk_count += 1
 
-                        # On last loop (no tools), stream text immediately.
-                        # Otherwise buffer until we know if tool calls follow.
+                        # On last loop (no tools), stream text immediately
+                        # Otherwise buffer until we know if tool calls follow
                         if is_last_loop:
                             self.token_received.emit(delta.content)
 
@@ -1189,7 +1212,7 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            # Prefer API-reported token count; fall back to chunk count for private deployments.
+            # Prefer API-reported token count; fall back to chunk count for private deployments
             self._timing_stats["output_tokens"] += _completion_tokens if _completion_tokens > 0 else _chunk_count
 
             _t_end = _time.time()
@@ -1214,12 +1237,12 @@ class AiChatThread(QThread):
                 common.bprint(f'[AI Debug] PERF: total={_llm_elapsed:.1f}s, first_token={_first_token_time:.2f}s, tokens={_effective_tokens}({_token_source}), TPM={_tpm:.0f}ms/token', date_format='%Y-%m-%d %H:%M:%S')
 
             if not tool_calls_data:
-                # Fallback: check if model output tool calls as XML text.
+                # Fallback: check if model output tool calls as XML text
                 xml_tool_calls = parse_xml_tool_calls(full_content) if full_content else []
 
                 if not xml_tool_calls:
                     if full_content:
-                        # Emit buffered text (already streamed on last loop).
+                        # Emit buffered text (already streamed on last loop)
                         if not is_last_loop:
                             self.token_received.emit(full_content)
 
@@ -1232,7 +1255,7 @@ class AiChatThread(QThread):
                 if self.debug:
                     common.bprint(f'[AI Debug] Parsed {len(xml_tool_calls)} tool call(s) from XML in content (fallback)', date_format='%Y-%m-%d %H:%M:%S')
 
-                # Strip XML block from displayed content.
+                # Strip XML block from displayed content
                 display_content = re.sub(r'<function_calls>.*?</function_calls>', '', full_content, flags=re.DOTALL).strip()
 
                 if display_content:
@@ -1259,7 +1282,7 @@ class AiChatThread(QThread):
 
                     self.tool_call_result.emit(tool_name, result)
 
-                    # Append as user message with tool result so model can continue.
+                    # Append as user message with tool result so model can continue
                     self.messages.append({"role": "user", "content": f"[Tool result from {tool_name}]:\n{result}"})
 
                 continue
@@ -1308,9 +1331,9 @@ class AiChatThread(QThread):
                     "content": result
                 })
 
-    # ==========================================================
-    # Anthropic API loop (Claude models via anthropic SDK).
-    # ==========================================================
+    # ============================================================================
+    # Anthropic API loop (Claude models via anthropic SDK)
+    # ============================================================================
 
     def _agent_loop_anthropic(self):
         import time as _time
@@ -1331,7 +1354,7 @@ class AiChatThread(QThread):
             if self._stop_flag:
                 return
 
-            # Debug: log prompt size breakdown.
+            # Debug: log prompt size breakdown
             if self.debug:
                 _sys_len = len(self.messages[0].get('content', '')) if self.messages else 0
                 _non_sys_chars = sum(len(str(m.get('content', ''))) for m in self.messages[1:])
@@ -1345,13 +1368,13 @@ class AiChatThread(QThread):
 
             self.status_signal.emit('Waiting for LLM response')
 
-            # On the last iteration, omit tools and inject a summary instruction.
+            # On the last iteration, omit tools and inject a summary instruction
             is_last_loop = (loop_i == max_loops - 1)
 
             if is_last_loop:
                 self.messages.append({"role": "user", "content": "请基于以上所有已收集的信息，给出完整的分析结论和可操作的建议。不要再请求更多数据。"})
 
-            # Convert messages to Anthropic format.
+            # Convert messages to Anthropic format
             system, anthropic_msgs = openai_messages_to_anthropic(self.messages)
 
             _t_api = _time.time()
@@ -1393,7 +1416,7 @@ class AiChatThread(QThread):
                         self._timing_stats["llm_first_token_max"] = max(self._timing_stats["llm_first_token_max"], _first_token_time)
                         _first_chunk = False
 
-                    # Capture output_tokens from message_delta event (Anthropic usage).
+                    # Capture output_tokens from message_delta event (Anthropic usage)
                     if event.type == 'message_delta' and hasattr(event, 'usage'):
                         _completion_tokens = getattr(event.usage, 'output_tokens', 0)
 
@@ -1419,7 +1442,7 @@ class AiChatThread(QThread):
                 self.error_signal.emit(f"Stream error: {e}")
                 return
 
-            # Prefer API-reported token count; fall back to chunk count for private deployments.
+            # Prefer API-reported token count; fall back to chunk count for private deployments
             self._timing_stats["output_tokens"] += _completion_tokens if _completion_tokens > 0 else _chunk_count
 
             _t_end = _time.time()
@@ -1443,7 +1466,7 @@ class AiChatThread(QThread):
                 common.bprint(f'[AI Debug] OUTPUT: {_output_summary}', date_format='%Y-%m-%d %H:%M:%S')
                 common.bprint(f'[AI Debug] PERF: total={_llm_elapsed:.1f}s, first_token={_first_token_time:.2f}s, tokens={_effective_tokens}({_token_source}), TPM={_tpm:.0f}ms/token', date_format='%Y-%m-%d %H:%M:%S')
 
-            # No tool calls -> done (or fallback to XML parsing).
+            # No tool calls -> done (or fallback to XML parsing)
             if not tool_calls:
                 xml_tool_calls = parse_xml_tool_calls(full_content) if full_content else []
 
@@ -1490,7 +1513,7 @@ class AiChatThread(QThread):
 
                 continue
 
-            # Build assistant message in OpenAI format (for message history).
+            # Build assistant message in OpenAI format (for message history)
             assistant_tool_calls = []
 
             for idx in sorted(tool_calls.keys()):
@@ -1507,7 +1530,7 @@ class AiChatThread(QThread):
                 "tool_calls": assistant_tool_calls
             })
 
-            # Execute each tool call.
+            # Execute each tool call
             for idx in sorted(tool_calls.keys()):
                 if self._stop_flag:
                     return
@@ -1537,9 +1560,9 @@ class AiChatThread(QThread):
                 })
 
 
-# ============================================================
-# Cluster analyze report (shared by bsample headless + bmonitor GUI).
-# ============================================================
+# ============================================================================
+# Cluster analyze report (shared by bsample headless + bmonitor GUI)
+# ============================================================================
 
 
 def _collect_raw_data(tool='lsf'):
@@ -1666,7 +1689,7 @@ def collect_cluster_snapshot(tool='lsf', raw_data=None):
     sections = []
 
     if raw_data:
-        # Use pre-collected data.
+        # Use pre-collected data
         lsid = raw_data.get('lsid')
 
         if isinstance(lsid, tuple):
@@ -1709,7 +1732,7 @@ def collect_cluster_snapshot(tool='lsf', raw_data=None):
             else:
                 sections.append(f"[{title}]\n{output}")
     else:
-        # Original serial collection (backward compatible).
+        # Original serial collection (backward compatible)
         try:
             tool_name, tool_version, cluster, master = common_lsf.get_lsid_info()
             sections.append(f"[Cluster] tool={tool_name} version={tool_version} cluster={cluster} master={master}")
@@ -1837,7 +1860,7 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
     max_list = bhosts_dic.get('MAX', [])
     njobs_list = bhosts_dic.get('NJOBS', [])
 
-    # Per-host slot capacity (bhosts MAX), used to derive per-queue slot totals.
+    # Per-host slot capacity (bhosts MAX), used to derive per-queue slot totals
     host_max_map = {}
 
     for idx, hname in enumerate(host_names):
@@ -1872,7 +1895,7 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
         if slots_total > 0:
             metrics['util_slot'] = round(slots_used * 100 / slots_total, 1)
 
-    # Suspended jobs across hosts (SSUSP + USUSP).
+    # Suspended jobs across hosts (SSUSP + USUSP)
     susp = sum(v for v in (_lsf_int(s) for s in bhosts_dic.get('SSUSP', [])) if v is not None) \
         + sum(v for v in (_lsf_int(s) for s in bhosts_dic.get('USUSP', [])) if v is not None)
 
@@ -1892,7 +1915,7 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
 
     # Per-queue total slots = sum of member-host MAX slots (same as the SLOTS
     # column on bmonitor's QUEUES page). bqueues' own MAX field is a per-queue
-    # slot *limit* and is usually '-' (unlimited), so it is not what we want.
+    # slot *limit* and is usually '-' (unlimited), so it is not what we want
     if raw_data and 'queue_host' in raw_data and not isinstance(raw_data['queue_host'], Exception):
         queue_host_dic = raw_data['queue_host']
     else:
@@ -1965,7 +1988,7 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
         except Exception:
             lshosts_dic = {}
 
-    # Total physical cores (lshosts ncpus).
+    # Total physical cores (lshosts ncpus)
     cores_total = sum(v for v in (_lsf_int(c) for c in lshosts_dic.get('ncpus', [])) if v is not None)
 
     if lshosts_dic.get('ncpus'):
@@ -2074,8 +2097,9 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
 def _aggregate_pending_reasons(command='bjobs -u all -p', top_n=6):
     """
     Parse 'bjobs -u all -p' and tally pending reasons across all pending jobs.
-    Each job's indented reason lines are normalized (host counts stripped) and
-    counted once per job. Returns [{'reason', 'count'}] sorted desc, top_n.
+    Each indented reason line is normalized (host counts stripped) and counted
+    once; a job pending for N reasons adds 1 to each of its N reason counters.
+    Returns [{'reason', 'count'}] sorted desc, top_n.
     """
     from collections import Counter
 
@@ -2104,7 +2128,7 @@ def _aggregate_pending_reasons(command='bjobs -u all -p', top_n=6):
                 in_job = False
                 continue
 
-            # Normalize: drop trailing ": N hosts;" / ";" and collapse digits.
+            # Normalize: drop trailing ": N hosts;" / ";" and collapse digits
             reason = re.sub(r'\s*:\s*\d+\s+hosts?\s*;?\s*$', '', reason)
             reason = re.sub(r'\s*;\s*$', '', reason)
             reason = re.sub(r'\b\d+\b', 'N', reason)
@@ -2170,7 +2194,7 @@ def render_cluster_dashboard(metrics):
 
     parts = []
 
-    # ---- 概览横幅: mechanical health verdict ----
+    # ---- Banner ("概览横幅"): mechanical health verdict ----
     high_pend_queue = any((q['pend_rate'] >= 80 and q['pend'] > 0) for q in queues)
     closed_ratio = (closed_n / total) if total else 0
 
@@ -2196,10 +2220,12 @@ def render_cluster_dashboard(metrics):
         f'<div class="banner-m">{" · ".join(meta_bits)}</div></div>'
     )
 
-    # ---- 集群现状: a single section; 主机状态/队列负载/作业与用户分析 are sub-parts ----
+    # ---- "集群现状" is one section; host status / queue load / job+user
+    # analysis are sub-parts of it ----
     parts.append('<h2 id="sec-status">集群现状</h2>')
 
-    # 总揽: 主机数 / 总核数 / 总slots / 总内存 / 总作业数 (job summary last).
+    # "总揽" cards: host count / total cores / total slots / total memory /
+    # job count (job summary last)
     run_n = metrics.get('jobs_run')
     pend_n = metrics.get('jobs_pend')
     susp_n = metrics.get('jobs_susp')
@@ -2213,13 +2239,13 @@ def render_cluster_dashboard(metrics):
     ]
     parts.append('<div class="panel"><div class="panel-h">总揽</div><div class="cards">' + ''.join(scale_cards) + '</div></div>')
 
-    # 利用率: horizontal gauge bars (clearer than donuts).
+    # "利用率" gauges: horizontal bars (clearer than donuts)
     gauges = (gauge(metrics.get('util_slot'), 'slot 利用率')
               + gauge(metrics.get('util_cpu'), 'cpu 利用率')
               + gauge(metrics.get('util_mem'), 'mem 利用率'))
     parts.append('<div class="panel"><div class="panel-h">利用率</div>' + gauges + '</div>')
 
-    # ---- 主机状态 (sub-part): CSS bar chart + collapsible per-host detail ----
+    # ---- "主机状态" (sub-part): CSS bar chart + collapsible per-host detail ----
     parts.append('<h3 id="sec-hosts">主机状态</h3>')
     bar_order = [
         ('ok', open_n, 'ok'),
@@ -2271,7 +2297,7 @@ def render_cluster_dashboard(metrics):
             + ''.join(rows) + '</tbody></table></details>'
         )
 
-    # ---- 队列负载 (sub-part): table + composition bars; >10 queues collapse ----
+    # ---- "队列负载" (sub-part): table + composition bars; >10 queues collapse ----
     parts.append('<h3 id="sec-queues">队列负载</h3>')
 
     if queues:
@@ -2294,7 +2320,7 @@ def render_cluster_dashboard(metrics):
         hidden_q = queues[q_limit:]
 
         # Single continuous table; hidden queues are extra <tr> rows toggled by a
-        # pure-CSS checkbox hack (the <input> must precede <table> as a sibling).
+        # pure-CSS checkbox hack (the <input> must precede <table> as a sibling)
         body = ''.join(qrow(q) for q in visible_q) + ''.join(qrow(q, 'extra') for q in hidden_q)
 
         if hidden_q:
@@ -2348,7 +2374,7 @@ def render_cluster_dashboard(metrics):
     else:
         parts.append('<p>（无队列数据）</p>')
 
-    # ---- 作业与用户分析 (sub-part): pending reasons + active users ----
+    # ---- "作业与用户分析" (sub-part): pending reasons + active users ----
     reasons = metrics.get('pending_reasons', [])
     users = metrics.get('active_users', [])
 
@@ -2356,7 +2382,7 @@ def render_cluster_dashboard(metrics):
         parts.append('<h3 id="sec-jobs">作业与用户分析</h3>')
         parts.append('<div class="two-col">')
 
-        # Pending reasons.
+        # Pending reasons
         block = ['<div class="panel"><div class="panel-h">排队原因 Top</div>']
 
         if reasons:
@@ -2373,7 +2399,7 @@ def render_cluster_dashboard(metrics):
         block.append('</div>')
         parts.append(''.join(block))
 
-        # Active users.
+        # Active users
         block = ['<div class="panel"><div class="panel-h">活跃用户 Top</div>']
 
         if users:
@@ -2403,17 +2429,17 @@ def extract_final_text(messages):
 
             if isinstance(content, str) and content.strip():
                 text = content.strip()
-                # Strip a leading/trailing ```html ... ``` fence if the model added one.
+                # Strip a leading/trailing ```html ... ``` fence if the model added one
                 text = re.sub(r'^```[a-zA-Z]*\s*', '', text)
                 text = re.sub(r'\s*```$', '', text)
-                # Drop any chatty preamble before the first HTML block tag.
+                # Drop any chatty preamble before the first HTML block tag
                 match = re.search(r'<(?:h[1-6]|p|div|ul|ol|table)\b', text, re.IGNORECASE)
 
                 if match:
                     text = text[match.start():]
                 else:
                     # Model returned plain text (no HTML): escape and wrap in <pre>
-                    # so it renders readably instead of breaking the report layout.
+                    # so it renders readably instead of breaking the report layout
                     import html as _html
                     text = '<pre>' + _html.escape(text) + '</pre>'
 
@@ -2458,7 +2484,7 @@ def _run_readonly_agent(messages, api_base_url, api_key, model_name,
 
     # AiChatThread.run() swallows agent-loop errors into error_signal; capture
     # them so the caller can surface the real cause instead of a generic empty
-    # report.
+    # report
     errors = []
     thread.error_signal.connect(errors.append)
     thread.run()
@@ -2468,10 +2494,10 @@ def _run_readonly_agent(messages, api_base_url, api_key, model_name,
     if not final_text and errors:
         raise RuntimeError(errors[-1])
 
-    # Fallback: LLMs occasionally omit the required 分析汇总 section (even when
-    # output is short — this is an instruction-following lapse, not a token
-    # truncation). Append a minimal 分析汇总 skeleton so the report is never
-    # missing the section, keeping the structure (and the side-nav anchor) intact.
+    # Fallback: LLMs occasionally omit the required "分析汇总" section (even
+    # when output is short — an instruction-following lapse, not truncation)
+    # Append a minimal skeleton so the report never misses the section, keeping
+    # the structure (and the side-nav anchor) intact
     final_text = _ensure_summary_section(final_text)
 
     return final_text, thread
@@ -2488,12 +2514,12 @@ def _ensure_summary_section(html_fragment):
     if not html_fragment or not html_fragment.strip():
         return html_fragment
 
-    # Match the section heading loosely (covers <h2>分析汇总</h2>, <h2 id="...">分析汇总</h2>).
+    # Match the section heading loosely (covers <h2>分析汇总</h2>, <h2 id="...">分析汇总</h2>)
     if re.search(r'<h2[^>]*>\s*分析汇总\s*</h2>', html_fragment):
         return html_fragment
 
     # Extract issue card titles (the <b>...</b> right after the badge span) so
-    # the severe-issue list reflects what the LLM already found.
+    # the severe-issue list reflects what the LLM already found
     titles = re.findall(r'<span class="badge high[^>]*>严重</span>\s*<b>([^<]+)</b>', html_fragment)
     severe_items = ''.join(f'<li>{t}</li>' for t in titles) or '<li>无</li>'
 
@@ -2526,19 +2552,20 @@ def generate_cluster_analyze_report(api_base_url, api_key, model_name, tool='lsf
 
     _t_total_start = _time.time()
 
-    # AiChatThread is a QThread (QObject); ensure an application object exists for headless use.
+    # AiChatThread is a QThread (QObject); ensure an application object exists for headless use
     if QCoreApplication.instance() is None:
         generate_cluster_analyze_report._app = QCoreApplication([])
 
     # Parallel data collection: all LSF commands run concurrently, results shared
-    # between compute_cluster_metrics and collect_cluster_snapshot (no duplication).
+    # between compute_cluster_metrics and collect_cluster_snapshot (no duplication)
     _t_collect = _time.time()
     raw_data = _collect_raw_data(tool)
     _t_collect_end = _time.time()
 
-    # Exact, deterministic data sections (集群现状/主机状态/队列负载) are computed and
-    # rendered in Python so they never vary run-to-run. The LLM only writes the
-    # analyze sections (集群问题/分析汇总) from these authoritative numbers.
+    # Exact, deterministic data sections ("集群现状" / "主机状态" / "队列负载")
+    # are computed and rendered in Python so they never vary run-to-run. The LLM
+    # only writes the analysis sections ("集群问题" / "分析汇总") from these
+    # authoritative numbers
     metrics = compute_cluster_metrics(tool, raw_data=raw_data)
     dashboard_html = render_cluster_dashboard(metrics)
 
@@ -2575,7 +2602,7 @@ def generate_cluster_analyze_report(api_base_url, api_key, model_name, tool='lsf
         {"role": "user", "content": user_prompt},
     ]
 
-    # Run the agent loop synchronously in the current thread.
+    # Run the agent loop synchronously in the current thread
     _t_llm = _time.time()
     analyze_html, thread = _run_readonly_agent(
         messages,
@@ -2596,7 +2623,7 @@ def generate_cluster_analyze_report(api_base_url, api_key, model_name, tool='lsf
 
     _t_total_end = _time.time()
 
-    # Timing summary appended to the report.
+    # Timing summary appended to the report
     timing_stats = thread._timing_stats
     timing_html = (
         f'<div class="header-info" style="margin-top:40px; padding-top:12px; border-top:1px solid var(--line, #e0e0e0);">'
@@ -2608,7 +2635,7 @@ def generate_cluster_analyze_report(api_base_url, api_key, model_name, tool='lsf
         f'总耗时 {_t_total_end - _t_total_start:.1f}s</p></div>'
     )
 
-    # Deterministic data sections first, then the LLM's analyze sections.
+    # Deterministic data sections first, then the LLM's analyze sections
     return dashboard_html + '\n' + analyze_html + '\n' + timing_html
 
 
@@ -2643,15 +2670,16 @@ def resolve_report_dir(report_type):
         try:
             # 0o1777 (sticky) so every user can write their own reports but
             # cannot delete others'. Without it, makedirs defaults to 0o755
-            # and only the first user to create the dir can save reports.
+            # and only the first user to create the dir can save reports
             os.makedirs(report_dir, mode=0o1777, exist_ok=True)
 
-            # chmod in case the dir already existed with a tighter mode.
+            # chmod in case the dir already existed with a tighter mode
             os.chmod(report_dir, 0o1777)
 
-            # makedirs 的 mode 只作用于叶子(<type>)目录,中间的 ai_report
-            # 按 umask 创建为 0o755,会阻止其他用户在其下新建 <type> 子目录,
-            # 故一并 chmod 中间层。
+            # makedirs' mode only applies to the leaf (<type>) dir; the
+            # intermediate ai_report dir would be created 0o755 per umask,
+            # blocking other users from creating their own <type> subdir, so
+            # chmod the intermediate level too
             os.chmod(os.path.dirname(report_dir), 0o1777)
 
             if os.access(report_dir, os.W_OK):
@@ -2659,7 +2687,7 @@ def resolve_report_dir(report_type):
         except Exception:
             continue
 
-    # Last resort: a unique temp dir, which mkdtemp guarantees is writable.
+    # Last resort: a unique temp dir, which mkdtemp guarantees is writable
     return tempfile.mkdtemp(prefix=f'lsfMonitor_{report_type}_report_')
 
 
@@ -2670,10 +2698,11 @@ def wrap_html_report(content, heading='集群分析报告', meta_line=''):
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     meta = meta_line if meta_line else f'Generated: {timestamp}'
 
-    # Per-report nav config: maps each LLM-generated section title to a nav id.
+    # Per-report nav config: maps each report section title (system- or
+    # LLM-generated) to a nav id
     # Headings are also injected with matching id attributes below so the nav
     # anchors scroll to them. A nav item of (label, id, is_sub) renders as a
-    # sub-entry (indented) when is_sub is True.
+    # sub-entry (indented) when is_sub is True
     _report_nav = {
         '集群分析报告': [
             ('集群现状', 'sec-status', False),
@@ -2718,7 +2747,7 @@ def wrap_html_report(content, heading='集群分析报告', meta_line=''):
 
     nav_items = _report_nav.get(heading, _report_nav['集群分析报告'])
 
-    # Inject id attributes into h2 headings that lack them, for every nav target.
+    # Inject id attributes into h2 headings that lack them, for every nav target
     _heading_id_map = {label: hid for label, hid, _ in nav_items}
 
     for h_text, h_id in _heading_id_map.items():
@@ -2730,17 +2759,17 @@ def wrap_html_report(content, heading='集群分析报告', meta_line=''):
 
     # Strip any <script> tags the LLM may have injected into its HTML output —
     # they would interfere with wrap_html_report's own scripts and can cause
-    # "Uncaught SyntaxError: Unexpected token '}'" in the browser console.
+    # "Uncaught SyntaxError: Unexpected token '}'" in the browser console
     content = _re.sub(r'<script[^>]*>.*?</script>', '', content, flags=_re.DOTALL | _re.IGNORECASE)
 
     # Keep only nav items whose section actually appears in the content (LLM
     # skips states with zero jobs, so their h2 won't exist — don't show dead
-    # nav links).
+    # nav links)
     _present_ids = set(_re.findall(r'<h2[^>]*id="([^"]+)"', content))
     nav_items = [(label, hid, sub) for label, hid, sub in nav_items if hid in _present_ids]
 
     # Click-to-sort for tables marked .sortable: numeric columns sort by value,
-    # others by string. Self-contained vanilla JS (offline-safe, no deps).
+    # others by string. Self-contained vanilla JS (offline-safe, no deps)
     script = r'''<script>
 (function () {
   function parseNum(s) {
@@ -2868,7 +2897,7 @@ document.querySelectorAll('td.cmd-cell').forEach(function (cell) {
 })();
 </script>'''
 
-    # Build the side-nav links from the per-report nav config.
+    # Build the side-nav links from the per-report nav config
     nav_lines = []
 
     for label, hid, is_sub in nav_items:
@@ -3101,10 +3130,10 @@ li {{ margin: 6px 0; }}
 </html>"""
 
 
-# ==========================================================================
-# User jobs analyze report (per-user PEND/RUN/DONE/EXIT diagnosis).
-# Mirrors the cluster report flow: collect → compute → dashboard → LLM.
-# ==========================================================================
+# ============================================================================
+# User jobs analyze report (per-user PEND/RUN/DONE/EXIT diagnosis)
+# Mirrors the cluster report flow: collect → compute → dashboard → LLM
+# ============================================================================
 USER_REPORT_PREFIX = 'user_analyze_'
 
 USER_ANALYZE_SYSTEM_PROMPT = """You are a senior LSF/OpenLava/Volclava HPC cluster operations expert generating a per-user jobs analysis report.
@@ -3190,8 +3219,9 @@ DONE 表示正常完成。简要汇总完成数量、按 queue 分布，关注�
 def _collect_user_jobs_data(user, tool='lsf'):
     """Collect a single user's jobs snapshot in parallel.
 
-    Returns a dict with keys: jobs_overview (bjobs -w), pending_reasons
-    (bjobs -p aggregated), jobs_detail (bjobs -UF parsed by-job).
+    Returns a dict with keys: user, overview_text (bjobs -w), pending_reasons
+    (bjobs -p aggregated), jobs_detail (bjobs -UF parsed by-job), host_load
+    (per-host lsload).
     """
     from concurrent.futures import ThreadPoolExecutor
 
@@ -3206,7 +3236,7 @@ def _collect_user_jobs_data(user, tool='lsf'):
     user_q = shlex.quote(user)
     commands = {
         # -a = all job states (RUN/PEND/DONE/EXIT/SUSP); without it bjobs only
-        # shows RUN/PEND, so EXIT/DONE jobs would be missed entirely.
+        # shows RUN/PEND, so EXIT/DONE jobs would be missed entirely
         'overview': f'bjobs -u {user_q} -a -w',
         'pending': f'bjobs -u {user_q} -p',
         'detail_uf': f'bjobs -u {user_q} -a -UF',
@@ -3216,7 +3246,7 @@ def _collect_user_jobs_data(user, tool='lsf'):
         futures = {k: ex.submit(_run, c) for k, c in commands.items()}
         raw = {k: f.result(timeout=120) for k, f in futures.items()}
 
-    # Parse the -UF output into a per-job dict via common_lsf.
+    # Parse the -UF output into a per-job dict via common_lsf
     try:
         from common import common_lsf
 
@@ -3224,9 +3254,9 @@ def _collect_user_jobs_data(user, tool='lsf'):
     except Exception:
         jobs_detail = {}
 
-    # Collect host load (lsload) so RUN-job performance can blame the host.
+    # Collect host load (lsload) so RUN-job performance can blame the host
     # get_lsload_info returns column-oriented {HOST_NAME:[...], ut:[...], ...};
-    # transpose to {host: {ut, r1m, r15m, mem, status}} for O(1) lookup.
+    # transpose to {host: {ut, r1m, r15m, mem, status}} for O(1) lookup
     host_load = {}
 
     try:
@@ -3311,7 +3341,7 @@ def compute_user_metrics(user, raw_data):
         except Exception:
             return None
 
-        # If in the future, the job actually started last year.
+        # If in the future, the job actually started last year
         if sec > now_sec:
             try:
                 sec = _time.mktime(_time.strptime(f'{year - 1} {parts[1]} {parts[2]} {parts[3]}', '%Y %b %d %H:%M:%S'))
@@ -3340,7 +3370,7 @@ def compute_user_metrics(user, raw_data):
         bucket[status] += 1
         bucket['total'] += 1
 
-        # Common fields every job gets (for the snapshot / LLM).
+        # Common fields every job gets (for the snapshot / LLM)
         job = {
             'job_id': job_id,
             'status': status,
@@ -3357,7 +3387,7 @@ def compute_user_metrics(user, raw_data):
         }
         jobs_by_status.setdefault(status, []).append(job)
 
-        # RUN-specific: exec host + load + runtime + idle factor.
+        # RUN-specific: exec host + load + runtime + idle factor
         if status == 'RUN':
             started = info.get('started_time', '')
             runtime_sec = _bjobs_uf_to_seconds(started)
@@ -3402,7 +3432,7 @@ def compute_user_metrics(user, raw_data):
             })
             exit_jobs.append(job)
 
-    # idle_factor distribution buckets (objective reference only).
+    # idle_factor distribution buckets (objective reference only)
     idle_buckets = Counter()
 
     for j in run_jobs:
@@ -3422,7 +3452,7 @@ def compute_user_metrics(user, raw_data):
 
     # ---- Job profile: macro-level characterization for someone who doesn't
     # know this user's workload (command distribution, resource stats, runtime
-    # buckets). Built from already-collected data, no extra LSF calls.
+    # buckets). Built from already-collected data, no extra LSF calls
     all_commands = Counter()
 
     for jobs in jobs_by_status.values():
@@ -3432,7 +3462,7 @@ def compute_user_metrics(user, raw_data):
             if cmd:
                 # Commands with >2 args differ per-job only by volatile args
                 # (uuid/port/path), so aggregate by command name; short commands
-                # (≤2 args) keep their args to stay distinct.
+                # (≤2 args) keep their args to stay distinct
                 tokens = cmd.split()
 
                 if len(tokens) > 3:
@@ -3446,7 +3476,7 @@ def compute_user_metrics(user, raw_data):
     command_top = [{'command': cmd, 'count': cnt} for cmd, cnt in all_commands.most_common(5)]
     command_repeated = bool(command_top and command_top[0]['count'] / max(total_jobs_for_profile, 1) > 0.5)
 
-    # Command conclusion: one-sentence summary.
+    # Command conclusion: one-sentence summary
     if not command_top:
         command_conclusion = '无作业数据。'
     elif command_repeated:
@@ -3458,7 +3488,7 @@ def compute_user_metrics(user, raw_data):
     else:
         command_conclusion = f'用户作业以少量 command 为主，{len(all_commands)} 种 command 覆盖 {total_jobs_for_profile} 个作业，存在一定重复。'
 
-    # Resource stats from DONE jobs (completed jobs have full resource data).
+    # Resource stats from DONE jobs (completed jobs have full resource data)
     done_jobs = jobs_by_status.get('DONE', [])
 
     def _stats(values):
@@ -3494,14 +3524,14 @@ def compute_user_metrics(user, raw_data):
     maxmem_stats = _stats([_parse_mem_mb(j.get('max_mem', '')) for j in done_jobs])
     slots_stats = _stats([j.get('processors_requested', '1') for j in done_jobs])
 
-    # Convert MB → GB for display.
+    # Convert MB → GB for display
     resource_stats = {
         'rusage_mem_gb': {'min': _mb_to_gb(rusage_stats['min']), 'avg': _mb_to_gb(rusage_stats['avg']), 'max': _mb_to_gb(rusage_stats['max'])},
         'max_mem_gb': {'min': _mb_to_gb(maxmem_stats['min']), 'avg': _mb_to_gb(maxmem_stats['avg']), 'max': _mb_to_gb(maxmem_stats['max'])},
         'slots': slots_stats,
     }
 
-    # Resource conclusion.
+    # Resource conclusion
     if done_jobs and maxmem_stats['avg'] is not None:
         avg_slots = slots_stats['avg']
         avg_maxmem = _mb_to_gb(maxmem_stats['avg'])
@@ -3509,7 +3539,7 @@ def compute_user_metrics(user, raw_data):
     else:
         resource_conclusion = '无 DONE 作业，无法统计资源用量。'
 
-    # Runtime buckets from DONE jobs (started → finished).
+    # Runtime buckets from DONE jobs (started → finished)
     runtime_buckets = Counter()
 
     for j in done_jobs:
@@ -3519,7 +3549,7 @@ def compute_user_metrics(user, raw_data):
         if not st or not ft:
             continue
 
-        # Parse "Mon Sep 4 09:00:00" → seconds (reuse _bjobs_uf_to_seconds).
+        # Parse "Mon Sep 4 09:00:00" → seconds (reuse _bjobs_uf_to_seconds)
         start_sec = _bjobs_uf_to_seconds(st)
         finish_sec = _bjobs_uf_to_seconds(ft)
 
@@ -3542,7 +3572,7 @@ def compute_user_metrics(user, raw_data):
         else:
             runtime_buckets['>7d'] += 1
 
-    # Runtime conclusion.
+    # Runtime conclusion
     rt_total = sum(runtime_buckets.values())
 
     if rt_total > 0:
@@ -3584,8 +3614,8 @@ def compute_user_metrics(user, raw_data):
     }
 
 
-# Chinese explanations for common LSF pending reasons (best-effort mapping;
-# unknown reasons show "—"). Used in the 作业概览 dashboard table.
+# Chinese explanations for common LSF pending reasons (best-effort mapping)
+# Currently unused — kept as reference data for future dashboard rendering
 _PEND_REASON_CN = {
     'Job slot requirement not satisfied': '无空闲 slot，资源不足',
     'Host load threshold exceeded': '主机负载超阈值',
@@ -3606,7 +3636,7 @@ _PEND_REASON_CN = {
     'Not enough slots to satisfy the job': '空闲 slot 不足',
 }
 
-# Chinese explanations for common (exit_code, term_signal) combos.
+# Chinese explanations for common (exit_code, term_signal) combos
 _EXIT_CODE_CN = {
     ('0', ''): '正常完成',
     ('1', ''): '通用错误（命令返回 1）',
@@ -3625,7 +3655,8 @@ _EXIT_CODE_CN = {
 
 
 def render_user_dashboard(metrics):
-    """Render the deterministic '作业概览' HTML section from user metrics.
+    """Render the deterministic "作业画像" + "作业概览" HTML sections from user
+    metrics.
 
     Mirrors the cluster report's visual style: banner verdict, card row,
     gauge bars, and sortable tables inside panels.
@@ -3698,12 +3729,12 @@ def render_user_dashboard(metrics):
         f'<div class="banner-m">{" · ".join(meta_bits)}</div></div>'
     )
 
-    # ---- 作业画像 section: macro-level characterization ----
+    # ---- "作业画像" section: macro-level characterization ----
     prof = metrics.get('profile', {})
 
     parts.append('<h2 id="sec-profile">作业画像</h2>')
 
-    # Command distribution table + conclusion.
+    # Command distribution table + conclusion
     cmd_top = prof.get('command_top', [])
 
     if cmd_top:
@@ -3717,7 +3748,7 @@ def render_user_dashboard(metrics):
             pct_val = round(item['count'] * 100 / max(cmd_total, 1), 1)
             full_cmd = esc(item['command'])
             # .cmd-cell: truncate long commands to one line with ellipsis (Excel-
-            # like); title tooltip shows the full command, click toggles wrap.
+            # like); title tooltip shows the full command, click toggles wrap
             body += (f'<tr><td class="cmd-cell" title="{full_cmd}">{full_cmd}</td>'
                      f'<td class="r">{item["count"]}</td><td class="r">{pct_val}%</td></tr>')
 
@@ -3730,7 +3761,7 @@ def render_user_dashboard(metrics):
             + concl_html + '</div>'
         )
 
-    # Resource stats cards (from DONE jobs, GB units, order: rusage/max_mem/slots).
+    # Resource stats cards (from DONE jobs, GB units, order: rusage/max_mem/slots)
     rs = prof.get('resource_stats', {})
 
     def _fmt_stat(stat, decimals=1):
@@ -3756,7 +3787,7 @@ def render_user_dashboard(metrics):
         + res_concl_html + '</div>'
     )
 
-    # Runtime distribution gauge bars + conclusion.
+    # Runtime distribution gauge bars + conclusion
     rt_buckets = prof.get('runtime_buckets', {})
     rt_total = sum(rt_buckets.values()) if rt_buckets else 0
 
@@ -3782,10 +3813,10 @@ def render_user_dashboard(metrics):
                 '<div class="panel"><div class="panel-h">运行时长分布（DONE 作业）</div>' + bars + rt_concl_html + '</div>'
             )
 
-    # ---- 作业概览 section ----
+    # ---- "作业概览" section ----
     parts.append('<h2 id="sec-overview">作业概览</h2>')
 
-    # Card row: one card per status that has jobs (dynamic, covers all states).
+    # Card row: one card per status that has jobs (dynamic, covers all states)
     cards = [card(total, '作业总数', sub=f'用户 {esc(user)}')]
 
     status_card_order = [
@@ -3808,14 +3839,14 @@ def render_user_dashboard(metrics):
 
     parts.append('<div class="cards">' + ''.join(cards) + '</div>')
 
-    # Status distribution gauge bars.
+    # Status distribution gauge bars
     status_order = [(label, c, cls) for label, c, cls in status_card_order if c > 0]
     gauges = ''.join(gauge(c, total, label, cls) for label, c, cls in status_order)
 
     if gauges:
         parts.append('<div class="panel"><div class="panel-h">作业状态分布</div>' + gauges + '</div>')
 
-    # Per-queue breakdown table.
+    # Per-queue breakdown table
     qs = metrics.get('queue_summary', {})
 
     if qs:
@@ -3885,7 +3916,7 @@ def _user_snapshot_text(raw_data, metrics):
     pend_lines = [_fmt_pend(j) for j in metrics.get('pend_jobs', [])[:50]]
     exit_lines = [_fmt_exit(j) for j in metrics.get('exit_jobs', [])[:50]]
 
-    # Long-running jobs (> 14 days) — highlight for zombie detection.
+    # Long-running jobs (> 14 days) — highlight for zombie detection
     long_lines = []
 
     for j in metrics.get('long_run_jobs', []):
@@ -3894,14 +3925,14 @@ def _user_snapshot_text(raw_data, metrics):
 
         long_lines.append(f"  job {j['job_id']}: queue={j['queue']}, exec_host={j.get('exec_host', '')}, runtime={days}天, started={j['started_time']}, name={j['job_name']}")
 
-    # EXIT summary (exit_code, term_signal) → count.
+    # EXIT summary (exit_code, term_signal) → count
     exit_summary_lines = []
 
     for (ec, ts), cnt in sorted(metrics.get('exit_summary', {}).items(), key=lambda x: -x[1]):
         exit_summary_lines.append(f"  exit_code={ec}, term_signal={ts or '(none)'}: {cnt} 个作业")
 
     # Other statuses (DONE/PSUSP/USUSP/SSUSP/UNKWN/WAIT/ZOMBI/PROV/...) — list
-    # per-status job details so the LLM can analyze every state that has jobs.
+    # per-status job details so the LLM can analyze every state that has jobs
     handled = {'RUN', 'PEND', 'EXIT', ''}
     other_sections = []
 
@@ -3990,7 +4021,7 @@ def generate_user_jobs_report(api_base_url, api_key, model_name, user, tool='lsf
     ]
 
     # The dashboard (data section) is prepended; the LLM only writes the
-    # analyze sections, so the final content = dashboard + LLM output.
+    # analyze sections, so the final content = dashboard + LLM output
     llm_content, _thread = _run_readonly_agent(
         messages,
         api_base_url=api_base_url,
@@ -4011,10 +4042,10 @@ def generate_user_jobs_report(api_base_url, api_key, model_name, user, tool='lsf
     return content
 
 
-# ==========================================================================
-# Job analyze report (per-job deep diagnosis).
-# Mirrors the cluster/user report flow: collect → compute → dashboard → LLM.
-# ==========================================================================
+# ============================================================================
+# Job analyze report (per-job deep diagnosis)
+# Mirrors the cluster/user report flow: collect → compute → dashboard → LLM
+# ============================================================================
 JOB_REPORT_PREFIX = 'job_'
 
 
@@ -4151,7 +4182,7 @@ def _collect_job_data(jobid, tool='lsf', db_path=''):
     """Collect a single job's full snapshot: detail + mem curve + host load."""
     jobid_q = shlex.quote(str(jobid))
 
-    # 1. Job detail via bjobs -UF (active jobs only).
+    # 1. Job detail via bjobs -UF (active jobs only)
     jobs_detail = {}
 
     try:
@@ -4170,11 +4201,11 @@ def _collect_job_data(jobid, tool='lsf', db_path=''):
             break
 
     # 2. Fallback: finished jobs (DONE/EXIT) are invisible to bjobs; query the
-    # historical job db so the 作业信息 section still has core fields.
+    # historical job db so the "作业信息" section still has core fields
     if not job_info and db_path:
         job_info = _query_finished_job_detail(db_path, jobid)
 
-    # 3. Mem/idle_factor time series via bmonitor_cli db job-mem.
+    # 3. Mem/idle_factor time series via bmonitor_cli db job-mem
     mem_curve = []
 
     try:
@@ -4190,7 +4221,7 @@ def _collect_job_data(jobid, tool='lsf', db_path=''):
     except Exception:
         pass
 
-    # 4. Host load if the job is running (or was running).
+    # 4. Host load if the job is running (or was running)
     host_load = {}
 
     exec_host = (job_info.get('started_on') or '').split()[0] if job_info.get('started_on') else ''
@@ -4214,7 +4245,7 @@ def _collect_job_data(jobid, tool='lsf', db_path=''):
         except Exception:
             pass
 
-    # Host config (ncpus / maxmem) via lshosts.
+    # Host config (ncpus / maxmem) via lshosts
     host_config = {}
 
     if exec_host:
@@ -4279,7 +4310,7 @@ def compute_job_metrics(jobid, raw_data):
         except Exception:
             return None
 
-    # Runtime: for RUN jobs = now - started; for EXIT/DONE = finished - started.
+    # Runtime: for RUN jobs = now - started; for EXIT/DONE = finished - started
     start_sec = _parse_bjobs_time(started_time)
 
     if start_sec:
@@ -4399,10 +4430,10 @@ def render_job_dashboard(metrics):
         f'<div class="banner-m">{" · ".join(meta_bits)}</div></div>'
     )
 
-    # ---- 作业信息 section ----
+    # ---- "作业信息" section ----
     parts.append('<h2 id="sec-info">作业信息</h2>')
 
-    # Exec Host with host config (ncpus / maxmem) in parentheses.
+    # Exec Host with host config (ncpus / maxmem) in parentheses
     hc = metrics.get('host_config', {})
     host_desc = exec_host
 
@@ -4417,8 +4448,8 @@ def render_job_dashboard(metrics):
 
         host_desc = f"{exec_host} ({', '.join(bits)})"
 
-    # Detail table (no card row — the table already contains all fields).
-    # Mem fields are in MB (from get_lsf_bjobs_uf_info), convert to GB for display.
+    # Detail table (no card row — the table already contains all fields)
+    # Mem fields are in MB (from get_lsf_bjobs_uf_info), convert to GB for display
     def _fmt_mem(mb_val):
         """Convert MB (float or str) to 'X.X GB', or '' if empty."""
         if not mb_val and mb_val != 0:
@@ -4471,7 +4502,7 @@ def render_job_dashboard(metrics):
     if curve:
         parts.append('<h2 id="sec-curve">mem/idle_factor 曲线</h2>')
 
-        # Build runtime (minutes) / mem / idle_factor lists from the curve data.
+        # Build runtime (minutes) / mem / idle_factor lists from the curve data
         import datetime as _dt
 
         try:
@@ -4516,7 +4547,7 @@ def render_job_dashboard(metrics):
                 else:
                     idle_list.append(None)
 
-            # Generate matplotlib charts and embed as base64 PNG.
+            # Generate matplotlib charts and embed as base64 PNG
             if runtime_list:
                 import io as _io
                 import base64 as _b64
@@ -4525,7 +4556,7 @@ def render_job_dashboard(metrics):
                 matplotlib.use('Agg')
                 from matplotlib.figure import Figure
 
-                # Memory curve.
+                # Memory curve
                 mem_chart = ''
 
                 if any(m is not None for m in mem_list):
@@ -4549,7 +4580,7 @@ def render_job_dashboard(metrics):
                     mem_chart = f'<img src="data:image/png;base64,{mem_b64}" style="width:100%;max-width:800px;border:1px solid var(--line);border-radius:8px;margin:8px 0;" />'
                     buf.close()
 
-                # Idle factor curve.
+                # Idle factor curve
                 idle_chart = ''
 
                 if any(i is not None for i in idle_list):
@@ -4579,7 +4610,7 @@ def render_job_dashboard(metrics):
                     parts.append('<div class="panel"><div class="panel-h">内存与 idle_factor 曲线</div><p>采样数据中无有效数值，无法绘制曲线。</p></div>')
 
         except Exception:
-            # Fallback: show raw table.
+            # Fallback: show raw table
             head = '<tr><th>采样时间</th><th class="r">mem</th><th class="r">idle_factor</th></tr>'
             body = ''
 
@@ -4688,10 +4719,10 @@ def generate_job_analyze_report(api_base_url, api_key, model_name, jobid, tool='
     return content
 
 
-# ==========================================================================
-# Queue analyze report (per-queue load / resource-sufficiency diagnosis).
-# Mirrors the cluster report flow: collect → compute → dashboard → LLM.
-# ==========================================================================
+# ============================================================================
+# Queue analyze report (per-queue load / resource-sufficiency diagnosis)
+# Mirrors the cluster report flow: collect → compute → dashboard → LLM
+# ============================================================================
 
 QUEUE_ANALYZE_SYSTEM_PROMPT = """You are a senior LSF/OpenLava/Volclava HPC cluster operations expert generating a single-queue analysis report on short-term load and resource sufficiency.
 
@@ -4792,7 +4823,8 @@ def _collect_queue_data(queue, tool='lsf'):
         ('queue_host', common_lsf.get_queue_host_info),
         ('bhosts', common_lsf.get_bhosts_info),
         ('lsload', lambda: common_lsf.get_lsload_info(command='lsload -l' if tool == 'openlava' else 'lsload')),
-        # bjobs 默认只查当前用户，须显式 -u all 才能看到全量 PEND/RUN 作业。
+        # bjobs defaults to the current user only; -u all is required to see
+        # the full set of PEND/RUN jobs
         ('pending_reasons', lambda: _aggregate_pending_reasons(f'bjobs -u all -q {queue_q} -p', top_n=8)),
         ('jobs_overview', lambda: _render_command_output(f'bjobs -u all -q {queue_q} -a -w', 120)),
         ('bqueues_l', lambda: _render_command_output(f'bqueues -l {queue_q}', 200)),
@@ -4840,7 +4872,7 @@ def compute_queue_metrics(queue, raw_data):
         'hosts': [],
     }
 
-    # Queue config row + job counts (bqueues -w).
+    # Queue config row + job counts (bqueues -w)
     bqueues_dict = raw_data.get('bqueues')
 
     if isinstance(bqueues_dict, Exception) or not bqueues_dict:
@@ -4872,7 +4904,7 @@ def compute_queue_metrics(queue, raw_data):
     # Queue detail (bqueues -l <queue>): real scheduling constraints, e.g.
     # RUNLIMIT / USERS / HOSTS / RES_REQ / SCHEDULING POLICIES. bqueues -w's
     # MAX/JL_* columns are usually '-' (no slot limit), so these are the
-    # constraints that actually gate dispatch.
+    # constraints that actually gate dispatch
     bqueues_l_text = raw_data.get('bqueues_l')
 
     if isinstance(bqueues_l_text, Exception) or not bqueues_l_text:
@@ -4889,7 +4921,7 @@ def compute_queue_metrics(queue, raw_data):
     metrics['scheduling_policies'] = _grab(r'^\s*SCHEDULING POLICIES:\s*(.+)$')
     metrics['user_shares'] = _grab(r'^\s*USER_SHARES:\s*(.+)$')
 
-    # Member hosts (queue_host + bhosts) → slot capacity + host states.
+    # Member hosts (queue_host + bhosts) → slot capacity + host states
     queue_host_dict = raw_data.get('queue_host')
 
     if isinstance(queue_host_dict, Exception) or not queue_host_dict:
@@ -4945,7 +4977,7 @@ def compute_queue_metrics(queue, raw_data):
         if slots_total > 0:
             metrics['util_slot'] = round(slots_used * 100 / slots_total, 1)
 
-    # Member-host cpu load (lsload ut) for the resource-sufficiency judgement.
+    # Member-host cpu load (lsload ut) for the resource-sufficiency judgement
     lsload_dict = raw_data.get('lsload')
 
     if isinstance(lsload_dict, Exception) or not lsload_dict:
@@ -4987,6 +5019,7 @@ def compute_queue_metrics(queue, raw_data):
             return val  # MB
         except Exception:
             return None
+
     member_ut_values = [ut_dict.get(h['name']) for h in metrics['hosts'] if ut_dict.get(h['name']) is not None]
 
     if member_ut_values:
@@ -5020,13 +5053,13 @@ def compute_queue_metrics(queue, raw_data):
     total_used_mb = 0
 
     for host in metrics['hosts']:
-        # Total physical memory from lshosts.
+        # Total physical memory from lshosts
         i = lshosts_index.get(host['name'])
 
         if i is not None and i < len(maxmem_list):
             total_max_mb += _parse_mem_mb(maxmem_list[i]) or 0
 
-        # Used memory = total - available (lsload 'mem' = available).
+        # Used memory = total - available (lsload 'mem' = available)
         j = mem_index.get(host['name'])
 
         if j is not None and j < len(mem_list_lsload):
@@ -5044,7 +5077,7 @@ def compute_queue_metrics(queue, raw_data):
         metrics['mem_idle_gb'] = round((total_max_mb - total_used_mb) / 1024, 1)
         metrics['util_mem'] = round(total_used_mb * 100 / total_max_mb, 1)
 
-    # Pending reasons (bjobs -q <queue> -p).
+    # Pending reasons (bjobs -q <queue> -p)
     pending_reasons_list = raw_data.get('pending_reasons')
 
     if isinstance(pending_reasons_list, list):
@@ -5054,7 +5087,8 @@ def compute_queue_metrics(queue, raw_data):
 
 
 def render_queue_dashboard(metrics):
-    """Render the deterministic queue data sections (banner + 队列资源 + 主机状态 + 排队原因)."""
+    """Render the deterministic queue data sections (banner + "队列现状" +
+    "队列限制配置" + "主机状态" + "排队原因")."""
     import html as _html
 
     def esc(value):
@@ -5072,7 +5106,7 @@ def render_queue_dashboard(metrics):
     closed_n = total - open_n
     parts = []
 
-    # Overview banner: resource-sufficiency verdict.
+    # Overview banner: resource-sufficiency verdict
     slots_idle = metrics.get('slots_idle')
     pend = metrics.get('jobs_pend') or 0
     util_slot = metrics.get('util_slot')
@@ -5095,7 +5129,7 @@ def render_queue_dashboard(metrics):
         f'<div class="banner-m">{" · ".join(meta_bits)}</div></div>'
     )
 
-    # 队列现状: basic info table.
+    # "队列现状": basic info table
     parts.append('<h2 id="sec-status">队列现状</h2>')
 
     def info_row(label, value):
@@ -5123,8 +5157,9 @@ def render_queue_dashboard(metrics):
                  '<table class="sortable"><thead><tr><th>项目</th><th>值</th></tr></thead><tbody>'
                  + ''.join(info_rows) + '</tbody></table></div>')
 
-    # 队列限制配置: real scheduling constraints from bqueues -l (bqueues -w 的
-    # MAX/JL_* 列通常是 '-'，真正的约束在 RUNLIMIT/USERS/HOSTS/RES_REQ 等)。
+    # "队列限制配置": real scheduling constraints from bqueues -l (the MAX/JL_*
+    # columns of bqueues -w are usually '-' and are not the real constraints;
+    # those live in RUNLIMIT / USERS / HOSTS / RES_REQ)
     parts.append('<h2 id="sec-config">队列限制配置</h2>')
 
     constraint_rows = []
@@ -5154,7 +5189,7 @@ def render_queue_dashboard(metrics):
     else:
         parts.append('<p>未设置队列限制。</p>')
 
-    # 主机状态: state bar chart + member-host detail table.
+    # "主机状态": state bar chart + member-host detail table
     parts.append('<h2 id="sec-hosts">主机状态</h2>')
 
     bar_order = [
@@ -5205,7 +5240,7 @@ def render_queue_dashboard(metrics):
             + ''.join(rows) + '</tbody></table></details>'
         )
 
-    # 排队原因.
+    # "排队原因": pending reasons table
     parts.append('<h2 id="sec-jobs">排队原因</h2>')
 
     reasons = metrics.get('pending_reasons', [])
@@ -5225,7 +5260,8 @@ def render_queue_dashboard(metrics):
 
 
 def _queue_snapshot_text(raw_data, metrics):
-    """Render the raw queue snapshot (bqueues row + jobs overview) as plain text."""
+    """Render the raw queue snapshot (bqueues row + jobs overview + bqueues -l
+    queue detail) as plain text."""
     lines = [f"[Queue] {metrics.get('queue')}"]
 
     bqueues_dict = raw_data.get('bqueues')
@@ -5438,7 +5474,7 @@ class AnalyzeReportThread(QThread):
             with open(self.output_file, 'w', encoding='utf-8') as f:
                 f.write(html)
 
-            # 0o644: 报告 owner 写、其余用户只读。
+            # 0o644: report owner writes, other users read-only
             os.chmod(self.output_file, 0o644)
 
             self.finished_signal.emit(self.output_file)

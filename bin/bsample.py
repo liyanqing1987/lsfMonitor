@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : bsample.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : LSF data sampler: collects jobs / job memory / hosts / queues /
+#               queue-host and group-host mappings / load / user stats /
+#               utilization into SQLite for bmonitor and bmonitor_cli
+################################
 
 import os
 import re
@@ -46,8 +54,8 @@ bsample — LSF 数据采样工具
   bsample -q                    # 采集队列状态
 
   # 组合采样（同时执行多项）
-  bsample -j -m -q -qH -gH -H -l    # 常规全量采样（不含慢查询）
-  bsample -j -m -q -H -l            # 轻量快速采样
+  bsample -j -m -q -qH -gH -H -l    # 常规全量采样（不含 -u/-U 等耗时统计）
+  bsample -j -m -q -H -l            # 常用采样
   bsample -U -UD                    # 利用率 + 日利用率统计
   bsample -u                        # 用户作业统计
 
@@ -80,7 +88,7 @@ bsample — LSF 数据采样工具
     parser.add_argument("-m", "--job_mem",
                         action="store_true",
                         default=False,
-                        help='采集运行中作业的内存和 idle_factor（bjobs -o）')
+                        help='采集运行中作业的内存和 idle_factor（bjobs -u all -r -UF）')
     parser.add_argument("-q", "--queue",
                         action="store_true",
                         default=False,
@@ -129,8 +137,8 @@ bsample — LSF 数据采样工具
 
 class Sampling:
     """
-    Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/busers commands.
-    Save the infomation into sqlite3 DB.
+    Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/bmgroup commands.
+    Save the information into sqlite3 DB.
     """
     def __init__(self, cleanup, job_sampling, job_mem_sampling, queue_sampling, queue_host_mapping_sampling, group_host_mapping_sampling, host_sampling, load_sampling, user_sampling, utilization_sampling, utilization_day_sampling, analyze_sampling):
         self.cleanup = cleanup
@@ -146,14 +154,14 @@ class Sampling:
         self.utilization_day_sampling = utilization_day_sampling
         self.analyze_sampling = analyze_sampling
 
-        # Get sample time (use single datetime to avoid midnight race).
+        # Get sample time (use single datetime to avoid midnight race)
         now = datetime.datetime.now()
         self.sample_second = int(now.timestamp())
         self.sample_date = now.strftime('%Y%m%d')
         self.sample_time = now.strftime('%Y%m%d_%H%M%S')
 
-        # Update self.db_path with cluster information.
-        # resolve_db_path: config_lsf.db_path if set, else config.py db_path/lsf.
+        # Update self.db_path with cluster information
+        # resolve_db_path: config_lsf.db_path if set, else config.py db_path/lsf
         global config_lsf
         self.db_path = common_db_path.resolve_db_path(config_lsf, 'lsf')
         (self.tool, cluster) = self.check_cluster_info()
@@ -161,7 +169,7 @@ class Sampling:
 
         # Reload cluster-specific config_lsf if exists; rebind the module-level
         # config_lsf so downstream reads (db_path, cleanup_expire_days, lmstat_*)
-        # pick up the cluster-specific overrides.
+        # pick up the cluster-specific overrides
         reloaded = common_config.reload_config_for_cluster(cluster)
 
         if reloaded is not None:
@@ -170,7 +178,7 @@ class Sampling:
         if cluster:
             self.db_path = common_db_path.resolve_db_path(config_lsf, 'lsf') + '/' + str(cluster)
 
-        # Data retention days for cleanup (after cluster config_lsf reload).
+        # Data retention days for cleanup (after cluster config_lsf reload)
         default_cleanup_expire_days = {
             'job': 30,
             'job_data': 30,
@@ -189,13 +197,13 @@ class Sampling:
 
         self.cleanup_expire_days = default_cleanup_expire_days
 
-        # Create db path.
+        # Define db paths for job/job_data/user (created just below)
         self.job_db_path = str(self.db_path) + '/job'
         self.job_data_db_path = str(self.db_path) + '/job_data'
         self.user_db_path = str(self.db_path) + '/user'
 
         # Sampling data is written by the dedicated sampler (owner) and only
-        # read by others via the GUI, so these dirs are 0o755 (owner-writable).
+        # read by others via the GUI, so these dirs are 0o755 (owner-writable)
         common.create_dir(self.db_path, 0o755)
         common.create_dir(self.job_db_path, 0o755)
         common.create_dir(self.job_data_db_path, 0o755)
@@ -245,7 +253,7 @@ class Sampling:
 
         # Sweep stale/orphaned malformed-suspect counter files left over from
         # the self-heal mechanism (db files deleted by -c, or ranges that
-        # stopped sampling). Counter dir lives next to job_data dbs.
+        # stopped sampling). Counter dir lives next to job_data dbs
         try:
             removed = common_sqlite3.cleanup_suspect_counters(self.job_data_db_path)
 
@@ -321,7 +329,7 @@ class Sampling:
                     if deleted > 0:
                         common.bprint(f'Deleted {deleted} expired rows from "{db_file_name}".', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
-                    # Remove empty db file or VACUUM non-empty ones.
+                    # Remove empty db file or VACUUM non-empty ones
                     curs = db_conn.cursor()
                     curs.execute("SELECT COUNT(*) FROM job_data")
                     remaining = curs.fetchone()[0]
@@ -346,8 +354,9 @@ class Sampling:
 
     def _cleanup_single_db_files(self):
         """
-        Clean up single-file databases (queue.db, host.db, load.db, utilization.db, utilization_day.db)
-        by deleting rows older than expire_days.
+        Clean up single-file databases (queue.db, queue_host_mapping.db,
+        group_host_mapping.db, host.db, load.db, utilization.db,
+        utilization_day.db) by deleting rows older than expire_days.
         Uses sample_second (INTEGER PK) for most dbs, sample_date (TEXT PK) for utilization_day.
         """
         item_list = ['queue', 'queue_host_mapping', 'group_host_mapping', 'host', 'load', 'utilization', 'utilization_day']
@@ -403,7 +412,7 @@ class Sampling:
         common.bprint('* Getting finished job information with command "bjobs -u all -d -UF" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
 
-        # Re-organize jobs_dic with finished_date.
+        # Re-organize jobs_dic with finished_date
         date_bjobs_dic = {}
 
         for job in bjobs_dic.keys():
@@ -414,7 +423,7 @@ class Sampling:
 
             date_bjobs_dic[finished_date][job] = bjobs_dic[job]
 
-        # Write db_file with finished_date.
+        # Write db_file with finished_date
         common.bprint('* Saving finished job information ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         key_list = ['job', 'job_name', 'job_description', 'user', 'project', 'status', 'interactive_mode', 'queue', 'command', 'submitted_from', 'submitted_time', 'cwd', 'processors_requested', 'requested_resources', 'span_hosts', 'rusage_mem', 'specified_hosts', 'started_on', 'started_time', 'finished_time', 'exit_code', 'term_signal', 'cpu_time', 'idle_factor', 'mem', 'swap', 'run_limit', 'pids', 'max_mem', 'avg_mem', 'pending_reasons', 'job_info']
         key_type_list = ['PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
@@ -430,7 +439,6 @@ class Sampling:
                     common_sqlite3.create_sql_table(finished_date_db_file, finished_date_db_conn, 'job', key_string, commit=False)
 
                     for job in date_bjobs_dic[finished_date].keys():
-                        # Insert sql table value if not exists.
                         value_list = [job, date_bjobs_dic[finished_date][job]['job_name'], date_bjobs_dic[finished_date][job]['job_description'], date_bjobs_dic[finished_date][job]['user'], date_bjobs_dic[finished_date][job]['project'], date_bjobs_dic[finished_date][job]['status'], date_bjobs_dic[finished_date][job]['interactive_mode'], date_bjobs_dic[finished_date][job]['queue'], date_bjobs_dic[finished_date][job]['command'], date_bjobs_dic[finished_date][job]['submitted_from'], date_bjobs_dic[finished_date][job]['submitted_time'], date_bjobs_dic[finished_date][job]['cwd'], date_bjobs_dic[finished_date][job]['processors_requested'], date_bjobs_dic[finished_date][job]['requested_resources'], date_bjobs_dic[finished_date][job]['span_hosts'], date_bjobs_dic[finished_date][job]['rusage_mem'], date_bjobs_dic[finished_date][job]['specified_hosts'], date_bjobs_dic[finished_date][job]['started_on'], date_bjobs_dic[finished_date][job]['started_time'], date_bjobs_dic[finished_date][job]['finished_time'], date_bjobs_dic[finished_date][job]['exit_code'], date_bjobs_dic[finished_date][job]['term_signal'], date_bjobs_dic[finished_date][job]['cpu_time'], date_bjobs_dic[finished_date][job]['idle_factor'], date_bjobs_dic[finished_date][job]['mem'], date_bjobs_dic[finished_date][job]['swap'], ' '.join(date_bjobs_dic[finished_date][job]['run_limit']), ' '.join(date_bjobs_dic[finished_date][job]['pids']), date_bjobs_dic[finished_date][job]['max_mem'], date_bjobs_dic[finished_date][job]['avg_mem'], ' '.join(date_bjobs_dic[finished_date][job]['pending_reasons']), date_bjobs_dic[finished_date][job]['job_info']]
                         value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                         common_sqlite3.insert_into_sql_table(finished_date_db_file, finished_date_db_conn, 'job', value_string, commit=False)
@@ -478,7 +486,7 @@ class Sampling:
         Write job mem and idle_factor data to job_data DB files using single-table schema.
         Detects recycled job IDs by checking time gap and removes stale data.
         """
-        # If a job_id has no sample in the last 24 hours, treat it as a recycled ID.
+        # If a job_id has no sample in the last 24 hours, treat it as a recycled ID
         stale_gap = 24 * 3600
         batch_size = 500
 
@@ -493,7 +501,7 @@ class Sampling:
                     curs = db_conn.cursor()
                     curs.execute("CREATE TABLE IF NOT EXISTS job_data (job_id TEXT, sample_second INTEGER, sample_time TEXT, mem TEXT, idle_factor TEXT, PRIMARY KEY (job_id, sample_second))")
 
-                    # Detect and remove stale data from recycled job IDs (batched to avoid SQLite variable limit).
+                    # Detect and remove stale data from recycled job IDs (batched to avoid SQLite variable limit)
                     job_list = job_range_dic[job_range]
                     stale_jobs = []
 
@@ -560,11 +568,9 @@ class Sampling:
                     queue = queue_list[i]
                     queue_table_name = 'queue_' + str(queue)
 
-                    # Generate sql table if not exitst.
                     if queue_table_name not in queue_table_list:
                         common_sqlite3.create_sql_table(queue_db_file, queue_db_conn, queue_table_name, key_string, commit=False)
 
-                    # Insert sql table value.
                     total_slots = 0
 
                     if queue == 'ALL':
@@ -618,11 +624,9 @@ class Sampling:
                     host = host_list[i]
                     host_table_name = 'host_' + str(host)
 
-                    # Generate sql table if not exists.
                     if host_table_name not in host_table_list:
                         common_sqlite3.create_sql_table(host_db_file, host_db_conn, host_table_name, key_string, commit=False)
 
-                    # Insert sql table value.
                     value_list = [self.sample_second, self.sample_time, bhosts_dic['NJOBS'][i], bhosts_dic['RUN'][i], bhosts_dic['SSUSP'][i], bhosts_dic['USUSP'][i]]
                     value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                     common_sqlite3.insert_into_sql_table(host_db_file, host_db_conn, host_table_name, value_string, commit=False)
@@ -661,11 +665,10 @@ class Sampling:
                     host = host_list[i]
                     load_table_name = 'load_' + str(host)
 
-                    # Generate sql table if not exists.
                     if load_table_name not in load_table_list:
                         common_sqlite3.create_sql_table(load_db_file, load_db_conn, load_table_name, key_string, commit=False)
 
-                    # Update "ut" value.
+                    # Update "ut" value
                     if not lsload_dic['ut'][i]:
                         lsload_dic['ut'][i] = '0%'
                     else:
@@ -681,7 +684,6 @@ class Sampling:
 
                         lsload_dic['ut'][i] = str(ut) + '%'
 
-                    # Insert sql table value.
                     value_list = [self.sample_second, self.sample_time, lsload_dic['ut'][i], lsload_dic['tmp'][i], lsload_dic['swp'][i], lsload_dic['mem'][i]]
                     value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                     common_sqlite3.insert_into_sql_table(load_db_file, load_db_conn, load_table_name, value_string, commit=False)
@@ -700,7 +702,7 @@ class Sampling:
         common.bprint('* Getting finished job information with command "bjobs -u all -d -UF" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         bjobs_dic = common_lsf.get_bjobs_uf_info('bjobs -u all -d -UF')
 
-        # Re-organize jobs_dic with finished_date.
+        # Re-organize jobs_dic with finished_date
         date_bjobs_dic = {}
 
         for job in bjobs_dic.keys():
@@ -710,7 +712,7 @@ class Sampling:
             date_bjobs_dic[finished_date].setdefault(user, {})
             date_bjobs_dic[finished_date][user][job] = {'status': bjobs_dic[job]['status'], 'queue': bjobs_dic[job]['queue'], 'project': bjobs_dic[job]['project'], 'rusage_mem': bjobs_dic[job]['rusage_mem'], 'max_mem': bjobs_dic[job]['max_mem']}
 
-        # Write db_file with finished_date.
+        # Write db_file with finished_date
         common.bprint('* Saving user job information ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
         key_list = ['job', 'status', 'queue', 'project', 'rusage_mem', 'max_mem']
         key_type_list = ['PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
@@ -728,12 +730,11 @@ class Sampling:
                     for user in date_bjobs_dic[finished_date]:
                         user_table_name = 'user_' + str(user)
 
-                        # Generate sql table (user) if not exitst.
+                        # Generate sql table (user) if not exitst
                         if user_table_name not in user_table_list:
                             common_sqlite3.create_sql_table(finished_date_db_file, finished_date_db_conn, user_table_name, key_string, commit=False)
 
                         for job in date_bjobs_dic[finished_date][user]:
-                            # Insert sql table value if not exists.
                             value_list = [job, bjobs_dic[job]['status'], bjobs_dic[job]['queue'], bjobs_dic[job]['project'], bjobs_dic[job]['rusage_mem'], bjobs_dic[job]['max_mem']]
                             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                             common_sqlite3.insert_into_sql_table(finished_date_db_file, finished_date_db_conn, user_table_name, value_string, commit=False)
@@ -754,7 +755,7 @@ class Sampling:
         """
         common.bprint('>>> Sampling queue-host mapping info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Get current queue-host mapping info.
+        # Get current queue-host mapping info
         current_queue_host_dic = common_lsf.get_queue_host_info()
 
         queue_host_mapping_db_file = str(self.db_path) + '/queue_host_mapping.db'
@@ -768,11 +769,9 @@ class Sampling:
                 skipped_count = 0
 
                 for queue, host_list in current_queue_host_dic.items():
-                    # Generate table name for this queue
                     table_name = 'queue_' + str(queue)
                     hosts_string = ' '.join(host_list)
 
-                    # Generate sql table if not exists.
                     if table_name not in queue_host_mapping_table_list:
                         key_list = ['sample_second', 'sample_time', 'hosts']
                         key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
@@ -787,7 +786,6 @@ class Sampling:
 
                     if last_data and 'hosts' in last_data and len(last_data['hosts']) > 0:
                         last_hosts_string = last_data['hosts'][0]
-                        # Sort hosts for comparison
                         last_hosts = sorted(last_hosts_string.split())
                         current_hosts = sorted(host_list)
 
@@ -821,7 +819,7 @@ class Sampling:
         """
         common.bprint('>>> Sampling host group-host mapping info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Get current host group-host mapping info.
+        # Get current host group-host mapping info
         current_group_host_dic = common_lsf.get_bmgroup_info()
 
         host_group_mapping_db_file = str(self.db_path) + '/group_host_mapping.db'
@@ -835,26 +833,25 @@ class Sampling:
                 skipped_count = 0
 
                 for group, host_list in current_group_host_dic.items():
-                    # Generate table name for this group.
+                    # Generate table name for this group
                     table_name = 'group_' + str(group)
                     hosts_string = ' '.join(host_list)
 
-                    # Generate sql table if not exists.
                     if table_name not in host_group_mapping_table_list:
                         key_list = ['sample_second', 'sample_time', 'hosts']
                         key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT']
                         key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                         common_sqlite3.create_sql_table(host_group_mapping_db_file, host_group_mapping_db_conn, table_name, key_string, commit=False)
 
-                    # Check if current mapping is same as last recorded mapping for this group.
+                    # Check if current mapping is same as last recorded mapping for this group
                     skip_save = False
 
-                    # Get the last recorded entry for this group.
+                    # Get the last recorded entry for this group
                     last_data = common_sqlite3.get_sql_table_data(host_group_mapping_db_file, host_group_mapping_db_conn, table_name, ['hosts'], 'ORDER BY sample_second DESC LIMIT 1')
 
                     if last_data and 'hosts' in last_data and len(last_data['hosts']) > 0:
                         last_hosts_string = last_data['hosts'][0]
-                        # Sort hosts for comparison.
+                        # Sort hosts for comparison
                         last_hosts = sorted(last_hosts_string.split())
                         current_hosts = sorted(host_list)
 
@@ -862,7 +859,7 @@ class Sampling:
                             skip_save = True
                             skipped_count += 1
 
-                    # Insert sql table value only if mapping changed or no previous data.
+                    # Insert sql table value only if mapping changed or no previous data
                     if not skip_save:
                         value_list = [self.sample_second, self.sample_time, hosts_string]
                         value_string = common_sqlite3.gen_sql_table_value_string(value_list)
@@ -910,11 +907,10 @@ class Sampling:
                     host = host_list[i]
                     utilization_table_name = 'utilization_' + str(host)
 
-                    # Generate sql table if not exists.
                     if utilization_table_name not in utilization_table_list:
                         common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, key_string, commit=False)
 
-                    # Get slot_utilization.
+                    # Get slot_utilization
                     slot_utilization = 0
 
                     for (j, host_name) in enumerate(bhosts_dic['HOST_NAME']):
@@ -931,18 +927,18 @@ class Sampling:
 
                             break
 
-                    # Get cpu_utilization.
+                    # Get cpu_utilization
                     cpu_utilization = 0
 
                     if re.match(r'^\d+%$', lsload_dic['ut'][i]):
                         cpu_utilization = re.sub('%', '', lsload_dic['ut'][i])
 
-                    # Get mem_utilization.
+                    # Get mem_utilization
                     mem_utilization = 0
 
                     for (k, host_name) in enumerate(lshosts_dic['HOST_NAME']):
                         if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
-                            # Get maxmem with MB.
+                            # Get maxmem with MB
                             maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
                             maxmem = float(maxmem_match.group(1))
                             maxmem_unit = maxmem_match.group(3)
@@ -952,7 +948,7 @@ class Sampling:
                             elif maxmem_unit == 'T':
                                 maxmem = maxmem * 1024 * 1024
 
-                            # Get mem with MB.
+                            # Get mem with MB
                             mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
                             mem = float(mem_match.group(1))
                             mem_unit = mem_match.group(3)
@@ -970,7 +966,6 @@ class Sampling:
 
                             break
 
-                    # Insert sql table value.
                     value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
                     value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                     common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
@@ -1001,11 +996,11 @@ class Sampling:
                 utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
 
                 for utilization_table_name in utilization_table_list:
-                    # Get current day issued/in_use/utilization from sqlite3 database.
+                    # Get current day slot/cpu/mem from sqlite3 database
                     utilization_db_data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, utilization_table_name, ['slot', 'cpu', 'mem'], select_condition)
 
                     if utilization_db_data_dic:
-                        # Get slot_sum/cpu_sum/mem_sum info.
+                        # Get slot_sum/cpu_sum/mem_sum info
                         slot_utilization_sum = 0
                         cpu_utilization_sum = 0
                         mem_utilization_sum = 0
@@ -1015,7 +1010,7 @@ class Sampling:
                             cpu_utilization_sum += float(utilization_db_data_dic['cpu'][i])
                             mem_utilization_sum += float(utilization_db_data_dic['mem'][i])
 
-                        # Get slot_avg/cpu_avg/mem_avg utilizaiton info.
+                        # Get slot_avg/cpu_avg/mem_avg utilizaiton info
                         slot_avg_utilization = round(slot_utilization_sum / len(utilization_db_data_dic['slot']), 1)
                         cpu_avg_utilization = round(cpu_utilization_sum / len(utilization_db_data_dic['slot']), 1)
                         mem_avg_utilization = round(mem_utilization_sum / len(utilization_db_data_dic['slot']), 1)
@@ -1062,11 +1057,10 @@ class Sampling:
                     host = re.sub('utilization_', '', utilization_day_table_name)
                     common.bprint(f'Counting utilization (day average) info for host "{host}" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
-                    # Generate sql table.
+                    # Generate sql table
                     if utilization_day_table_name not in utilization_day_table_list:
                         common_sqlite3.create_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, key_string, commit=False)
 
-                        # Insert sql table value.
                         value_list = [self.sample_date, utilization_day_table_dic['slot'], utilization_day_table_dic['cpu'], utilization_day_table_dic['mem']]
                         value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                         common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
@@ -1075,12 +1069,11 @@ class Sampling:
                         utilization_day_db_data_dic = common_sqlite3.get_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, ['slot', 'cpu', 'mem'], select_condition)
 
                         if utilization_day_db_data_dic:
-                            # Replace sql table value.
+                            # Replace sql table value
                             set_condition = "SET slot='" + str(utilization_day_table_dic['slot']) + "', cpu='" + str(utilization_day_table_dic['cpu']) + "', mem='" + str(utilization_day_table_dic['mem']) + "'"
                             where_condition = "WHERE sample_date='" + str(self.sample_date) + "'"
                             common_sqlite3.update_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, set_condition, where_condition, commit=False)
                         else:
-                            # Insert sql table value.
                             value_list = [self.sample_date, utilization_day_table_dic['slot'], utilization_day_table_dic['cpu'], utilization_day_table_dic['mem']]
                             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                             common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
@@ -1098,7 +1091,7 @@ class Sampling:
         """
         common.bprint('>>> Generating AI cluster analyze report ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Require AI configuration (from config_ai.py, not config_lsf.py).
+        # Require AI configuration (from config_ai.py, not config_lsf.py)
         if not (getattr(config_ai, 'ai_api_base_url', '') and getattr(config_ai, 'ai_api_key', '') and getattr(config_ai, 'ai_model_name', '')):
             common.bprint('AI is not configured (ai_api_base_url/ai_api_key/ai_model_name in config_ai.py), skip cluster analyze.', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
             return
@@ -1111,7 +1104,8 @@ class Sampling:
 
         try:
             # Load RAG documents (optional) so the report can cite best practices.
-            docs_dir = os.path.join(str(os.environ['LSFMONITOR_INSTALL_PATH']), 'db', 'ai')
+            # Same source as the AI panel: <ai_db_root>/rag (rag_builder output)
+            docs_dir = os.path.join(common_db_path.resolve_db_path(config_ai, 'ai'), 'rag')
             doc_chunks = common_ai.load_ai_documents(docs_dir)
 
             content = common_ai.generate_cluster_analyze_report(
@@ -1123,9 +1117,9 @@ class Sampling:
                 lmstat_path=getattr(config_lsf, 'lmstat_path', 'lmstat'),
                 lmstat_bsub_command=getattr(config_lsf, 'lmstat_bsub_command', ''),
                 doc_chunks=doc_chunks,
-                embedding_model=getattr(config_lsf, 'ai_embedding_model_name', ''),
-                embedding_api_base_url=getattr(config_lsf, 'ai_embedding_api_base_url', ''),
-                embedding_api_key=getattr(config_lsf, 'ai_embedding_api_key', ''),
+                embedding_model=getattr(config_ai, 'ai_embedding_model_name', ''),
+                embedding_api_base_url=getattr(config_ai, 'ai_embedding_api_base_url', ''),
+                embedding_api_key=getattr(config_ai, 'ai_embedding_api_key', ''),
             )
 
             if not content:
@@ -1147,11 +1141,9 @@ class Sampling:
     def sampling(self):
         start_time = time.time()
 
-        # Cleanup.
         if self.cleanup:
             self.cleanup_db()
 
-        # Sample.
         process_list = []
 
         if self.job_sampling:
@@ -1213,7 +1205,7 @@ class Sampling:
                 p.join(timeout=10)
 
         # AI cluster analyze is a single (slow) LLM call; run it inline after the
-        # parallel samplers so its output and errors are visible.
+        # parallel samplers so its output and errors are visible
         if self.analyze_sampling:
             self.sample_cluster_analyze()
 
@@ -1235,7 +1227,7 @@ def main():
     # Ensure db_path root is 0o1777 before Sampling.__init__ creates lsf/
     # subdirs under it. For a custom db_path created on first run, makedirs
     # would otherwise leave the root at 0o755 (umask) and lock out other
-    # sampler accounts from creating their own subsystem subdirs.
+    # sampler accounts from creating their own subsystem subdirs
     try:
         lsf_root = common_db_path.resolve_db_path(config_lsf, 'lsf')
         common_db_path.ensure_db_root(os.path.dirname(lsf_root))

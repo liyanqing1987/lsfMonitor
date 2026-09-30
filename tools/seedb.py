@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : seedb.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Command-line SQLite viewer: list tables and dump rows / columns
+################################
+
 import os
 import re
 import sys
@@ -97,7 +104,7 @@ def get_table_columns(db_file, table_name):
         if result == 'failed' or conn == '':
             return columns
 
-        # Validate table_name to avoid PRAGMA injection (PRAGMA does not support binding).
+        # Validate table_name to avoid PRAGMA injection (PRAGMA does not support binding)
         valid_tables = common_sqlite3.get_sql_table_list(db_file, conn)
 
         if table_name not in valid_tables:
@@ -143,15 +150,15 @@ def seedb(db_file, table_list, key_list, number):
             display_key_list = list(data_dic.keys())
 
             # get_sql_table_data returns an empty dict both when the user
-            # specifies an invalid -k column AND when the table is simply empty.
+            # specifies an invalid -k column AND when the table is simply empty
             # Distinguish the two: on an empty result, fall back to the actual
             # table columns (PRAGMA table_info) so an empty table still shows
-            # its header rather than a misleading "No valid key_list" error.
+            # its header rather than a misleading "No valid key_list" error
             if len(display_key_list) == 0:
                 all_columns = get_table_columns(db_file, table)
 
                 if key_list:
-                    # User-specified keys that don't exist on the table.
+                    # User-specified keys that don't exist on the table
                     invalid = [k for k in key_list if k not in all_columns]
 
                     if invalid:

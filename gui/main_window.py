@@ -7,8 +7,9 @@
 #               LSF/LICENSE/RUN/AI panels and a single merged menubar. Both
 #               `bmonitor` and `license_monitor` launchers start this program;
 #               the entry panel is chosen via --panel (lsf by default, license
-#               for license_monitor). Non-entry panels are instantiated lazily
-#               the first time the user clicks them in the sidebar.
+#               for license_monitor). All four panels are instantiated at
+#               startup so their menu actions exist; each panel still builds its
+#               own inner UI lazily via on_first_show
 ################################
 
 import os
@@ -46,10 +47,10 @@ def _menu_action(text, icon_path, slot, parent=None):
     return act
 
 
-# ------------------------------------------------------------------
+# ============================================================================
 # Sidebar icons are drawn programmatically (simple, clean, match theme)
-# instead of using the old bitmap assets.
-# ------------------------------------------------------------------
+# instead of using the old bitmap assets
+# ============================================================================
 def _make_icon(draw_fn, size=20, color=PRIMARY):
     """Build a QIcon by calling draw_fn(QPainter, size, color) on a transparent pm."""
     pm = QPixmap(size, size)
@@ -69,7 +70,7 @@ def _draw_server_icon(p, s, c):
     pen.setCapStyle(Qt.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.NoBrush)
-    # Two rack units (top & bottom), evenly placed, with breathing room.
+    # Two rack units (top & bottom), evenly placed, with breathing room
     pad_x = s * 0.13
     h = s * 0.28
     top_y = s * 0.17
@@ -123,7 +124,7 @@ def _draw_sparkle_icon(p, s, c):
     cx, cy = s * 0.50, s * 0.52
     # Main star: filled 4-pointed. Vertical arm slightly taller than horizontal
     # to look natural. Use a polygon with "notch" points near the center to
-    # create the classic sparkle shape instead of a plain cross.
+    # create the classic sparkle shape instead of a plain cross
     arm_v = s * 0.36   # vertical half-length
     arm_h = s * 0.30   # horizontal half-length
     notch = s * 0.06   # indent on the diagonals (0 = sharp diamond)
@@ -155,12 +156,12 @@ def _draw_terminal_icon(p, s, c):
     pen.setCapStyle(Qt.RoundCap)
     p.setPen(pen)
     p.setBrush(Qt.NoBrush)
-    # Screen body.
+    # Screen body
     body = QRectF(s * 0.14, s * 0.20, s * 0.72, s * 0.60)
     p.drawRoundedRect(body, s * 0.08, s * 0.08)
-    # Title bar line.
+    # Title bar line
     p.drawLine(QPointF(body.left(), s * 0.30), QPointF(body.right(), s * 0.30))
-    # Prompt ">" chevron + cursor.
+    # Prompt ">" chevron + cursor
     prompt_pen = QPen(c)
     prompt_pen.setWidthF(max(1.4, s * 0.11))
     prompt_pen.setCapStyle(Qt.RoundCap)
@@ -184,7 +185,7 @@ def _nav_icon(kind):
 
 
 # LsfPanel lives in gui/lsf_panel.py and LicensePanel in gui/license_panel.py
-# (panel classes live alongside the GUI framework, not under bin/).
+# (panel classes live alongside the GUI framework, not under bin/)
 _INSTALL_PATH = os.environ.get('LSFMONITOR_INSTALL_PATH', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 if _INSTALL_PATH not in sys.path:
@@ -279,8 +280,8 @@ lsfMonitor — 统一 GUI 监控工具（LSF/License/批量运维/AI 助手）
 class MainWindow(QMainWindow):
     """
     Unified host window. Owns the outer sidebar navigation and the merged
-    menubar. Only the entry panel (selected by --panel) is instantiated at
-    startup; the other three panels are created on first navigation.
+    menubar. All four panels are instantiated at startup (so every panel's menu
+    actions are available); each panel builds its inner UI lazily on first show.
     """
 
     def __init__(self, args):
@@ -293,7 +294,7 @@ class MainWindow(QMainWindow):
         self.context = AppContext(install_path, dark_mode=args.dark_mode)
 
         # QListWidget for outer nav (West QTabWidget rotates text 90°); each
-        # panel keeps its own inner QTabWidget.
+        # panel keeps its own inner QTabWidget
         central = QWidget(self)
         central.setObjectName('centralWidget')
         layout = QHBoxLayout(central)
@@ -302,7 +303,7 @@ class MainWindow(QMainWindow):
 
         self.nav_list = QListWidget(central)
         self.nav_list.setObjectName('navList')
-        # Size sidebar to the longest nav label (LICENSE).
+        # Size sidebar to the longest nav label (LICENSE)
         _nav_font = QFont(self.nav_list.font())
         _nav_font.setBold(True)
         _fm = QFontMetrics(_nav_font)
@@ -319,8 +320,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.stack)
         self.setCentralWidget(central)
 
-        # Panel registry: (name, label, icon_key, factory). Non-entry panels are
-        # instantiated lazily on first navigation.
+        # Panel registry: (name, label, icon_key, factory)
         self._panel_meta = [
             ('lsf', 'LSF', 'lsf', LsfPanel),
             ('license', 'LICENSE', 'license', LicensePanel),
@@ -328,8 +328,8 @@ class MainWindow(QMainWindow):
             ('ai', 'AI', 'ai', AiPanel),
         ]
 
-        # Populate sidebar + placeholder widgets (entry panel replaces its
-        # placeholder below).
+        # Populate sidebar + placeholder widgets (each panel replaces its own
+        # placeholder when it is created below)
         for _name, label, icon_key, _factory in self._panel_meta:
             item = QListWidgetItem(label)
             item.setIcon(_nav_icon(icon_key))
@@ -338,18 +338,18 @@ class MainWindow(QMainWindow):
             placeholder = QWidget()
             self.stack.addWidget(placeholder)
 
-        # Shared menubar skeleton (File/Setup/Function/Help) + Exit anchor.
+        # Shared menubar skeleton (File/Setup/Function/Help) + Exit anchor
         self._shared_menus = None
         self._exit_action = None
         self.gen_menubar_skeleton()
 
         # Instantiate all panels so their menu actions are available from
-        # startup; UIs are still built lazily via on_first_show.
+        # startup; UIs are still built lazily via on_first_show
         for _name, _label, _icon_key, _factory in self._panel_meta:
             self._ensure_panel_created(_name)
 
         # Entry panel: --panel (case-insensitive) or auto-inferred from args
-        # (--feature → license, else lsf).
+        # (--feature → license, else lsf)
         entry_name = args.panel.lower() if args.panel else ''
 
         if not entry_name:
@@ -365,15 +365,16 @@ class MainWindow(QMainWindow):
         entry_idx = next(i for i, (n, _l, _ic, _f) in enumerate(self._panel_meta) if n == entry_name)
 
         # Connect navigation after creating all panels so setCurrentRow triggers
-        # activation exactly once.
+        # activation exactly once
         self.nav_list.currentRowChanged.connect(self._on_outer_panel_changed)
         self.nav_list.setCurrentRow(entry_idx)
 
-        # setCurrentRow(0) doesn't emit currentChanged if row is already 0.
+        # setCurrentRow() only emits currentRowChanged when the row actually
+        # changes, so activate explicitly when the entry row was already set
         if self.nav_list.currentRow() == entry_idx:
             self._activate_panel(entry_name)
 
-        # Forward entry args (-j/-u/-f/-t) to the entry panel.
+        # Forward entry args (-j/-u/-f/-t) to the entry panel
         entry_panel = self.panels[entry_name]
         entry_panel.apply_entry_args(self.args)
 
@@ -430,7 +431,7 @@ class MainWindow(QMainWindow):
 
         # Exit + separator: re-added to the tail of File whenever a panel
         # registers actions, so Exit stays at the bottom (addAction moves an
-        # existing action to the tail).
+        # existing action to the tail)
         from PyQt5.QtWidgets import qApp
         self._exit_action = _menu_action('Exit',
                                          os.path.join(install_path, 'data/pictures/exit.png'),
@@ -447,7 +448,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self._exit_action)
 
     def _ensure_panel_created(self, name):
-        """Instantiate a panel on demand and swap its stack placeholder."""
+        """Return the panel for ``name``, creating it on first call."""
         if name in self.panels:
             return self.panels[name]
 
@@ -466,9 +467,8 @@ class MainWindow(QMainWindow):
         setattr(self.context, '{}_panel'.format(name), panel)
         panel._panel_activated = False
 
-        # Register menu actions. This is a no-op for panels that haven't
-        # built their inner UI yet, but the actions themselves (QAction
-        # objects) are cheap to create and only do work when triggered.
+        # Register menu actions. The QActions are cheap to create and only do
+        # work when triggered, so this is safe before a panel inner UI exists
         self._register_panel_menus(panel)
 
         return panel
@@ -485,9 +485,9 @@ class MainWindow(QMainWindow):
             panel._panel_activated = True
 
     def _on_outer_panel_changed(self, row):
-        """Sidebar nav slot: lazily create + activate the target panel. Stack is
-        switched before on_first_show so a panel launching a background load can
-        render its own loading placeholder first."""
+        """Sidebar nav slot: create (if needed) + activate the target panel.
+        Stack is switched before on_first_show so a panel launching a background
+        load can render its own loading placeholder first."""
         if row < 0 or row >= len(self._panel_meta):
             return
 
@@ -501,12 +501,13 @@ def main():
     args = read_args()
 
     # Ensure db_path root is 0o1777 before any subsystem writes (earliest write
-    # point is save_app_start → init_app_log_db → os.makedirs).
+    # point is save_app_start → init_app_log_db → os.makedirs)
     try:
         from common import common_config, common_db_path
 
         default_config = common_config.load_default_config()
         db_path = getattr(default_config, 'db_path', '') if default_config else ''
+
         if not db_path:
             db_path = os.path.join(os.environ.get('LSFMONITOR_INSTALL_PATH', '.'), 'db')
 
@@ -515,7 +516,7 @@ def main():
         pass
 
     # Record this launch (best-effort). Prefer LSFMONITOR_ORIG_CMDLINE so the
-    # logged command matches what the user typed, not Python's expanded argv.
+    # logged command matches what the user typed, not Python's expanded argv
     try:
         from common import common_app_log
 
@@ -533,7 +534,7 @@ def main():
 
     app = QApplication(sys.argv)
 
-    # Apply matplotlib chart style after QApplication exists.
+    # Apply matplotlib chart style after QApplication exists
     try:
         common_pyqt5.apply_chart_style()
     except Exception:

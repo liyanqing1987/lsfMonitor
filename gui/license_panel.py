@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : license_panel.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : LICENSE panel: server / feature / usage / expires tables and the
+#               curve + utilization tabs
+################################
 
 import os
 import re
@@ -8,12 +15,12 @@ import copy
 import shlex
 import datetime
 
-from PyQt5.QtWidgets import QWidget, QAction, QFrame, QGridLayout, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QLineEdit, QHeaderView, QDateEdit, QFileDialog, QApplication
+from PyQt5.QtWidgets import QWidget, QAction, QFrame, QGridLayout, QSplitter, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QLineEdit, QDateEdit, QFileDialog, QApplication
 from PyQt5.QtGui import QIcon, QBrush, QColor, QFont
 from PyQt5.QtCore import Qt, QThread, QDate, pyqtSignal
 
 # Project root. License subsystem data lives under config/ (shared with other
-# panels); tools live under tools/. No separate license/ subsystem root anymore.
+# panels); tools live under tools/. No separate license/ subsystem root anymore
 _LSFMONITOR_INSTALL_PATH = os.environ['LSFMONITOR_INSTALL_PATH']
 
 if _LSFMONITOR_INSTALL_PATH not in sys.path:
@@ -29,18 +36,18 @@ from gui.panel_base import PanelBase
 from gui.theme import STATUS_EXIT, STATUS_DONE
 from gui import theme
 
-# Shared loading-prompt QThread (tracked subprocess + safe terminate()).
+# Shared loading-prompt QThread (tracked subprocess + safe terminate())
 ShowMessage = common_pyqt5.ShowMessage
 
 # License config loaded via the unified loader into sys.modules['config_license'];
-# bound to the local name `config` used throughout this file.
+# bound to the local name `config` used throughout this file
 config = common_config.load_config('license')
 
 from gui.version import USER
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
-# Solve some unexpected warning message.
+# Set XDG_RUNTIME_DIR to avoid Qt/X11 runtime warnings
 if 'XDG_RUNTIME_DIR' not in os.environ:
     os.environ['XDG_RUNTIME_DIR'] = '/tmp/runtime-' + str(USER)
 
@@ -63,7 +70,7 @@ class LicensePanel(PanelBase):
         self.specified_tab = getattr(args, 'tab', 'FEATURE') if args else 'FEATURE'
         self.dark_mode = getattr(args, 'dark_mode', False) if args else False
 
-        # Get administrator list, check admin permission.
+        # Get administrator list, check admin permission
         common.bprint('Check admin permission', date_format='%Y-%m-%d %H:%M:%S')
 
         if hasattr(config, 'administrators') and config.administrators:
@@ -75,7 +82,7 @@ class LicensePanel(PanelBase):
             common.bprint('You are not administrator, certain functions is prohibited!', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             self.administrator_list = []
 
-        # Initialization for class variables.
+        # Initialization for class variables
         self.license_dic = {}
         self.license_dic_second = 0
         self.feature_list = []
@@ -85,12 +92,12 @@ class LicensePanel(PanelBase):
 
         # Background license-data loader. Empty license_dic until the first
         # load completes; inner tabs are built against {} (empty tables) and
-        # repopulated once data arrives via _on_license_loaded().
+        # repopulated once data arrives via _on_license_loaded()
         self._license_load_thread = None
 
         # Generate GUI (builds inner tabs; menubar handled by host). Does NOT
         # fetch license data here -- the fetch runs in on_first_show() via a
-        # background thread so the panel renders immediately.
+        # background thread so the panel renders immediately
         self.init_ui()
 
     def on_first_show(self):
@@ -110,12 +117,12 @@ class LicensePanel(PanelBase):
         which is marshalled back to the GUI thread via a signal so table
         population happens on the GUI thread.
         """
-        # Avoid overlapping loads if the user navigates away and back quickly.
+        # Avoid overlapping loads if the user navigates away and back quickly
         if self._license_load_thread is not None:
             return
 
         # Refresh control: skip if already fresh within fresh_interval, but only
-        # when we already have data. First load always runs.
+        # when we already have data. First load always runs
         if self.license_dic and (not self._license_data_stale()):
             self._on_license_loaded(self.license_dic)
 
@@ -128,7 +135,7 @@ class LicensePanel(PanelBase):
         thread = LicenseLoadThread(self)
         # Keep a reference so the QThread is not GC'd while running (which would
         # abort with "QThread: Destroyed while thread is still running"), and
-        # clear it only after the thread has fully finished.
+        # clear it only after the thread has fully finished
         self._license_load_thread = thread
         thread.loaded.connect(self._on_license_loaded)
         thread.finished.connect(self._on_license_thread_finished)
@@ -182,17 +189,17 @@ class LicensePanel(PanelBase):
         if not self.license_dic:
             common.bprint('Not find any valid license information.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
 
-        # Derive feature/user/product lists now that data is available.
+        # Derive feature/user lists now that data is available
         (self.feature_list, self.user_list) = self.get_feature_and_user_list()
 
-        # Refresh every inner table with the freshly loaded data.
+        # Refresh every inner table with the freshly loaded data
         self.gen_server_tab_table()
         self.gen_feature_tab_table(self.license_dic)
         self.gen_expires_tab_table(self.license_dic)
         self.gen_usage_tab_table(self.license_dic)
 
         # Re-populate the server/vendor combos that were built against the
-        # still-empty license_dic during init_ui().
+        # still-empty license_dic during init_ui()
         self.set_feature_tab_server_combo()
         self.set_feature_tab_vendor_combo()
         self.set_expires_tab_server_combo()
@@ -203,7 +210,7 @@ class LicensePanel(PanelBase):
         self.set_usage_tab_execute_host_combo()
 
         # Admin-only tabs (CURVE/UTILIZATION) combos were also built with an
-        # empty license_dic; refresh them now if they exist.
+        # empty license_dic; refresh them now if they exist
         if hasattr(self, 'curve_tab_server_combo'):
             self.set_curve_tab_server_combo()
             self.set_curve_tab_vendor_combo()
@@ -212,24 +219,24 @@ class LicensePanel(PanelBase):
             self.set_utilization_tab_server_combo()
             self.set_utilization_tab_vendor_combo()
 
-        # Refresh feature/user line completers with the now-available lists.
+        # Refresh feature/user line completers with the now-available lists
         self.feature_tab_feature_line.setCompleter(common_pyqt5.get_completer(self.feature_list))
         self.expires_tab_feature_line.setCompleter(common_pyqt5.get_completer(self.feature_list))
         self.usage_tab_feature_line.setCompleter(common_pyqt5.get_completer(self.feature_list))
         self.usage_tab_user_line.setCompleter(common_pyqt5.get_completer(self.user_list))
 
         # Admin-only tabs (CURVE/UTILIZATION) feature lines were built
-        # with an empty feature_list; refresh their completers.
+        # with an empty feature_list; refresh their completers
         if hasattr(self, 'curve_tab_feature_line'):
             self.curve_tab_feature_line.setCompleter(common_pyqt5.get_completer(self.feature_list))
 
         if hasattr(self, 'utilization_tab_feature_line'):
             self.utilization_tab_feature_line.setCompleter(common_pyqt5.get_completer(self.feature_list))
 
-        # Hide the loading overlay.
+        # Hide the loading overlay
         self._license_loading_label.hide()
 
-        # Apply entry args (-f/-u) now that license_dic is populated.
+        # Apply entry args (-f/-u) now that license_dic is populated
         self.apply_entry_args(self.args)
 
     def cleanup(self):
@@ -252,12 +259,12 @@ class LicensePanel(PanelBase):
             return
 
         # -u/-f are nargs='+' lists now; join to a space-separated string so
-        # the filter inputs (which .split() on whitespace) keep working.
+        # the filter inputs (which .split() on whitespace) keep working
         specified_feature = ' '.join(getattr(args, 'feature', []) or [])
         specified_user = ' '.join(getattr(args, 'user', []) or [])
         specified_tab = getattr(args, 'tab', '')
 
-        # Default inner tab: FEATURE for -f, USAGE for -u, FEATURE otherwise.
+        # Default inner tab: FEATURE for -f, USAGE for -u, FEATURE otherwise
         if not specified_tab:
             if specified_feature:
                 specified_tab = 'FEATURE'
@@ -272,7 +279,7 @@ class LicensePanel(PanelBase):
             (USER in self.administrator_list)
         )
 
-        # Pre-set feature.
+        # Pre-set feature
         if specified_feature:
             self.feature_tab_feature_line.setText(specified_feature)
             self.expires_tab_feature_line.setText(specified_feature)
@@ -281,15 +288,16 @@ class LicensePanel(PanelBase):
             if is_admin:
                 if hasattr(self, 'curve_tab_feature_line'):
                     self.curve_tab_feature_line.setText(specified_feature)
+
                 self.utilization_tab_feature_line.setText(specified_feature)
 
-        # Pre-set user.
+        # Pre-set user
         if specified_user:
             self.usage_tab_user_line.setText(specified_user)
 
-        # For pre-set feature or pre-set user, apply filters.
+        # For pre-set feature or pre-set user, apply filters
         # License data is already loaded (by _on_license_loaded before this is
-        # called), so we do NOT force a second fetch here.
+        # called), so we do NOT force a second fetch here
         if specified_feature or specified_user:
             if specified_feature:
                 self.filter_feature_tab_license_feature(get_license_info=False)
@@ -299,12 +307,13 @@ class LicensePanel(PanelBase):
                 if is_admin:
                     if hasattr(self, 'curve_tab_feature_line'):
                         self.filter_curve_tab()
+
                     self.filter_utilization_tab()
 
             if specified_user and (not specified_feature):
                 self.filter_usage_tab_license_feature(get_license_info=False)
 
-        # For pre-set tab.
+        # For pre-set tab
         self.switch_tab(specified_tab)
 
     def get_license_dic(self, force=False, show_message=True):
@@ -316,7 +325,7 @@ class LicensePanel(PanelBase):
         prompt); get_license_dic then stays silent so the two prompts don't
         flash in sequence with a gap of unresponsive UI in between.
         """
-        # Not update license_dic repeatedly in config.fresh_interval seconds.
+        # Not update license_dic repeatedly in config.fresh_interval seconds
         current_second = int(time.time())
 
         if not force:
@@ -328,21 +337,20 @@ class LicensePanel(PanelBase):
 
         common.bprint('Load license info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Print loading license information message with GUI.
+        # Print loading license information message with GUI
         my_show_message = None
 
         if show_message:
             my_show_message = ShowMessage('Info', 'Loading license info, please wait a moment ...', persistent=True)
             my_show_message.start()
 
-        # Get self.license_dic.
         LM_LICENSE_FILE_file = str(_LSFMONITOR_INSTALL_PATH) + '/config/license/LM_LICENSE_FILE'
 
         if os.path.exists(LM_LICENSE_FILE_file) and (('all' in self.administrator_list) or ('ALL' in self.administrator_list) or (USER in self.administrator_list)):
             # Collect non-empty/non-comment lines first; only override the
             # LM_LICENSE_FILE environment variable when the platform file
             # actually yields servers. An empty (comment-only) file must fall
-            # back to the shell's LM_LICENSE_FILE instead of clobbering it.
+            # back to the shell's LM_LICENSE_FILE instead of clobbering it
             parsed_servers = []
 
             with open(LM_LICENSE_FILE_file, 'r') as LLF:
@@ -440,9 +448,9 @@ class LicensePanel(PanelBase):
         _on_license_loaded() repopulates every table.
         """
         # main_tab is provided by PanelBase; menubar is contributed by
-        # register_menubar_actions() onto the host MainWindow.
+        # register_menubar_actions() onto the host MainWindow
 
-        # Define sub-tab placeholders.
+        # Define sub-tab placeholders
         self.server_tab = QWidget()
         self.feature_tab = QWidget()
         self.expires_tab = QWidget()
@@ -452,7 +460,6 @@ class LicensePanel(PanelBase):
             self.curve_tab = QWidget()
             self.utilization_tab = QWidget()
 
-        # Add the sub-tabs into main Tab widget
         self.main_tab.addTab(self.server_tab, 'SERVER')
         self.main_tab.addTab(self.feature_tab, 'FEATURE')
         self.main_tab.addTab(self.expires_tab, 'EXPIRES')
@@ -463,7 +470,7 @@ class LicensePanel(PanelBase):
             self.main_tab.addTab(self.utilization_tab, 'UTILIZATION')
 
         # Build inner tabs against the (still-empty) license_dic so the tab UI
-        # exists immediately; tables stay header-only until data arrives.
+        # exists immediately; tables stay header-only until data arrives
         self.gen_server_tab()
         self.gen_feature_tab()
         self.gen_expires_tab()
@@ -474,7 +481,7 @@ class LicensePanel(PanelBase):
             self.gen_utilization_tab()
 
         # Switch to the default inner tab:
-        #   --tab > --feature+--user(USAGE) > --feature(FEATURE) > --user(USAGE) > FEATURE.
+        #   --tab > --feature+--user(USAGE) > --feature(FEATURE) > --user(USAGE) > FEATURE
         specified_feature = getattr(self.args, 'feature', '') if self.args else ''
 
         initial_tab = 'FEATURE'
@@ -489,7 +496,7 @@ class LicensePanel(PanelBase):
         self.switch_tab(initial_tab)
 
         # Loading overlay shown across the whole panel while the background
-        # lmstat fetch is running. Hidden in _on_license_loaded().
+        # lmstat fetch is running. Hidden in _on_license_loaded()
         self._license_loading_label = QLabel('Loading license info, please wait ...', self)
         self._license_loading_label.setAlignment(Qt.AlignCenter)
         self._license_loading_label.setStyleSheet(
@@ -512,8 +519,8 @@ class LicensePanel(PanelBase):
             tab_dic['CURVE'] = self.curve_tab
             tab_dic['UTILIZATION'] = self.utilization_tab
 
-        # Tab name is case-insensitive (user may type feature/Feature/FEATURE).
-        # Guard against unknown names (would otherwise raise KeyError).
+        # Tab name is case-insensitive (user may type feature/Feature/FEATURE)
+        # Guard against unknown names (would otherwise raise KeyError)
         specified_tab = specified_tab.upper() if specified_tab else ''
 
         if specified_tab not in tab_dic:
@@ -530,7 +537,7 @@ class LicensePanel(PanelBase):
         file_menu = shared_menus['File']
         setup_menu = shared_menus['Setup']
 
-        # ----- File (License exports), added after LSF items via a separator -----
+        # ---- File (License exports), added after LSF items via a separator ----
         file_menu.addSeparator()
 
         export_server_table_action = QAction('Export LICENSE server table', self)
@@ -566,7 +573,7 @@ class LicensePanel(PanelBase):
             file_menu.addAction(export_curve_table_action)
             file_menu.addAction(export_utilization_table_action)
 
-            # ----- Setup (License) -----
+            # ---- Setup (License) ----
             self.enable_utilization_detail_action = QAction('Enable License utilization detail', self, checkable=True)
             self.enable_utilization_detail_action.setChecked(False)
             self.enable_utilization_detail_action.toggled.connect(self.func_enable_utilization_detail)
@@ -593,11 +600,11 @@ class LicensePanel(PanelBase):
         """
         checkbox_combo.clear()
 
-        # Fill checkbox_combo.
+        # Fill checkbox_combo
         for item in item_list:
             checkbox_combo.addCheckBoxItem(item, update_width=True)
 
-        # Set "ALL" as checked status.
+        # Set "ALL" as checked status
         for (i, qBox) in enumerate(checkbox_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 checkbox_combo.checkBoxList[i].setChecked(True)
@@ -612,7 +619,9 @@ class LicensePanel(PanelBase):
                 checkbox_combo.checkBoxList[i].setChecked(state)
                 break
 
-# For SERVER TAB (start) #
+# ============================================================================
+# For SERVER TAB (start)
+# ============================================================================
     def gen_server_tab(self):
         """
         Generate SERVER tab, show license server/vendor information.
@@ -620,31 +629,32 @@ class LicensePanel(PanelBase):
         self.server_tab_table = QTableWidget(self.server_tab)
         common_pyqt5.make_table_readonly(self.server_tab_table)
 
-        # Grid
         server_tab_grid = QGridLayout()
         server_tab_grid.addWidget(self.server_tab_table, 0, 0)
         self.server_tab.setLayout(server_tab_grid)
 
-        # Generate self.server_tab_table
         self.gen_server_tab_table()
 
     def gen_server_tab_table(self):
         self.server_tab_table.setShowGrid(True)
-        self.server_tab_table.setSortingEnabled(True)
-        self.server_tab_table.setColumnCount(0)
-        self.server_tab_table_title_list = ['Server', 'Server_Status', 'Server_Version', 'License_Files', 'Vendor', 'Vendor_Status', 'Vendor_Version']
-        self.server_tab_table.setColumnCount(len(self.server_tab_table_title_list))
+        self.server_tab_table.setSortingEnabled(False)
+        self.server_tab_table_title_list = ['Server', 'Server_Status', 'Server_Version', 'Vendor', 'Vendor_Status', 'Vendor_Version', 'License_Files']
+
+        first_build = self.server_tab_table.columnCount() != len(self.server_tab_table_title_list)
+
+        if first_build:
+            self.server_tab_table.setColumnCount(len(self.server_tab_table_title_list))
+
         self.server_tab_table.setHorizontalHeaderLabels(self.server_tab_table_title_list)
 
-        # Set column width
-        self.server_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.server_tab_table.setColumnWidth(1, 110)
-        self.server_tab_table.setColumnWidth(2, 110)
-        self.server_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.server_tab_table.setColumnWidth(4, 90)
-        self.server_tab_table.setColumnWidth(5, 120)
-        self.server_tab_table.setColumnWidth(6, 120)
-        common_pyqt5.auto_size_table_columns(self.server_tab_table)
+        if first_build:
+            self.server_tab_table.setColumnWidth(0, 180)  # min 88
+            self.server_tab_table.setColumnWidth(1, 142)  # min 142
+            self.server_tab_table.setColumnWidth(2, 150)  # min 150
+            self.server_tab_table.setColumnWidth(3, 120)  # min 92
+            self.server_tab_table.setColumnWidth(4, 146)  # min 146
+            self.server_tab_table.setColumnWidth(5, 153)  # min 153
+            common_pyqt5.auto_size_table_columns(self.server_tab_table, flex_cols=[6])
 
         # Get and update license_dic
         license_dic = copy.deepcopy(self.license_dic)
@@ -653,19 +663,18 @@ class LicensePanel(PanelBase):
             if not license_dic[license_server]['vendor_daemon']:
                 license_dic[license_server]['vendor_daemon'].setdefault('', {'vendor_daemon_status': '', 'vendor_daemon_version': ''})
 
-        # Get license_server_list.
+        # Get license_server_list
         license_server_list = self.get_license_server_list()
 
-        # Set self.server_tab_table.setRowCount
         row = 0
 
         for license_server in license_server_list:
             for vendor_daemon in license_dic[license_server]['vendor_daemon'].keys():
                 row += 1
 
+        self.server_tab_table.setRowCount(0)
         self.server_tab_table.setRowCount(row)
 
-        # Set item
         row = -1
 
         for license_server in license_server_list:
@@ -673,7 +682,6 @@ class LicensePanel(PanelBase):
                 column = 0
                 row += 1
 
-                # For Server
                 item = QTableWidgetItem()
                 item.setText(license_server)
 
@@ -696,16 +704,6 @@ class LicensePanel(PanelBase):
                 column += 1
                 item = QTableWidgetItem()
                 item.setText(license_dic[license_server]['license_server_version'])
-
-                if license_dic[license_server]['license_server_status'] != 'UP':
-                    item.setBackground(QBrush(QColor(STATUS_EXIT)))
-
-                self.server_tab_table.setItem(row, column, item)
-
-                # For license_files
-                column += 1
-                item = QTableWidgetItem()
-                item.setText(license_dic[license_server]['license_files'])
 
                 if license_dic[license_server]['license_server_status'] != 'UP':
                     item.setBackground(QBrush(QColor(STATUS_EXIT)))
@@ -741,9 +739,25 @@ class LicensePanel(PanelBase):
                     item.setBackground(QBrush(QColor(STATUS_EXIT)))
 
                 self.server_tab_table.setItem(row, column, item)
-# For SERVER TAB (end) #
 
-# For FEATURE TAB (start) #
+                # For license_files
+                column += 1
+                item = QTableWidgetItem()
+                item.setText(license_dic[license_server]['license_files'])
+
+                if license_dic[license_server]['license_server_status'] != 'UP':
+                    item.setBackground(QBrush(QColor(STATUS_EXIT)))
+
+                self.server_tab_table.setItem(row, column, item)
+
+        self.server_tab_table.setSortingEnabled(True)
+# ============================================================================
+# For SERVER TAB (end)
+# ============================================================================
+
+# ============================================================================
+# For FEATURE TAB (start)
+# ============================================================================
     def gen_feature_tab(self):
         """
         Generate FEATURE tab, show license feature usage information.
@@ -754,9 +768,7 @@ class LicensePanel(PanelBase):
 
         self.feature_tab_table = QTableWidget(self.feature_tab)
         common_pyqt5.make_table_readonly(self.feature_tab_table)
-        self.feature_tab_table.setContextMenuPolicy(Qt.CustomContextMenu)
 
-        # Grid
         feature_tab_grid = QGridLayout()
 
         feature_tab_grid.addWidget(self.feature_tab_frame, 0, 0)
@@ -773,7 +785,6 @@ class LicensePanel(PanelBase):
         self.feature_tab_table.itemClicked.connect(self.feature_tab_table_check_click)
 
     def gen_feature_tab_frame(self):
-        # Show
         feature_tab_show_label = QLabel('Show', self.feature_tab_frame)
         feature_tab_show_label.setStyleSheet('font-weight: bold;')
         feature_tab_show_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -781,7 +792,6 @@ class LicensePanel(PanelBase):
         self.feature_tab_show_combo = common_pyqt5.QComboCheckBox(self.feature_tab_frame)
         self.set_feature_tab_show_combo()
 
-        # License Server
         feature_tab_server_label = QLabel('Server', self.feature_tab_frame)
         feature_tab_server_label.setStyleSheet('font-weight: bold;')
         feature_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -789,7 +799,6 @@ class LicensePanel(PanelBase):
         self.feature_tab_server_combo = common_pyqt5.QComboCheckBox(self.feature_tab_frame)
         self.set_feature_tab_server_combo()
 
-        # Vendor Daemon
         feature_tab_vendor_label = QLabel('Vendor', self.feature_tab_frame)
         feature_tab_vendor_label.setStyleSheet('font-weight: bold;')
         feature_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -797,7 +806,6 @@ class LicensePanel(PanelBase):
         self.feature_tab_vendor_combo = common_pyqt5.QComboCheckBox(self.feature_tab_frame)
         self.set_feature_tab_vendor_combo()
 
-        # License Feature
         feature_tab_feature_label = QLabel('Feature', self.feature_tab_frame)
         feature_tab_feature_label.setStyleSheet('font-weight: bold;')
         feature_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -808,11 +816,9 @@ class LicensePanel(PanelBase):
         feature_tab_feature_line_completer = common_pyqt5.get_completer(self.feature_list)
         self.feature_tab_feature_line.setCompleter(feature_tab_feature_line_completer)
 
-        # Filter Button
         feature_tab_check_button = QPushButton('Check', self.feature_tab_frame)
         feature_tab_check_button.clicked.connect(lambda: self.filter_feature_tab_license_feature())
 
-        # Grid
         feature_tab_frame_grid = QGridLayout()
 
         feature_tab_frame_grid.addWidget(feature_tab_show_label, 0, 0)
@@ -846,7 +852,7 @@ class LicensePanel(PanelBase):
         for item in show_list:
             self.feature_tab_show_combo.addCheckBoxItem(item)
 
-        # Default: ALL checked.
+        # Default: ALL checked
         for (i, qBox) in enumerate(self.feature_tab_show_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 self.feature_tab_show_combo.checkBoxList[i].setChecked(True)
@@ -857,7 +863,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.feature_tab_server_combo.
         """
-        # Get license_server list.
+        # Get license_server list
         license_server_list = self.get_license_server_list()
         license_server_list.insert(0, 'ALL')
 
@@ -867,7 +873,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.feature_tab_vendor_combo.
         """
-        # Get vendor_daemon list.
+        # Get vendor_daemon list
         vendor_daemon_list = self.get_vendor_daemon_list()
         vendor_daemon_list.insert(0, 'ALL')
 
@@ -876,27 +882,28 @@ class LicensePanel(PanelBase):
     def filter_feature_tab_license_feature(self, get_license_info=True):
         """
         Get license feature information based on self.feature_tab_show_combo/self.feature_tab_server_combo/self.feature_tab_vendor_combo/self.feature_tab_feature_line.
-        Generate self.feature_tab_table with filetered license feature information.
+        Generate self.feature_tab_table with filtered license feature information.
         """
-        # One loading prompt spans license fetch, filter, and table render.
-        # persistent=True so the message window stays visible until terminate().
+        # One loading prompt spans license fetch, filter, and table render
+        # persistent=True so the message window stays visible until terminate()
         my_show_message = ShowMessage('Info', 'Loading feature info, please wait a moment ...', persistent=True)
         my_show_message.start()
 
-        # Let the message window render before blocking the GUI thread.
+        # Let the message window render before blocking the GUI thread
         QApplication.processEvents()
         time.sleep(0.2)
         QApplication.processEvents()
 
-        # Re-generate self.feature_tab_table.
         if get_license_info:
             self.get_license_dic(show_message=False)
 
         if self.license_dic:
             # show_combo is now a QComboCheckBox; selectedItems() returns a dict
-            # {text: text}. If ALL is selected (or nothing selected), show all.
+            # {text: text}. If ALL is selected (or nothing selected), show all
             show_mode_items = list(self.feature_tab_show_combo.selectedItems().values())
-            show_mode = 'ALL' if ('ALL' in show_mode_items or not show_mode_items) else show_mode_items[0]
+            # Multi-select: pass the full list down (OR semantics), matching the
+            # EXPIRES tab; 'ALL' / empty means no filtering
+            show_mode = ['ALL'] if ('ALL' in show_mode_items or not show_mode_items) else show_mode_items
             selected_license_server_dic = self.feature_tab_server_combo.selectedItems()
             selected_license_server_list = list(selected_license_server_dic.values())
             selected_vendor_daemon_dic = self.feature_tab_vendor_combo.selectedItems()
@@ -916,29 +923,29 @@ class LicensePanel(PanelBase):
                 in_use_num = self.feature_tab_table.item(item.row(), item.column()).text().strip()
 
                 if in_use_num != '0':
-                    # Reset self.usage_tab_server_combo on USAGE tab.
+                    # Reset self.usage_tab_server_combo on USAGE tab
                     current_license_server = self.feature_tab_table.item(item.row(), 0).text().strip()
                     self.set_usage_tab_server_combo()
                     self.set_checkbox_combo_item_state(self.usage_tab_server_combo, current_license_server, state=True)
 
-                    # Reset self.usage_tab_vendor_combo on USAGE tab.
+                    # Reset self.usage_tab_vendor_combo on USAGE tab
                     current_vendor_daemon = self.feature_tab_table.item(item.row(), 1).text().strip()
                     self.set_usage_tab_vendor_combo()
                     self.set_checkbox_combo_item_state(self.usage_tab_vendor_combo, current_vendor_daemon, state=True)
 
-                    # Reset self.usage_tab_feature_line on USAGE tab.
+                    # Reset self.usage_tab_feature_line on USAGE tab
                     current_feature = self.feature_tab_table.item(item.row(), 2).text().strip()
                     self.usage_tab_feature_line.setText(current_feature)
 
-                    # Clear self.usage_tab_user_line on USAGE tab.
+                    # Clear self.usage_tab_user_line on USAGE tab
                     self.usage_tab_user_line.setText('')
 
-                    # Switch to USGAE tab, filter USAGE tab license feature.
+                    # Switch to USAGE tab, filter USAGE tab license feature
                     self.main_tab.setCurrentWidget(self.usage_tab)
                     self.filter_usage_tab_license_feature()
 
     def gen_feature_tab_table(self, license_dic):
-        # Get license feature num.
+        # Get license feature num
         license_feature_num = 0
 
         if license_dic:
@@ -947,22 +954,26 @@ class LicensePanel(PanelBase):
                     for license_feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].keys():
                         license_feature_num += 1
 
-        # Fill self.feature_tab_table column.
+        # Fill self.feature_tab_table column
         self.feature_tab_table.setShowGrid(True)
-        self.feature_tab_table.setSortingEnabled(True)
-        self.feature_tab_table.setColumnCount(0)
-        self.feature_tab_table.setColumnCount(5)
+        self.feature_tab_table.setSortingEnabled(False)
         self.feature_tab_table_title_list = ['Server', 'Vendor', 'Feature', 'Total_License', 'In_Use_License']
+
+        first_build = self.feature_tab_table.columnCount() != len(self.feature_tab_table_title_list)
+
+        if first_build:
+            self.feature_tab_table.setColumnCount(len(self.feature_tab_table_title_list))
+
         self.feature_tab_table.setHorizontalHeaderLabels(self.feature_tab_table_title_list)
 
-        self.feature_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.feature_tab_table.setColumnWidth(1, 120)
-        self.feature_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.feature_tab_table.setColumnWidth(3, 160)
-        self.feature_tab_table.setColumnWidth(4, 160)
-        common_pyqt5.auto_size_table_columns(self.feature_tab_table)
+        if first_build:
+            self.feature_tab_table.setColumnWidth(0, 180)  # min 88
+            self.feature_tab_table.setColumnWidth(1, 120)  # min 92
+            self.feature_tab_table.setColumnWidth(3, 137)  # min 137
+            self.feature_tab_table.setColumnWidth(4, 149)  # min 149
+            common_pyqt5.auto_size_table_columns(self.feature_tab_table, flex_cols=[2])
 
-        # Fill self.feature_tab_table row.
+        # Fill self.feature_tab_table row
         self.feature_tab_table.setRowCount(0)
         self.feature_tab_table.setRowCount(license_feature_num)
 
@@ -973,22 +984,22 @@ class LicensePanel(PanelBase):
                 for license_feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'].keys():
                     row += 1
 
-                    # For Server.
+                    # For Server
                     item = QTableWidgetItem()
                     item.setText(license_server)
                     self.feature_tab_table.setItem(row, 0, item)
 
-                    # For Vendor.
+                    # For Vendor
                     item = QTableWidgetItem()
                     item.setText(vendor_daemon)
                     self.feature_tab_table.setItem(row, 1, item)
 
-                    # For Feature.
+                    # For Feature
                     item = QTableWidgetItem()
                     item.setText(license_feature)
                     self.feature_tab_table.setItem(row, 2, item)
 
-                    # For Total_License.
+                    # For Total_License
                     item = QTableWidgetItem()
 
                     if self.license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][license_feature]['issued'] == 'Uncounted':
@@ -998,7 +1009,7 @@ class LicensePanel(PanelBase):
 
                     self.feature_tab_table.setItem(row, 3, item)
 
-                    # For In_Use_License.
+                    # For In_Use_License
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, int(self.license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][license_feature]['in_use']))
 
@@ -1006,9 +1017,15 @@ class LicensePanel(PanelBase):
                         item.setFont(QFont('song', 9, QFont.Bold))
 
                     self.feature_tab_table.setItem(row, 4, item)
-# For FEATURE TAB (end) #
 
-# For EXPIRES TAB (start) #
+        self.feature_tab_table.setSortingEnabled(True)
+# ============================================================================
+# For FEATURE TAB (end)
+# ============================================================================
+
+# ============================================================================
+# For EXPIRES TAB (start)
+# ============================================================================
     def gen_expires_tab(self):
         """
         Generate EXPIRES tab, show license feature expires information.
@@ -1020,7 +1037,6 @@ class LicensePanel(PanelBase):
         self.expires_tab_table = QTableWidget(self.expires_tab)
         common_pyqt5.make_table_readonly(self.expires_tab_table)
 
-        # Grid
         expires_tab_grid = QGridLayout()
 
         expires_tab_grid.addWidget(self.expires_tab_frame, 0, 0)
@@ -1031,12 +1047,11 @@ class LicensePanel(PanelBase):
 
         self.expires_tab.setLayout(expires_tab_grid)
 
-        # Generate self.expires_tab_frame and self.expires_tab_table.
+        # Generate self.expires_tab_frame and self.expires_tab_table
         self.gen_expires_tab_frame()
         self.gen_expires_tab_table(self.license_dic)
 
     def gen_expires_tab_frame(self):
-        # Show
         expires_tab_show_label = QLabel('Show', self.expires_tab_frame)
         expires_tab_show_label.setStyleSheet('font-weight: bold;')
         expires_tab_show_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1044,7 +1059,6 @@ class LicensePanel(PanelBase):
         self.expires_tab_show_combo = common_pyqt5.QComboCheckBox(self.expires_tab_frame)
         self.set_expires_tab_show_combo()
 
-        # License Server
         expires_tab_server_label = QLabel('Server', self.expires_tab_frame)
         expires_tab_server_label.setStyleSheet('font-weight: bold;')
         expires_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1052,7 +1066,6 @@ class LicensePanel(PanelBase):
         self.expires_tab_server_combo = common_pyqt5.QComboCheckBox(self.expires_tab_frame)
         self.set_expires_tab_server_combo()
 
-        # License vendor daemon
         expires_tab_vendor_label = QLabel('Vendor', self.expires_tab_frame)
         expires_tab_vendor_label.setStyleSheet('font-weight: bold;')
         expires_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1060,7 +1073,6 @@ class LicensePanel(PanelBase):
         self.expires_tab_vendor_combo = common_pyqt5.QComboCheckBox(self.expires_tab_frame)
         self.set_expires_tab_vendor_combo()
 
-        # License Feature
         expires_tab_feature_label = QLabel('Feature', self.expires_tab_frame)
         expires_tab_feature_label.setStyleSheet('font-weight: bold;')
         expires_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1071,11 +1083,9 @@ class LicensePanel(PanelBase):
         expires_tab_feature_line_completer = common_pyqt5.get_completer(self.feature_list)
         self.expires_tab_feature_line.setCompleter(expires_tab_feature_line_completer)
 
-        # Filter Button
         expires_tab_check_button = QPushButton('Check', self.expires_tab_frame)
         expires_tab_check_button.clicked.connect(lambda: self.filter_expires_tab_license_feature())
 
-        # Grid
         expires_tab_frame_grid = QGridLayout()
 
         expires_tab_frame_grid.addWidget(expires_tab_show_label, 0, 0)
@@ -1109,7 +1119,7 @@ class LicensePanel(PanelBase):
         for item in show_list:
             self.expires_tab_show_combo.addCheckBoxItem(item)
 
-        # Default: ALL checked.
+        # Default: ALL checked
         for (i, qBox) in enumerate(self.expires_tab_show_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 self.expires_tab_show_combo.checkBoxList[i].setChecked(True)
@@ -1120,7 +1130,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.expires_tab_server_combo.
         """
-        # Get license_server list.
+        # Get license_server list
         license_server_list = self.get_license_server_list()
         license_server_list.insert(0, 'ALL')
 
@@ -1130,7 +1140,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.expires_tab_vendor_combo.
         """
-        # Get vendor_daemon list.
+        # Get vendor_daemon list
         vendor_daemon_list = self.get_vendor_daemon_list()
         vendor_daemon_list.insert(0, 'ALL')
 
@@ -1139,28 +1149,27 @@ class LicensePanel(PanelBase):
     def filter_expires_tab_license_feature(self, get_license_info=True):
         """
         Get license feature expires information based on self.expires_tab_show_combo/self.expires_tab_server_combo/self.expires_tab_vendor_combo/self.expires_tab_feature_line.
-        Generate self.expires_tab_table with filetered license feature information.
+        Generate self.expires_tab_table with filtered license feature information.
         """
         # One loading prompt spans the whole pipeline — license fetch, filter,
         # (optional license-file grep), and table render — so it stays up until
         # the result is on screen. get_license_dic stays silent (show_message
-        # =False) to avoid a second prompt flashing with a gap of frozen UI.
+        # =False) to avoid a second prompt flashing with a gap of frozen UI
         my_show_message = ShowMessage('Info', 'Loading expires info, please wait a moment ...', persistent=True)
         my_show_message.start()
 
-        # Let the message window render before blocking the GUI thread.
+        # Let the message window render before blocking the GUI thread
         QApplication.processEvents()
         time.sleep(0.2)
         QApplication.processEvents()
 
-        # Re-generate self.expires_tab_table.
         if get_license_info:
             self.get_license_dic(show_message=False)
 
         if self.license_dic:
             selected_show_items = list(self.expires_tab_show_combo.selectedItems().values())
             # Multi-select: pass the full list down so e.g. Expired + Nearly_Expired
-            # both apply (OR). 'ALL' / empty means no filtering.
+            # both apply (OR). 'ALL' / empty means no filtering
             selected_show_mode = ['ALL'] if (('ALL' in selected_show_items) or (not selected_show_items)) else selected_show_items
             selected_license_server_dic = self.expires_tab_server_combo.selectedItems()
             selected_license_server_list = list(selected_license_server_dic.values())
@@ -1221,7 +1230,7 @@ class LicensePanel(PanelBase):
 
         if license_dic:
             # selected_show_mode is now a list (multi-select). Filter only when
-            # there's at least one non-ALL mode.
+            # there's at least one non-ALL mode
             if isinstance(selected_show_mode, str):
                 do_filter = selected_show_mode and selected_show_mode != 'ALL'
             else:
@@ -1236,7 +1245,7 @@ class LicensePanel(PanelBase):
         return filtered_license_dic
 
     def gen_expires_tab_table(self, license_dic):
-        # Get license expires num.
+        # Get license expires num
         license_feature_num = 0
 
         if license_dic:
@@ -1246,23 +1255,26 @@ class LicensePanel(PanelBase):
                         for expires_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][license_feature]:
                             license_feature_num += 1
 
-        # Fill self.expires_tab_table column.
+        # Fill self.expires_tab_table column
         self.expires_tab_table.setShowGrid(True)
-        self.expires_tab_table.setSortingEnabled(True)
-        self.expires_tab_table.setColumnCount(0)
-        self.expires_tab_table.setColumnCount(6)
+        self.expires_tab_table.setSortingEnabled(False)
         self.expires_tab_table_title_list = ['Server', 'Vendor', 'Feature', 'Version', 'License_Num', 'Expires']
+
+        first_build = self.expires_tab_table.columnCount() != len(self.expires_tab_table_title_list)
+
+        if first_build:
+            self.expires_tab_table.setColumnCount(len(self.expires_tab_table_title_list))
+
         self.expires_tab_table.setHorizontalHeaderLabels(self.expires_tab_table_title_list)
 
-        self.expires_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.expires_tab_table.setColumnWidth(1, 100)
-        self.expires_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.expires_tab_table.setColumnWidth(3, 100)
-        self.expires_tab_table.setColumnWidth(4, 120)
-        self.expires_tab_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        common_pyqt5.auto_size_table_columns(self.expires_tab_table)
+        if first_build:
+            self.expires_tab_table.setColumnWidth(0, 180)  # min 88
+            self.expires_tab_table.setColumnWidth(1, 120)  # min 92
+            self.expires_tab_table.setColumnWidth(3, 95)   # min 95
+            self.expires_tab_table.setColumnWidth(4, 135)  # min 135
+            common_pyqt5.auto_size_table_columns(self.expires_tab_table, flex_cols=[2, 5])
 
-        # Fill self.expires_tab_table row.
+        # Fill self.expires_tab_table row
         self.expires_tab_table.setRowCount(0)
         self.expires_tab_table.setRowCount(license_feature_num)
 
@@ -1274,32 +1286,32 @@ class LicensePanel(PanelBase):
                     for expires_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][license_feature]:
                         row += 1
 
-                        # For Server.
+                        # For Server
                         item = QTableWidgetItem()
                         item.setText(license_server)
                         self.expires_tab_table.setItem(row, 0, item)
 
-                        # For Vendor.
+                        # For Vendor
                         item = QTableWidgetItem()
                         item.setText(expires_dic['vendor'])
                         self.expires_tab_table.setItem(row, 1, item)
 
-                        # For Feature.
+                        # For Feature
                         item = QTableWidgetItem()
                         item.setText(license_feature)
                         self.expires_tab_table.setItem(row, 2, item)
 
-                        # For Version.
+                        # For Version
                         item = QTableWidgetItem()
                         item.setText(expires_dic['version'])
                         self.expires_tab_table.setItem(row, 3, item)
 
-                        # For Feature Number.
+                        # For Feature Number
                         item = QTableWidgetItem()
                         item.setData(Qt.DisplayRole, int(expires_dic['license']))
                         self.expires_tab_table.setItem(row, 4, item)
 
-                        # For Expires Date.
+                        # For Expires Date
                         item = QTableWidgetItem()
                         expires_date = common_license.switch_expires_date(expires_dic['expires'])
                         item.setText(expires_date)
@@ -1315,9 +1327,15 @@ class LicensePanel(PanelBase):
 
                         self.expires_tab_table.setItem(row, 5, item)
 
-# For EXPIRES TAB (end) #
+        self.expires_tab_table.setSortingEnabled(True)
 
-# For USAGE TAB (start) #
+# ============================================================================
+# For EXPIRES TAB (end)
+# ============================================================================
+
+# ============================================================================
+# For USAGE TAB (start)
+# ============================================================================
     def gen_usage_tab(self):
         """
         Generate USAGE tab, show license feature usage information for running tasks.
@@ -1329,7 +1347,6 @@ class LicensePanel(PanelBase):
         self.usage_tab_table = QTableWidget(self.usage_tab)
         common_pyqt5.make_table_readonly(self.usage_tab_table)
 
-        # Grid
         usage_tab_grid = QGridLayout()
 
         usage_tab_grid.addWidget(self.usage_tab_frame, 0, 0)
@@ -1340,12 +1357,11 @@ class LicensePanel(PanelBase):
 
         self.usage_tab.setLayout(usage_tab_grid)
 
-        # Generate self.usage_tab_frame and self.usage_tab_table.
+        # Generate self.usage_tab_frame and self.usage_tab_table
         self.gen_usage_tab_frame()
         self.gen_usage_tab_table(self.license_dic)
 
     def gen_usage_tab_frame(self):
-        # License Server
         usage_tab_server_label = QLabel('Server', self.usage_tab_frame)
         usage_tab_server_label.setStyleSheet('font-weight: bold;')
         usage_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1353,7 +1369,6 @@ class LicensePanel(PanelBase):
         self.usage_tab_server_combo = common_pyqt5.QComboCheckBox(self.usage_tab_frame)
         self.set_usage_tab_server_combo()
 
-        # License vendor daemon
         usage_tab_vendor_label = QLabel('Vendor', self.usage_tab_frame)
         usage_tab_vendor_label.setStyleSheet('font-weight: bold;')
         usage_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1361,7 +1376,6 @@ class LicensePanel(PanelBase):
         self.usage_tab_vendor_combo = common_pyqt5.QComboCheckBox(self.usage_tab_frame)
         self.set_usage_tab_vendor_combo()
 
-        # License Feature
         usage_tab_feature_label = QLabel('Feature', self.usage_tab_frame)
         usage_tab_feature_label.setStyleSheet('font-weight: bold;')
         usage_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1372,7 +1386,6 @@ class LicensePanel(PanelBase):
         usage_tab_feature_line_completer = common_pyqt5.get_completer(self.feature_list)
         self.usage_tab_feature_line.setCompleter(usage_tab_feature_line_completer)
 
-        # Submit Host
         usage_tab_submit_host_label = QLabel('Submit_Host', self.usage_tab_frame)
         usage_tab_submit_host_label.setStyleSheet('font-weight: bold;')
         usage_tab_submit_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1380,7 +1393,6 @@ class LicensePanel(PanelBase):
         self.usage_tab_submit_host_combo = common_pyqt5.QComboCheckBox(self.usage_tab_frame, enableFilter=True)
         self.set_usage_tab_submit_host_combo()
 
-        # Execute Host
         usage_tab_execute_host_label = QLabel('Execute_Host', self.usage_tab_frame)
         usage_tab_execute_host_label.setStyleSheet('font-weight: bold;')
         usage_tab_execute_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1399,11 +1411,9 @@ class LicensePanel(PanelBase):
         usage_tab_user_line_completer = common_pyqt5.get_completer(self.user_list)
         self.usage_tab_user_line.setCompleter(usage_tab_user_line_completer)
 
-        # Fileter
         usage_tab_check_button = QPushButton('Check', self.usage_tab_frame)
         usage_tab_check_button.clicked.connect(lambda: self.filter_usage_tab_license_feature())
 
-        # Grid
         usage_tab_frame_grid = QGridLayout()
 
         usage_tab_frame_grid.addWidget(usage_tab_server_label, 0, 0)
@@ -1462,7 +1472,7 @@ class LicensePanel(PanelBase):
         for submit_host in submit_host_list:
             self.usage_tab_submit_host_combo.addCheckBoxItem(submit_host)
 
-        # Default: ALL checked.
+        # Default: ALL checked
         for (i, qBox) in enumerate(self.usage_tab_submit_host_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 self.usage_tab_submit_host_combo.checkBoxList[i].setChecked(True)
@@ -1489,7 +1499,7 @@ class LicensePanel(PanelBase):
         for execute_host in execute_host_list:
             self.usage_tab_execute_host_combo.addCheckBoxItem(execute_host)
 
-        # Default: ALL checked.
+        # Default: ALL checked
         for (i, qBox) in enumerate(self.usage_tab_execute_host_combo.checkBoxList):
             if (qBox.text() == 'ALL') and (qBox.isChecked() is False):
                 self.usage_tab_execute_host_combo.checkBoxList[i].setChecked(True)
@@ -1499,23 +1509,22 @@ class LicensePanel(PanelBase):
     def filter_usage_tab_license_feature(self, get_license_info=True):
         """
         Get license feature information based on self.usage_tab_server_combo/self.usage_tab_vendor_combo/self.usage_tab_feature_line/self.usage_tab_user_line.
-        Generate self.usage_tab_table with filetered license feature information.
+        Generate self.usage_tab_table with filtered license feature information.
         """
-        # One loading prompt spans license fetch, filter, and table render.
+        # One loading prompt spans license fetch, filter, and table render
         # persistent=True so the message window stays visible (no auto-close)
-        # until terminate() is called after the table is fully rendered.
+        # until terminate() is called after the table is fully rendered
         my_show_message = ShowMessage('Info', 'Loading usage info, please wait a moment ...', persistent=True)
         my_show_message.start()
 
         # Let the ShowMessage subprocess (tools/message.py) start and render
         # before we block the GUI thread with lmstat. Without this, the GUI
         # thread blocks immediately on get_license_dic and the message window
-        # never appears ("稍纵即逝").
+        # never appears (it flashes and vanishes)
         QApplication.processEvents()
         time.sleep(0.2)
         QApplication.processEvents()
 
-        # Re-generate self.usage_tab_table.
         if get_license_info:
             self.get_license_dic(show_message=False)
 
@@ -1538,7 +1547,7 @@ class LicensePanel(PanelBase):
         my_show_message.terminate()
 
     def gen_usage_tab_table(self, license_dic):
-        # Get license usage num.
+        # Get license usage num
         license_usage_num = 0
 
         if license_dic:
@@ -1548,28 +1557,29 @@ class LicensePanel(PanelBase):
                         for usage_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][license_feature]['in_use_info']:
                             license_usage_num += 1
 
-        # Fill self.usage_tab_table column.
+        # Fill self.usage_tab_table column
         self.usage_tab_table.setShowGrid(True)
-        self.usage_tab_table.setSortingEnabled(True)
-        self.usage_tab_table.setColumnCount(0)
-        self.usage_tab_table.setColumnCount(9)
+        self.usage_tab_table.setSortingEnabled(False)
         self.usage_tab_table_title_list = ['Server', 'Vendor', 'Feature', 'User', 'Submit_Host', 'Execute_Host', 'Num', 'Version', 'Start_Time']
+
+        first_build = self.usage_tab_table.columnCount() != len(self.usage_tab_table_title_list)
+
+        if first_build:
+            self.usage_tab_table.setColumnCount(len(self.usage_tab_table_title_list))
+
         self.usage_tab_table.setHorizontalHeaderLabels(self.usage_tab_table_title_list)
 
-        self.usage_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.usage_tab_table.setColumnWidth(1, 95)    # Vendor (e.g. "Synopsys", "CDNS")
-        self.usage_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.usage_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.usage_tab_table.setColumnWidth(4, 110)   # Submit_Host
-        self.usage_tab_table.setColumnWidth(5, 110)   # Execute_Host
-        self.usage_tab_table.setColumnWidth(6, 50)    # Num
-        # Version: "v2023.1025" (10 chars) ≈ 80px + 36 padding ≈ 115px
-        self.usage_tab_table.setColumnWidth(7, 115)
-        # Start_Time: "2026-08-27 10:19" (16 chars) ≈ 115px + 36 padding ≈ 150px
-        self.usage_tab_table.setColumnWidth(8, 155)
-        common_pyqt5.auto_size_table_columns(self.usage_tab_table)
+        if first_build:
+            self.usage_tab_table.setColumnWidth(0, 180)  # min 88
+            self.usage_tab_table.setColumnWidth(1, 120)  # min 92
+            self.usage_tab_table.setColumnWidth(4, 140)  # min 132
+            self.usage_tab_table.setColumnWidth(5, 140)  # min 138
+            self.usage_tab_table.setColumnWidth(6, 74)   # min 74
+            self.usage_tab_table.setColumnWidth(7, 115)  # min 95
+            self.usage_tab_table.setColumnWidth(8, 155)  # min 119
+            common_pyqt5.auto_size_table_columns(self.usage_tab_table, flex_cols=[2, 3])
 
-        # Fill self.usage_tab_table row.
+        # Fill self.usage_tab_table row
         self.usage_tab_table.setRowCount(0)
         self.usage_tab_table.setRowCount(license_usage_num)
 
@@ -1581,47 +1591,47 @@ class LicensePanel(PanelBase):
                     for usage_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][license_feature]['in_use_info']:
                         row += 1
 
-                        # For Server.
+                        # For Server
                         item = QTableWidgetItem()
                         item.setText(license_server)
                         self.usage_tab_table.setItem(row, 0, item)
 
-                        # For Vendor.
+                        # For Vendor
                         item = QTableWidgetItem()
                         item.setText(vendor_daemon)
                         self.usage_tab_table.setItem(row, 1, item)
 
-                        # For Feature.
+                        # For Feature
                         item = QTableWidgetItem()
                         item.setText(license_feature)
                         self.usage_tab_table.setItem(row, 2, item)
 
-                        # For User.
+                        # For User
                         item = QTableWidgetItem()
                         item.setText(usage_dic['user'])
                         self.usage_tab_table.setItem(row, 3, item)
 
-                        # For Submit_Host.
+                        # For Submit_Host
                         item = QTableWidgetItem()
                         item.setText(usage_dic['submit_host'])
                         self.usage_tab_table.setItem(row, 4, item)
 
-                        # For Execute_Host.
+                        # For Execute_Host
                         item = QTableWidgetItem()
                         item.setText(usage_dic['execute_host'])
                         self.usage_tab_table.setItem(row, 5, item)
 
-                        # For License_Num.
+                        # For License_Num
                         item = QTableWidgetItem()
                         item.setData(Qt.DisplayRole, int(usage_dic['license_num']))
                         self.usage_tab_table.setItem(row, 6, item)
 
-                        # For License_Version.
+                        # For License_Version
                         item = QTableWidgetItem()
                         item.setText(usage_dic['version'])
                         self.usage_tab_table.setItem(row, 7, item)
 
-                        # For Start_Time.
+                        # For Start_Time
                         item = QTableWidgetItem()
                         start_time = common_license.switch_start_time(usage_dic['start_time'], format='%Y-%m-%d %H:%M')
                         item.setText(start_time)
@@ -1630,9 +1640,15 @@ class LicensePanel(PanelBase):
                             item.setForeground(QBrush(QColor(STATUS_EXIT)))
 
                         self.usage_tab_table.setItem(row, 8, item)
-# For USAGE TAB (end) #
 
-# For CURVE TAB (start) #
+        self.usage_tab_table.setSortingEnabled(True)
+# ============================================================================
+# For USAGE TAB (end)
+# ============================================================================
+
+# ============================================================================
+# For CURVE TAB (start)
+# ============================================================================
     def gen_curve_tab(self):
         """
         Generate CURVE tab, show license feature curve information.
@@ -1649,35 +1665,38 @@ class LicensePanel(PanelBase):
         self.curve_tab_frame1.setFrameShadow(QFrame.Raised)
         self.curve_tab_frame1.setFrameShape(QFrame.Box)
 
-        # Grid
         curve_tab_grid = QGridLayout()
 
-        curve_tab_grid.addWidget(self.curve_tab_frame0, 0, 0, 1, 2)
-        curve_tab_grid.addWidget(self.curve_tab_table, 1, 0)
-        curve_tab_grid.addWidget(self.curve_tab_frame1, 1, 1)
+        curve_tab_grid.addWidget(self.curve_tab_frame0, 0, 0)
+
+        curve_tab_splitter = QSplitter()
+        curve_tab_splitter.addWidget(self.curve_tab_table)
+        curve_tab_splitter.addWidget(self.curve_tab_frame1)
+        curve_tab_splitter.setChildrenCollapsible(False)
+        curve_tab_splitter.setHandleWidth(6)
+        curve_tab_splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self._apply_splitter_ratio(curve_tab_splitter, 40)
+
+        curve_tab_grid.addWidget(curve_tab_splitter, 1, 0)
 
         curve_tab_grid.setRowStretch(0, 1)
         curve_tab_grid.setRowStretch(1, 10)
 
-        curve_tab_grid.setColumnStretch(0, 2)
-        curve_tab_grid.setColumnStretch(1, 3)
-
         self.curve_tab.setLayout(curve_tab_grid)
 
-        # Generate self.curve_tab_frame0, self.curve_tab_table and self.curve_tab_frame1.
+        # Generate self.curve_tab_frame0, self.curve_tab_table and self.curve_tab_frame1
         self.gen_curve_tab_frame0()
         self.gen_curve_tab_table()
         self.gen_curve_tab_frame1()
 
-        # Empty-state hint: the CURVE table needs a "Check" to load history data.
+        # Empty-state hint: the CURVE table needs a "Check" to load history data
         # Shown over the chart frame (the tab's graphics area) so the filter
-        # row and table stay interactive; hidden once a load is triggered.
+        # row and table stay interactive; hidden once a load is triggered
         self.curve_tab_hint_label = self._make_empty_hint(
-            curve_tab_grid, 1, 1, 1, 1, 'Click "Check" button to load license feature curve information.'
+            self.curve_tab_frame1.layout(), 0, 0, 2, 1, 'Click "Check" button to load license feature curve information.'
         )
 
     def gen_curve_tab_frame0(self):
-        # License Server
         curve_tab_server_label = QLabel('Server', self.curve_tab_frame0)
         curve_tab_server_label.setStyleSheet('font-weight: bold;')
         curve_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1685,7 +1704,6 @@ class LicensePanel(PanelBase):
         self.curve_tab_server_combo = common_pyqt5.QComboCheckBox(self.curve_tab_frame0)
         self.set_curve_tab_server_combo()
 
-        # License vendor daemon
         curve_tab_vendor_label = QLabel('Vendor', self.curve_tab_frame0)
         curve_tab_vendor_label.setStyleSheet('font-weight: bold;')
         curve_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1693,7 +1711,6 @@ class LicensePanel(PanelBase):
         self.curve_tab_vendor_combo = common_pyqt5.QComboCheckBox(self.curve_tab_frame0)
         self.set_curve_tab_vendor_combo()
 
-        # License Feature
         curve_tab_feature_label = QLabel('Feature', self.curve_tab_frame0)
         curve_tab_feature_label.setStyleSheet('font-weight: bold;')
         curve_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1704,7 +1721,6 @@ class LicensePanel(PanelBase):
         curve_tab_feature_line_completer = common_pyqt5.get_completer(self.feature_list)
         self.curve_tab_feature_line.setCompleter(curve_tab_feature_line_completer)
 
-        # Check button
         curve_tab_check_button = QPushButton('Check', self.curve_tab_frame0)
         curve_tab_check_button.clicked.connect(self.filter_curve_tab)
 
@@ -1731,7 +1747,7 @@ class LicensePanel(PanelBase):
         self.curve_tab_end_date_edit.setDate(QDate.currentDate())
 
         # Export is provided via the File menu (Export License curve table);
-        # no in-tab Export button to avoid duplication.
+        # no in-tab Export button to avoid duplication
 
         # self.curve_tab_frame0 - Grid
         curve_tab_frame0_grid = QGridLayout()
@@ -1759,7 +1775,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.curve_tab_server_combo.
         """
-        # Get license_server list.
+        # Get license_server list
         license_server_list = self.get_license_server_list()
         license_server_list.insert(0, 'ALL')
 
@@ -1769,7 +1785,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.curve_tab_vendor_combo.
         """
-        # Get vendor_daemon list.
+        # Get vendor_daemon list
         vendor_daemon_list = self.get_vendor_daemon_list()
         vendor_daemon_list.insert(0, 'ALL')
 
@@ -1784,11 +1800,11 @@ class LicensePanel(PanelBase):
         # One loading prompt spans the whole pipeline — data fetch, table
         # render, and curve drawing — so the user sees it stay up until the
         # result is actually on screen. The inner methods no longer raise
-        # their own (premature) prompts.
+        # their own (premature) prompts
         my_show_message = ShowMessage('Info', 'Loading curve info, please wait a moment ...', persistent=True)
         my_show_message.start()
 
-        # Let the message window render before blocking the GUI thread.
+        # Let the message window render before blocking the GUI thread
         QApplication.processEvents()
         time.sleep(0.2)
         QApplication.processEvents()
@@ -1807,7 +1823,7 @@ class LicensePanel(PanelBase):
         common.bprint('Parse license db_path', date_format='%Y-%m-%d %H:%M:%S')
         self.db_dic = {}
 
-        # resolve_db_path: config_license.db_path if set, else config.py db_path/license.
+        # resolve_db_path: config_license.db_path if set, else config.py db_path/license
         resolved_db_path = common_db_path.resolve_db_path(config, 'license')
 
         if os.path.exists(resolved_db_path):
@@ -1848,7 +1864,7 @@ class LicensePanel(PanelBase):
         """
         Get curve information from <license db_path>/license_server/<license_server>/<vendor_deamon>/usage.db.
         """
-        # Print loading curve information message.
+        # Print loading curve information message
         common.bprint('Load curve info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         curve_dic = {}
@@ -1870,7 +1886,7 @@ class LicensePanel(PanelBase):
 
         self.update_db_info()
 
-        # Filter with license_server/vendor_daemon/feature.
+        # Filter with license_server/vendor_daemon/feature
         for license_server in self.db_dic.keys():
             if ('ALL' in selected_license_server_list) or (license_server in selected_license_server_list):
                 for vendor_daemon in self.db_dic[license_server].keys():
@@ -1882,7 +1898,7 @@ class LicensePanel(PanelBase):
                             if curve_db_file_connect_result == 'failed':
                                 common.bprint('Failed on connecting curve database file "' + str(curve_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                             else:
-                                # Get specified_license_feature_list (space-separated keywords, fuzzy OR match).
+                                # Get specified_license_feature_list (space-separated keywords, fuzzy OR match)
                                 curve_db_table_list = common_sqlite3.get_sql_table_list(curve_db_file, curve_db_conn)
 
                                 if 'sqlite_sequence' in curve_db_table_list:
@@ -1895,7 +1911,7 @@ class LicensePanel(PanelBase):
                                 else:
                                     specified_license_feature_list = common_license.match_exact_or_fuzzy(specified_license_feature_list_input, curve_db_table_list)
 
-                                # Get specified feature data.
+                                # Get specified feature data
                                 for feature in specified_license_feature_list:
                                     data_dic = common_sqlite3.get_sql_table_data(curve_db_file, curve_db_conn, feature, key_list, select_condition)
 
@@ -1905,7 +1921,7 @@ class LicensePanel(PanelBase):
                                         issued_list = []
                                         in_use_list = []
 
-                                        # Get sample data.
+                                        # Get sample data
                                         for (i, sample_time) in enumerate(data_dic['sample_time']):
                                             curve_dic[feature][vendor_daemon]['sample_data'].setdefault(sample_time, {'issued': 0.0, 'in_use': 0.0})
                                             issued_num = data_dic['issued'][i]
@@ -1919,11 +1935,11 @@ class LicensePanel(PanelBase):
 
                                             curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['in_use'] += float(in_use_num)
 
-                                            # Collect summary information.
+                                            # Collect summary information
                                             issued_list.append(curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'])
                                             in_use_list.append(curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['in_use'])
 
-                                        # Get summary data.
+                                        # Get summary data
                                         if 'Uncounted' in issued_list:
                                             avg_issued = 'Uncounted'
                                         else:
@@ -1945,20 +1961,24 @@ class LicensePanel(PanelBase):
         Generate self.curve_tab_table.
         """
         self.curve_tab_table.setShowGrid(True)
-        self.curve_tab_table.setSortingEnabled(True)
-        self.curve_tab_table.setColumnCount(0)
-        self.curve_tab_table.setColumnCount(5)
+        self.curve_tab_table.setSortingEnabled(False)
         self.curve_tab_table_title_list = ['Feature', 'Vendor', 'Total', 'In_Use', 'Peak']
+
+        first_build = self.curve_tab_table.columnCount() != len(self.curve_tab_table_title_list)
+
+        if first_build:
+            self.curve_tab_table.setColumnCount(len(self.curve_tab_table_title_list))
+
         self.curve_tab_table.setHorizontalHeaderLabels(self.curve_tab_table_title_list)
 
-        self.curve_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.curve_tab_table.setColumnWidth(1, 80)
-        self.curve_tab_table.setColumnWidth(2, 90)
-        self.curve_tab_table.setColumnWidth(3, 60)
-        self.curve_tab_table.setColumnWidth(4, 60)
-        common_pyqt5.auto_size_table_columns(self.curve_tab_table)
+        if first_build:
+            self.curve_tab_table.setColumnWidth(1, 120)  # min 92
+            self.curve_tab_table.setColumnWidth(2, 100)  # min 75
+            self.curve_tab_table.setColumnWidth(3, 90)   # min 88
+            self.curve_tab_table.setColumnWidth(4, 90)   # min 76
+            common_pyqt5.auto_size_table_columns(self.curve_tab_table, flex_cols=[0])
 
-        # Set self.curve_tab_table row length.
+        # Set self.curve_tab_table row length
         row_length = 0
 
         for feature in curve_dic.keys():
@@ -1968,7 +1988,7 @@ class LicensePanel(PanelBase):
         self.curve_tab_table.setRowCount(0)
         self.curve_tab_table.setRowCount(row_length)
 
-        # Fill self.curve_tab_table items.
+        # Fill self.curve_tab_table items
         if curve_dic:
             i = -1
 
@@ -1980,28 +2000,30 @@ class LicensePanel(PanelBase):
 
                     i += 1
 
-                    # Fill "Feature" item.
+                    # Fill "Feature" item
                     item = QTableWidgetItem(feature)
                     self.curve_tab_table.setItem(i, 0, item)
 
-                    # Fill "Vendor" item.
+                    # Fill "Vendor" item
                     item = QTableWidgetItem(vendor_daemon)
                     self.curve_tab_table.setItem(i, 1, item)
 
-                    # Fill "Total" item.
+                    # Fill "Total" item
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, avg_issued)
                     self.curve_tab_table.setItem(i, 2, item)
 
-                    # Fill "In_Use" item.
+                    # Fill "In_Use" item
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, avg_in_use)
                     self.curve_tab_table.setItem(i, 3, item)
 
-                    # Fill "Peak" item.
+                    # Fill "Peak" item
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, peak_in_use)
                     self.curve_tab_table.setItem(i, 4, item)
+
+        self.curve_tab_table.setSortingEnabled(True)
 
     def curve_tab_table_click(self, item=None):
         """
@@ -2016,10 +2038,12 @@ class LicensePanel(PanelBase):
 
         current_row = self.curve_tab_table.currentRow()
         feature_item = self.curve_tab_table.item(current_row, 0)
+
         if feature_item is None:
             return
 
         feature = feature_item.text().strip()
+
         if not feature:
             return
 
@@ -2047,9 +2071,10 @@ class LicensePanel(PanelBase):
             text_color = '#666666'
 
         # Hide ticks and all spines so the hint renders as plain centered text
-        # without a surrounding rectangle.
+        # without a surrounding rectangle
         axes.set_xticks([])
         axes.set_yticks([])
+
         for spine in axes.spines.values():
             spine.set_visible(False)
 
@@ -2060,7 +2085,6 @@ class LicensePanel(PanelBase):
         """
         Generate self.curve_tab_frame1.
         """
-        # self.curve_tab_frame1
         self.curve_tab_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.curve_tab_toolbar = common_pyqt5.NavigationToolbar2QT(self.curve_tab_canvas, self)
 
@@ -2077,13 +2101,13 @@ class LicensePanel(PanelBase):
         # Canvas starts blank; the empty-state QLabel hint
         # (curve_tab_hint_label) overlays this area until the user clicks
         # Check. _draw_curve_hint() will be invoked from update_curve_tab_frame1
-        # only if needed after the first Check attempt.
+        # only if needed after the first Check attempt
 
     def update_curve_tab_frame1(self, curve_dic={}):
         """
-        Generate self.curve_tab_frame1.
+        Redraw the curve canvas with data from curve_dic.
         """
-        # Generate fig.
+        # Generate fig
         fig = self.curve_tab_canvas.figure
         fig.clear()
         self.curve_tab_canvas.draw()
@@ -2098,10 +2122,10 @@ class LicensePanel(PanelBase):
             self._draw_curve_hint('Feature "' + str(specified_license_feature) + '" has no data. Please verify the feature name and click Check again.')
             return
 
-        # Print loading curve information message.
+        # Print loading curve information message
         common.bprint('Processing curve info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Get sample_time_list.
+        # Get sample_time_list
         sample_time_list = []
 
         for feature in curve_dic.keys():
@@ -2111,7 +2135,7 @@ class LicensePanel(PanelBase):
         sample_time_list = list(set(sample_time_list))
         sample_time_list.sort()
 
-        # Get issued/in_use list.
+        # Get issued/in_use list
         issued_list = []
         in_use_list = []
 
@@ -2129,11 +2153,11 @@ class LicensePanel(PanelBase):
                         in_use_list.append(in_use_num)
 
         if sample_time_list and issued_list and in_use_list:
-            # Update sample_time format.
+            # Update sample_time format
             for (i, sample_time) in enumerate(sample_time_list):
                 sample_time_list[i] = datetime.datetime.strptime(sample_time, '%Y%m%d_%H%M%S')
 
-            # Draw curve.
+            # Draw curve
             self.draw_curve_tab_curve(fig, sample_time_list, issued_list, in_use_list)
 
     def draw_curve_tab_curve(self, fig, sample_time_list, issued_list, in_use_list):
@@ -2153,9 +2177,13 @@ class LicensePanel(PanelBase):
                                  xlabel='Sample Time',
                                  ylabel='Num')
         self.curve_tab_canvas.draw()
-# For CURVE TAB (end) #
+# ============================================================================
+# For CURVE TAB (end)
+# ============================================================================
 
-# For UTILIZATION TAB (start) #
+# ============================================================================
+# For UTILIZATION TAB (start)
+# ============================================================================
     def gen_utilization_tab(self):
         """
         Generate UTILIZATION tab, show license feature utilization information.
@@ -2172,39 +2200,42 @@ class LicensePanel(PanelBase):
         self.utilization_tab_frame1.setFrameShadow(QFrame.Raised)
         self.utilization_tab_frame1.setFrameShape(QFrame.Box)
 
-        # Grid
         utilization_tab_grid = QGridLayout()
 
-        utilization_tab_grid.addWidget(self.utilization_tab_frame0, 0, 0, 1, 2)
-        utilization_tab_grid.addWidget(self.utilization_tab_table, 1, 0)
-        utilization_tab_grid.addWidget(self.utilization_tab_frame1, 1, 1)
+        utilization_tab_grid.addWidget(self.utilization_tab_frame0, 0, 0)
+
+        utilization_tab_splitter = QSplitter()
+        utilization_tab_splitter.addWidget(self.utilization_tab_table)
+        utilization_tab_splitter.addWidget(self.utilization_tab_frame1)
+        utilization_tab_splitter.setChildrenCollapsible(False)
+        utilization_tab_splitter.setHandleWidth(6)
+        utilization_tab_splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self._apply_splitter_ratio(utilization_tab_splitter, 30)
+
+        utilization_tab_grid.addWidget(utilization_tab_splitter, 1, 0)
 
         utilization_tab_grid.setRowStretch(0, 1)
         utilization_tab_grid.setRowStretch(1, 10)
 
-        utilization_tab_grid.setColumnStretch(0, 3)
-        utilization_tab_grid.setColumnStretch(1, 7)
-
         self.utilization_tab.setLayout(utilization_tab_grid)
 
-        # Generate self.utilization_tab_frame0, self.utilization_tab_table and self.utilization_tab_frame1.
+        # Generate self.utilization_tab_frame0, self.utilization_tab_table and self.utilization_tab_frame1
         self.gen_utilization_tab_frame0()
         self.gen_utilization_tab_table()
         self.gen_utilization_tab_frame1()
 
         # NOTE: update_utilization_tab_frame1() is NOT called here — it runs
         # ShowMessage and data processing, which should only happen when the
-        # user clicks "Check", not during init_ui construction.
+        # user clicks "Check", not during init_ui construction
 
-        # Empty-state hint: the UTILIZATION table needs a "Check" to load data.
+        # Empty-state hint: the UTILIZATION table needs a "Check" to load data
         # Shown over the chart frame (the tab's graphics area) so the filter
-        # row and table stay interactive; hidden once a load is triggered.
+        # row and table stay interactive; hidden once a load is triggered
         self.utilization_tab_hint_label = self._make_empty_hint(
-            utilization_tab_grid, 1, 1, 1, 1, 'Click "Check" button to load license utilization information.'
+            self.utilization_tab_frame1.layout(), 0, 0, 2, 1, 'Click "Check" button to load license utilization information.'
         )
 
     def gen_utilization_tab_frame0(self):
-        # License Server
         utilization_tab_server_label = QLabel('Server', self.utilization_tab_frame0)
         utilization_tab_server_label.setStyleSheet('font-weight: bold;')
         utilization_tab_server_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2212,7 +2243,6 @@ class LicensePanel(PanelBase):
         self.utilization_tab_server_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_server_combo()
 
-        # License vendor daemon
         utilization_tab_vendor_label = QLabel('Vendor', self.utilization_tab_frame0)
         utilization_tab_vendor_label.setStyleSheet('font-weight: bold;')
         utilization_tab_vendor_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2220,7 +2250,6 @@ class LicensePanel(PanelBase):
         self.utilization_tab_vendor_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0)
         self.set_utilization_tab_vendor_combo()
 
-        # License Feature
         utilization_tab_feature_label = QLabel('Feature', self.utilization_tab_frame0)
         utilization_tab_feature_label.setStyleSheet('font-weight: bold;')
         utilization_tab_feature_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2231,7 +2260,6 @@ class LicensePanel(PanelBase):
         utilization_tab_feature_line_completer = common_pyqt5.get_completer(self.feature_list)
         self.utilization_tab_feature_line.setCompleter(utilization_tab_feature_line_completer)
 
-        # Check button
         utilization_tab_check_button = QPushButton('Check', self.utilization_tab_frame0)
         utilization_tab_check_button.clicked.connect(self.filter_utilization_tab)
 
@@ -2257,9 +2285,8 @@ class LicensePanel(PanelBase):
         self.utilization_tab_end_date_edit.setCalendarPopup(True)
         self.utilization_tab_end_date_edit.setDate(QDate.currentDate())
 
-        # License Product
         # Export is provided via the File menu (Export License utilization
-        # table); no in-tab Export button to avoid duplication.
+        # table); no in-tab Export button to avoid duplication
 
         # self.utilization_tab_frame0 - Grid
         utilization_tab_frame0_grid = QGridLayout()
@@ -2287,7 +2314,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.utilization_tab_server_combo.
         """
-        # Get license_server list.
+        # Get license_server list
         license_server_list = self.get_license_server_list()
         license_server_list.insert(0, 'ALL')
 
@@ -2297,7 +2324,7 @@ class LicensePanel(PanelBase):
         """
         Set (initialize) self.utilization_tab_vendor_combo.
         """
-        # Get vendor_daemon list.
+        # Get vendor_daemon list
         vendor_daemon_list = self.get_vendor_daemon_list()
         vendor_daemon_list.insert(0, 'ALL')
 
@@ -2311,11 +2338,11 @@ class LicensePanel(PanelBase):
 
         # One loading prompt spans data fetch, table render, and curve drawing
         # so it stays up until the result is on screen. Inner methods no
-        # longer raise their own (premature) prompts.
+        # longer raise their own (premature) prompts
         my_show_message = ShowMessage('Info', 'Loading utilization info, please wait a moment ...', persistent=True)
         my_show_message.start()
 
-        # Let the message window render before blocking the GUI thread.
+        # Let the message window render before blocking the GUI thread
         QApplication.processEvents()
         time.sleep(0.2)
         QApplication.processEvents()
@@ -2332,7 +2359,7 @@ class LicensePanel(PanelBase):
         """
         Get utilization information from <license db_path>/license_server/<license_server>/<vendor_deamon>/utilization(_day).db.
         """
-        # Print loading utilization information message.
+        # Print loading utilization information message
         common.bprint('Load utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
         utilization_dic = {}
@@ -2362,7 +2389,7 @@ class LicensePanel(PanelBase):
 
         self.update_db_info()
 
-        # Filter with license_server/vendor_daemon/feature.
+        # Filter with license_server/vendor_daemon/feature
         for license_server in self.db_dic.keys():
             if ('ALL' in selected_license_server_list) or (license_server in selected_license_server_list):
                 for vendor_daemon in self.db_dic[license_server].keys():
@@ -2374,16 +2401,16 @@ class LicensePanel(PanelBase):
                             if utilization_db_file_connect_result == 'failed':
                                 common.bprint('Failed on connecting utilization database file "' + str(utilization_db_file) + '".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                             else:
-                                # Get specified_license_feature_list.
+                                # Get specified_license_feature_list
                                 utilization_db_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
                                 specified_license_feature_list = self.count_specified_license_feature_list(utilization_db_table_list, vendor_daemon, selected_license_feature_list)
 
-                                # Get specified feature data.
+                                # Get specified feature data
                                 for feature in specified_license_feature_list:
                                     data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, feature, key_list, select_condition)
 
                                     if data_dic:
-                                        # Save sample data.
+                                        # Save sample data
                                         utilization_dic.setdefault(feature, {})
                                         utilization_dic[feature].setdefault(vendor_daemon, {'sample_data': {}, 'summary': {}})
 
@@ -2407,14 +2434,14 @@ class LicensePanel(PanelBase):
 
                             utilization_db_conn.close()
 
-        # Count utilizaton/avg_utilization information. (Aggregated data from different license servers)
+        # Count utilization/avg_utilization information. (Aggregated data from different license servers)
         for feature in utilization_dic.keys():
             for vendor_daemon in utilization_dic[feature].keys():
                 issued_list = []
                 in_use_list = []
 
                 for sample_date in utilization_dic[feature][vendor_daemon]['sample_data'].keys():
-                    # Get feature sample_date 'utilization' info.
+                    # Get feature sample_date 'utilization' info
                     issued_num = utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['issued']
                     in_use_num = utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['in_use']
                     utilization = 0.0
@@ -2432,7 +2459,7 @@ class LicensePanel(PanelBase):
                     issued_list.append(issued_num)
                     in_use_list.append(in_use_num)
 
-                # Get feature 'avg_utilization' info.
+                # Get feature 'avg_utilization' info
                 if 'Uncounted' in issued_list:
                     if sum(in_use_list) > 0:
                         avg_utilization = 100.0
@@ -2460,7 +2487,7 @@ class LicensePanel(PanelBase):
         if not selected_license_feature_list:
             specified_license_feature_list = feature_list
         else:
-            # Exact-preferred match: exact match wins; fuzzy only when no exact match.
+            # Exact-preferred match: exact match wins; fuzzy only when no exact match
             specified_license_feature_list = common_license.match_exact_or_fuzzy(selected_license_feature_list, feature_list)
 
         return specified_license_feature_list
@@ -2475,17 +2502,20 @@ class LicensePanel(PanelBase):
         self.utilization_tab_table_title_list = ['Feature', 'Vendor', 'Ut (%)']
 
         self.utilization_tab_table.setShowGrid(True)
-        self.utilization_tab_table.setSortingEnabled(True)
-        self.utilization_tab_table.setColumnCount(0)
-        self.utilization_tab_table.setColumnCount(3)
+        self.utilization_tab_table.setSortingEnabled(False)
+        first_build = self.utilization_tab_table.columnCount() != len(self.utilization_tab_table_title_list)
+
+        if first_build:
+            self.utilization_tab_table.setColumnCount(len(self.utilization_tab_table_title_list))
+
         self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
 
-        self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.utilization_tab_table.setColumnWidth(1, 80)
-        self.utilization_tab_table.setColumnWidth(2, 60)
-        common_pyqt5.auto_size_table_columns(self.utilization_tab_table)
+        if first_build:
+            self.utilization_tab_table.setColumnWidth(1, 120)  # min 92
+            self.utilization_tab_table.setColumnWidth(2, 86)  # min 86
+            common_pyqt5.auto_size_table_columns(self.utilization_tab_table, flex_cols=[0])
 
-        # Set self.utilization_tab_table row length.
+        # Set self.utilization_tab_table row length
         row_length = 0
 
         for feature in utilization_dic.keys():
@@ -2495,7 +2525,7 @@ class LicensePanel(PanelBase):
         self.utilization_tab_table.setRowCount(0)
         self.utilization_tab_table.setRowCount(row_length)
 
-        # Fill self.utilization_tab_table items.
+        # Fill self.utilization_tab_table items
         if utilization_dic:
             i = -1
 
@@ -2504,15 +2534,15 @@ class LicensePanel(PanelBase):
                     avg_utilization = utilization_dic[feature][vendor_daemon]['summary']['avg_utilization']
                     i += 1
 
-                    # Fill "feature" item.
+                    # Fill "feature" item
                     item = QTableWidgetItem(feature)
                     self.utilization_tab_table.setItem(i, 0, item)
 
-                    # Fill "vendor" item.
+                    # Fill "vendor" item
                     item = QTableWidgetItem(vendor_daemon)
                     self.utilization_tab_table.setItem(i, 1, item)
 
-                    # Fill "utilization" item.
+                    # Fill "utilization" item
                     item = QTableWidgetItem()
                     item.setData(Qt.DisplayRole, avg_utilization)
 
@@ -2523,10 +2553,12 @@ class LicensePanel(PanelBase):
 
                     self.utilization_tab_table.setItem(i, 2, item)
 
+        self.utilization_tab_table.setSortingEnabled(True)
+
     def utilization_tab_table_click(self, item=None):
         """
         Click handler for self.utilization_tab_table. When the user clicks the
-        first column ("Feature", or "Product" when product view is enabled),
+        first column ("Feature"),
         copy that text into the corresponding input line and trigger a Check
         so the utilization detail is loaded immediately — equivalent to typing
         the name and pressing Check.
@@ -2537,10 +2569,12 @@ class LicensePanel(PanelBase):
 
         current_row = self.utilization_tab_table.currentRow()
         name_item = self.utilization_tab_table.item(current_row, 0)
+
         if name_item is None:
             return
 
         name = name_item.text().strip()
+
         if not name:
             return
 
@@ -2552,7 +2586,6 @@ class LicensePanel(PanelBase):
         """
         Generate self.utilization_tab_frame1.
         """
-        # self.utilization_tab_frame1
         self.utilization_tab_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.utilization_tab_toolbar = common_pyqt5.NavigationToolbar2QT(self.utilization_tab_canvas, self)
 
@@ -2568,17 +2601,17 @@ class LicensePanel(PanelBase):
 
     def update_utilization_tab_frame1(self, utilization_dic={}):
         """
-        Generate self.utilization_tab_frame1.
+        Redraw the utilization canvas with data from utilization_dic.
         """
-        # Generate fig.
+        # Generate fig
         fig = self.utilization_tab_canvas.figure
         fig.clear()
         self.utilization_tab_canvas.draw()
 
-        # Print loading utilization information message.
+        # Print loading utilization information message
         common.bprint('Process utilization info ...', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Get sample_date_list.
+        # Get sample_date_list
         sample_date_list = []
 
         for feature in utilization_dic.keys():
@@ -2588,7 +2621,7 @@ class LicensePanel(PanelBase):
         sample_date_list = list(set(sample_date_list))
         sample_date_list.sort()
 
-        # Get utilization_list.
+        # Get utilization_list
         utilization_list = []
 
         for sample_date in sample_date_list:
@@ -2603,17 +2636,17 @@ class LicensePanel(PanelBase):
             utilization_list.append(avg_sample_date_utilzation)
 
         if sample_date_list and utilization_list:
-            # Update sample_date format.
+            # Update sample_date format
             for (i, sample_date) in enumerate(sample_date_list):
                 if self.enable_utilization_detail:
                     sample_date_list[i] = datetime.datetime.strptime(sample_date, '%Y%m%d_%H%M%S')
                 else:
                     sample_date_list[i] = datetime.datetime.strptime(sample_date, '%Y%m%d')
 
-            # Get avg_utilization.
+            # Get avg_utilization
             avg_utilization = round(sum(utilization_list) / len(utilization_list), 1)
 
-            # Draw utilization curve.
+            # Draw utilization curve
             self.draw_utilization_tab_curve(fig, avg_utilization, sample_date_list, utilization_list)
 
     def draw_utilization_tab_curve(self, fig, avg_utilization, sample_date_list, utilization_list):
@@ -2631,10 +2664,14 @@ class LicensePanel(PanelBase):
                                  xlabel='Sample Time' if self.enable_utilization_detail else 'Sample Date',
                                  ylabel='Utilization (%)')
         self.utilization_tab_canvas.draw()
-# For UTILIZATION TAB (end) #
+# ============================================================================
+# For UTILIZATION TAB (end)
+# ============================================================================
 
 
-# Export table (start) #
+# ============================================================================
+# Export table (start)
+# ============================================================================
     def export_server_table(self):
         self.export_table('server', self.server_tab_table, self.server_tab_table_title_list)
 
@@ -2655,7 +2692,7 @@ class LicensePanel(PanelBase):
 
     def export_table(self, table_type, table_item, title_list):
         """
-        Export specified table info into an Excel.
+        Export specified table info into a CSV file.
         """
         current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         current_time_string = re.sub('-', '', current_time)
@@ -2665,7 +2702,7 @@ class LicensePanel(PanelBase):
         (output_file, output_file_type) = QFileDialog.getSaveFileName(self, 'Export ' + str(table_type) + ' table', default_output_file, 'CSV Files (*.csv)')
 
         if output_file:
-            # Get table content.
+            # Get table content
             content_dic = {}
             row_num = table_item.rowCount()
             column_num = table_item.columnCount()
@@ -2681,12 +2718,13 @@ class LicensePanel(PanelBase):
 
                 content_dic.setdefault(title_list[column], column_list)
 
-            # Write csv
             common.bprint('Writing ' + str(table_type) + ' table into "' + str(output_file) + '" ...', date_format='%Y-%m-%d %H:%M:%S')
 
             common.write_csv(csv_file=output_file, content_dic=content_dic)
 
-# Export table (end) #
+# ============================================================================
+# Export table (end)
+# ============================================================================
 
     def closeEvent(self, event):
         """
@@ -2738,7 +2776,7 @@ class LicenseLoadThread(QThread):
             # Collect non-empty/non-comment lines first; only override the
             # LM_LICENSE_FILE environment variable when the platform file
             # actually yields servers. An empty (comment-only) file must fall
-            # back to the shell's LM_LICENSE_FILE instead of clobbering it.
+            # back to the shell's LM_LICENSE_FILE instead of clobbering it
             parsed_servers = []
 
             with open(LM_LICENSE_FILE_file, 'r') as LLF:

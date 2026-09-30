@@ -33,6 +33,8 @@ The GUI has four sidebar panels, each with its own inner tabs:
 | **AI** | AI | LLM-powered helpdesk with RAG document search and tool execution |
 | | ANALYZE | One-shot health reports (cluster / user / job / queue), self-contained HTML |
 
+All data tables support header-click sorting, drag-resizable columns with per-column minimum widths (widths persist across refresh), and a right-click "Reset column widths" menu.
+
 Beyond the GUI:
 
 - **bmonitor_cli** — Command-line tool that outputs structured **JSON**. Real-time queries (jobs/hosts/queues/license) plus a `db` subcommand group for historical sampling data (finished jobs, load/utilization trends, license history). Covers bjobs/bhist/bpeek/bhosts/bqueues/busers/lmstat with structured output. Designed for scripts and AI agents.

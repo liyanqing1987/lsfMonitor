@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-#
-# common_app_log.py
-#
-# Author: liyanqing.1987
-# Created: 2026-09-03
-# Description: Tool launch log database operations. Each GUI launch appends one
-#   record to a shared SQLite db (<install>/db/log/log.db), one per-user table
-#   (app_log_<user>). Writing is best-effort: failures never block the GUI.
+################################
+# File Name   : common_app_log.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-03
+# Description : Tool launch log database operations. Each GUI launch appends
+#               one record to a shared SQLite db (<install>/db/log/log.db),
+#               one per-user table (app_log_<user>). Writing is best-effort:
+#               failures never block the GUI
+################################
 
 import os
 import sys
@@ -16,7 +17,7 @@ sys.path.append(str(os.environ.get('LSFMONITOR_INSTALL_PATH', '')))
 from common import common_sqlite3
 
 # 'id' is an auto-increment surrogate key (not a business key) so INSERT OR
-# IGNORE never drops a record — a user can legitimately launch twice per second.
+# IGNORE never drops a record — a user can legitimately launch twice per second
 TABLE_KEY_LIST = ['id', 'date', 'time', 'user', 'login_user', 'cwd', 'command', 'host']
 TABLE_KEY_TYPE_LIST = ['INTEGER PRIMARY KEY AUTOINCREMENT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
@@ -62,7 +63,7 @@ def _ensure_user_table(db_file, user):
 
     if not db_file_exists and os.path.exists(db_file):
         try:
-            # 0o666 (sticky bit is for dirs, not files): every user writes here.
+            # 0o666 (sticky bit is for dirs, not files): every user writes here
             os.chmod(db_file, 0o666)
         except PermissionError:
             pass

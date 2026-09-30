@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : message.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Standalone loading-prompt window, spawned as a subprocess so the
+#               caller's GUI thread stays responsive while it blocks
+################################
+
 """
 Unified loading prompt for lsfMonitor.
 
@@ -7,7 +15,7 @@ non-blocking "loading..." prompts: LSF data loading (bhosts/bjobs/queues),
 license loading, etc. Runs as an independent process so the window stays
 responsive even when the caller's GUI thread is blocked.
 
-This is ONLY for progress / loading prompts (always green "Info"). For
+This is ONLY for progress / loading prompts (always informational). For
 warnings/errors that need user confirmation, use QMessageBox instead — it
 blocks until the user clicks OK and shows the appropriate icon.
 
@@ -23,7 +31,7 @@ from PyQt5.QtCore import Qt, QTimer
 
 os.environ['PYTHONUNBUFFERED'] = '1'
 
-# Design tokens in sync with gui/theme.py.
+# Design tokens in sync with gui/theme.py
 BG_WHITE = '#FFFFFF'
 TEXT_PRIMARY = '#0F172A'
 BORDER = '#DCE3ED'
@@ -66,14 +74,14 @@ message — 加载提示弹窗工具
 
 
 class MessageDialog(QWidget):
-    """Card-style loading prompt with a green title bar."""
+    """Loading prompt with a system title bar and a centered message body."""
 
     def __init__(self, title, message, no_autoclose=False):
         super().__init__()
         self.no_autoclose = no_autoclose
 
         # Title shown only in the window title bar (system bar), not repeated
-        # in the body — avoids showing "Info" twice.
+        # in the body — avoids showing "Info" twice
         self.setWindowTitle(title)
         self.setWindowFlags(Qt.Dialog | Qt.WindowStaysOnTopHint)
         self.setFixedSize(380, 90)
@@ -81,7 +89,7 @@ class MessageDialog(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
 
-        # Message body — the only content in the dialog.
+        # Message body — the only content in the dialog
         message_label = QLabel(message, self)
         message_label.setAlignment(Qt.AlignCenter)
         message_label.setWordWrap(True)

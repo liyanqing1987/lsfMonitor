@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : akill.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Batch bkill helper: select jobs by id / name / user / host /
+#               queue, with '*' as the only wildcard
+################################
+
 import os
 import re
 import sys
@@ -97,7 +105,7 @@ class AutoKill():
                 self.jobid_list.append(jobid)
             elif re.search(r'\*', jobid):
                 # Keep the raw pattern with '*'; conversion to '.*' happens once
-                # in kill_base_jobid to avoid double-conversion (123* -> 123.* -> 123..*).
+                # in kill_base_jobid to avoid double-conversion (123* -> 123.* -> 123..*)
                 self.jobid_list.append(jobid)
             elif my_match := re.match(r'^(\d+)-(\d+)$', jobid):
                 start_jobid = int(my_match.group(1))
@@ -138,7 +146,7 @@ class AutoKill():
     def kill_base_job_name(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for job_name in self.job_name_list:
-                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                # Glob semantics: only '*' is a wildcard, everything else is literal
                 job_name_pattern = re.escape(job_name).replace(r'\*', '.*')
 
                 if job_dic['job_name'] and re.match(job_name_pattern, job_dic['job_name']):
@@ -148,7 +156,7 @@ class AutoKill():
     def kill_base_command(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for command in self.command_list:
-                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                # Glob semantics: only '*' is a wildcard, everything else is literal
                 command_pattern = re.escape(command).replace(r'\*', '.*')
 
                 if job_dic['command'] and re.match(command_pattern, job_dic['command']):
@@ -158,7 +166,7 @@ class AutoKill():
     def kill_base_submit_time(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for submit_time in self.submit_time_list:
-                # Glob semantics: only '*' is a wildcard, everything else is literal.
+                # Glob semantics: only '*' is a wildcard, everything else is literal
                 submit_time_pattern = re.escape(submit_time).replace(r'\*', '.*')
 
                 if job_dic['submitted_time'] and re.search(submit_time_pattern, job_dic['submitted_time']):

@@ -5,11 +5,11 @@
 # Created On : 2026-08-24
 # Description : Panel abstract base. Each tool panel owns an inner QTabWidget
 #               and registers menubar actions onto MainWindow. Supports lazy
-#               construction of inner tabs and a one-time on_first_show.
+#               construction of inner tabs and a one-time on_first_show
 ################################
 
 from PyQt5.QtWidgets import QWidget, QTabWidget, QGridLayout, QLabel
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QPalette
 
 from common import common_pyqt5
@@ -31,12 +31,12 @@ class PanelBase(QWidget):
 
         self.main_tab = QTabWidget(self)
         # BoldAwareTabBar sizes tabs to their bold (selected) width so the
-        # font-weight:600 selected label isn't clipped.
+        # font-weight:600 selected label isn't clipped
         _main_tab_bar = common_pyqt5.BoldAwareTabBar()
         _main_tab_bar.setExpanding(True)
         self.main_tab.setTabBar(_main_tab_bar)
         # objectName so QSS targets panel-level styling without leaking into
-        # nested QTabWidgets; fill the tab-strip area with PRIMARY_LIGHT.
+        # nested QTabWidgets; fill the tab-strip area with PRIMARY_LIGHT
         self.main_tab.setObjectName('mainTab')
         self.main_tab.setAutoFillBackground(True)
         _main_palette = self.main_tab.palette()
@@ -53,7 +53,7 @@ class PanelBase(QWidget):
         hint = QLabel(message)
         hint.setAlignment(Qt.AlignCenter)
         hint.setWordWrap(True)
-        hint.setStyleSheet('QLabel { color: #888; font-size: 14px; }')
+        hint.setStyleSheet('QLabel { color: #888; font-size: 14px; background: transparent; }')
         hint.setAttribute(Qt.WA_TransparentForMouseEvents)
         layout.addWidget(hint, row, col, row_span, col_span)
 
@@ -98,3 +98,23 @@ class PanelBase(QWidget):
     def cleanup(self):
         """Stop background threads on exit. Override if the panel owns threads."""
         return
+
+    @staticmethod
+    def _apply_splitter_ratio(splitter, left_pct):
+        """Set a QSplitter's left:right ratio (left_pct = left widget width %).
+
+        setSizes takes pixel widths and needs a visible splitter; lazy-built
+        tabs may not be visible yet, so poll until width > 0 then set.
+        """
+        splitter.setStretchFactor(0, left_pct)
+        splitter.setStretchFactor(1, 100 - left_pct)
+
+        def _set_sizes():
+            if splitter.width() > 0:
+                total = splitter.width()
+                left = total * left_pct // 100
+                splitter.setSizes([left, total - left])
+            else:
+                QTimer.singleShot(50, _set_sizes)
+
+        QTimer.singleShot(0, _set_sizes)

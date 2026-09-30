@@ -3,10 +3,10 @@
 # File Name   : patch.py
 # Author      : liyanqing.1987
 # Created On  : 2023-09-18 20:00:00
-# Description : Patch/upgrade tool for lsfMonitor.
+# Description : Patch/upgrade tool for lsfMonitor
 #               Syncs all files from a new package to the
 #               existing installation, handles config migration,
-#               shell wrapper regeneration, and cleanup.
+#               shell wrapper regeneration, and cleanup
 ################################
 import os
 import re
@@ -69,10 +69,10 @@ class Patch():
         self.dry_run = dry_run
         self.no_backup = no_backup
 
-        # Directories excluded from sync entirely.
+        # Directories excluded from sync entirely
         self.exclude_dirs = {'db', '.git', '.claude', '__pycache__', '.patch_backup'}
 
-        # Config files handled via migration, not direct copy.
+        # Config files handled via migration, not direct copy
         self.config_rel_paths = [
             'config/config_lsf.py',
             'config/config_license.py',
@@ -80,7 +80,7 @@ class Patch():
             'config/config_ai.py',
         ]
 
-        # Shell wrappers (generated, not synced directly).
+        # Shell wrappers (generated, not synced directly)
         self.tool_list = [
             'bin/bmonitor',
             'bin/bmonitor_cli',
@@ -122,19 +122,19 @@ class Patch():
         """
         parts = rel_path.split('/')
 
-        # Exclude top-level excluded directories.
+        # Exclude top-level excluded directories
         if parts[0] in self.exclude_dirs:
             return True
 
-        # Exclude __pycache__ at any depth.
+        # Exclude __pycache__ at any depth
         if '__pycache__' in parts:
             return True
 
-        # Exclude config files (handled via migration).
+        # Exclude config files (handled via migration)
         if rel_path in self.config_rel_paths:
             return True
 
-        # Exclude generated shell wrappers.
+        # Exclude generated shell wrappers
         if rel_path in self.tool_list:
             return True
 
@@ -147,16 +147,16 @@ class Patch():
         file_list = []
 
         for root_path, dirs, files in os.walk(base_path):
-            # Compute relative dir path.
+            # Compute relative dir path
             rel_dir = os.path.relpath(root_path, base_path)
 
             if rel_dir == '.':
                 rel_dir = ''
 
-            # Prune excluded directories from traversal.
+            # Prune excluded directories from traversal
             dirs[:] = [d for d in dirs if d not in self.exclude_dirs and '__pycache__' not in d]
 
-            # Also prune if the full relative path is excluded.
+            # Also prune if the full relative path is excluded
             if rel_dir:
                 parts = rel_dir.split(os.sep)
 
@@ -231,7 +231,7 @@ class Patch():
 
             common.bprint('')
 
-        # Config migration info.
+        # Config migration info
         for config_rel_path in self.config_rel_paths:
             new_config = os.path.join(self.patch_path, config_rel_path)
             old_config = os.path.join(self.install_path, config_rel_path)
@@ -271,7 +271,6 @@ class Patch():
 
                 shutil.copy2(src, dst)
 
-        # Also backup config files.
         config_backup_count = 0
 
         for config_rel_path in self.config_rel_paths:
@@ -292,7 +291,6 @@ class Patch():
         """
         Copy new/modified files from patch to install, remove deleted files.
         """
-        # Copy new files.
         if new_files:
             common.bprint('>>> Copying new files')
 
@@ -309,7 +307,6 @@ class Patch():
 
             common.bprint('')
 
-        # Copy modified files.
         if modified_files:
             common.bprint('>>> Updating modified files')
 
@@ -322,7 +319,6 @@ class Patch():
 
             common.bprint('')
 
-        # Remove deleted files.
         if deleted_files:
             common.bprint('>>> Removing deleted files')
 
@@ -335,7 +331,7 @@ class Patch():
 
             common.bprint('')
 
-            # Remove empty directories left after deletion.
+            # Remove empty directories left after deletion
             self.remove_empty_dirs()
 
     def remove_empty_dirs(self):
@@ -376,7 +372,7 @@ class Patch():
             return
 
         if not os.path.exists(old_config_path):
-            # No existing config, just copy the new one.
+            # No existing config, just copy the new one
             dst_dir = os.path.dirname(old_config_path)
 
             if not os.path.exists(dst_dir):
@@ -392,7 +388,7 @@ class Patch():
 
         common.bprint(f'>>> Migrating config file "{config_rel_path}"')
 
-        # Parse old config: extract variable assignments.
+        # Parse old config: extract variable assignments
         old_vars = {}
         old_var_lines = {}
 
@@ -405,7 +401,7 @@ class Patch():
                     old_vars[var_name] = match.group(2)
                     old_var_lines[var_name] = line
 
-        # Read new config template and build migrated content.
+        # Read new config template and build migrated content
         new_vars_seen = set()
         migrated_lines = []
 
@@ -418,16 +414,16 @@ class Patch():
                     new_vars_seen.add(var_name)
 
                     if var_name in old_var_lines:
-                        # Preserve user's value.
+                        # Preserve user's value
                         migrated_lines.append(old_var_lines[var_name])
                     else:
-                        # New variable, use template default.
+                        # New variable, use template default
                         migrated_lines.append(line)
                         common.bprint(f'    Added new config variable: {var_name}', color='green')
                 else:
                     migrated_lines.append(line)
 
-        # Append user-custom variables not in new template.
+        # Append user-custom variables not in new template
         custom_vars = [name for name in old_vars if name not in new_vars_seen]
 
         if custom_vars:
@@ -437,7 +433,7 @@ class Patch():
                 migrated_lines.append(old_var_lines[var_name])
                 common.bprint(f'    Preserved custom variable: {var_name}', color='cyan')
 
-        # Write migrated config.
+        # Write migrated config
         with open(old_config_path, 'w') as f:
             f.writelines(migrated_lines)
 
@@ -451,10 +447,10 @@ class Patch():
         """
         common.bprint('>>> Regenerating shell wrappers')
 
-        # Detect the tool_list from install.py in install path (already patched).
+        # Detect the tool_list from install.py in install path (already patched)
         tool_list = list(self.tool_list)
 
-        # Also check if the new install.py defines additional tools.
+        # Also check if the new install.py defines additional tools
         install_py_path = os.path.join(self.install_path, 'install.py')
 
         if os.path.exists(install_py_path):
@@ -462,7 +458,7 @@ class Patch():
                 with open(install_py_path, 'r') as f:
                     content = f.read()
 
-                # Extract tool_list from install.py.
+                # Extract tool_list from install.py
                 match = re.search(r'self\.tool_list\s*=\s*\[(.*?)\]', content, re.DOTALL)
 
                 if match:
@@ -484,7 +480,7 @@ class Patch():
             tool_path = os.path.join(self.install_path, tool_name)
             tool_py = tool_path + '.py'
 
-            # Only generate wrapper if the .py file exists.
+            # Only generate wrapper if the .py file exists
             if not os.path.exists(tool_py):
                 common.bprint(f'    Skipped {tool_name} (.py not found)', color='yellow')
                 continue
@@ -554,16 +550,16 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
         """
         Main execution flow.
         """
-        # Step 1: Scan.
+        # Step 1: Scan
         common.bprint('>>> Scanning files ...')
         new_files, modified_files, deleted_files = self.scan()
         common.bprint('')
 
-        # Step 2: Display summary.
+        # Step 2: Display summary
         self.display_summary(new_files, modified_files, deleted_files)
 
         if not new_files and not modified_files and not deleted_files:
-            # Check config separately.
+            # Check config separately
             config_needs_migration = False
 
             for config_rel_path in self.config_rel_paths:
@@ -579,12 +575,12 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
                 common.bprint('No changes detected. Installation is up to date.')
                 return
 
-        # Dry run: stop here.
+        # Dry run: stop here
         if self.dry_run:
             common.bprint('(Dry run mode - no changes applied.)', color='cyan', display_method=1)
             return
 
-        # Confirm before applying.
+        # Confirm before applying
         total_changes = len(new_files) + len(modified_files) + len(deleted_files)
         choice = input(f'Apply {total_changes} change(s)? (y|n) ')
 
@@ -594,22 +590,22 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
 
         common.bprint('')
 
-        # Step 3: Backup.
+        # Step 3: Backup
         backup_dir = self.create_backup(modified_files, deleted_files)
 
-        # Step 4: Sync files.
+        # Step 4: Sync files
         self.sync_files(new_files, modified_files, deleted_files)
 
-        # Step 5: Migrate config.
+        # Step 5: Migrate config
         self.migrate_config()
 
-        # Step 6: Regenerate shell wrappers.
+        # Step 6: Regenerate shell wrappers
         self.regenerate_shell_wrappers()
 
-        # Step 7: Cleanup __pycache__.
+        # Step 7: Cleanup __pycache__
         self.cleanup_pycache()
 
-        # Step 8: Result summary.
+        # Step 8: Result summary
         common.bprint('=== Patch Complete ===', color='green', display_method=1)
         common.bprint(f'  New      : {len(new_files)} file(s)')
         common.bprint(f'  Modified : {len(modified_files)} file(s)')

@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+################################
+# File Name   : common_sqlite3.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : SQLite helpers: connect / preprocess, malformed-db self-heal, and
+#               table create / insert / update / query
+################################
+
 import os
 import sys
 import time
@@ -13,9 +22,9 @@ JOURNAL_STALE_SECONDS = 600
 
 # A malformed db is only archived after this many *consecutive* quick_check
 # failures, so a transient glitch (NFS hiccup, a still-running write, OOM kill
-# of the previous sampler) does NOT cause premature archiving + data loss.
+# of the previous sampler) does NOT cause premature archiving + data loss
 # Counters persist across sampler processes via on-disk files under
-# <db_dir>/.malformed-suspect/. Reset to 0 on any successful quick_check.
+# <db_dir>/.malformed-suspect/. Reset to 0 on any successful quick_check
 MALFORMED_CONFIRM_THRESHOLD = 3
 
 
@@ -69,7 +78,7 @@ def _malformed_suspect_count(db_file, mode='read'):
             return current
         except OSError:
             # Can't persist counter (read-only fs, perms) — assume threshold
-            # reached so we still archive a genuinely malformed file.
+            # reached so we still archive a genuinely malformed file
             return MALFORMED_CONFIRM_THRESHOLD
 
     return 0
@@ -77,7 +86,7 @@ def _malformed_suspect_count(db_file, mode='read'):
 
 # Max seconds to spend row-recovering a malformed db before archiving. Bounds
 # sampler latency on very large job_data files (millions of rows). Whatever was
-# recovered by then is kept; the rest is lost with the archived file.
+# recovered by then is kept; the rest is lost with the archived file
 MALFORMED_RECOVER_TIMEOUT = 60
 
 
@@ -103,7 +112,7 @@ def _recover_malformed_db(old_db_file, new_conn):
 
     try:
         # Discover tables (sqlite_master is usually intact even when data
-        # pages are corrupt — schema lives in page 1).
+        # pages are corrupt — schema lives in page 1)
         try:
             tables = [row[0] for row in src.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").fetchall()]
         except Exception:
@@ -113,17 +122,17 @@ def _recover_malformed_db(old_db_file, new_conn):
             if time.time() - start_second > MALFORMED_RECOVER_TIMEOUT:
                 break
 
-            # Read the CREATE statement so the new db gets the same schema.
+            # Read the CREATE statement so the new db gets the same schema
             try:
                 create_sql = src.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
 
                 if create_sql and create_sql[0]:
                     new_conn.execute(create_sql[0])
             except Exception:
-                # Can't read schema for this table — skip it.
+                # Can't read schema for this table — skip it
                 continue
 
-            # Get column list for this table.
+            # Get column list for this table
             try:
                 col_info = src.execute(f"PRAGMA table_info({table})").fetchall()
                 cols = [c[1] for c in col_info]
@@ -137,7 +146,7 @@ def _recover_malformed_db(old_db_file, new_conn):
                 continue
 
             # Walk rows with fetchone(); the first corrupt page raises
-            # DatabaseError, which ends recovery for this table.
+            # DatabaseError, which ends recovery for this table
             try:
                 cursor = src.execute(f"SELECT {col_list} FROM {table}")
                 batch = []
@@ -165,7 +174,7 @@ def _recover_malformed_db(old_db_file, new_conn):
                     new_conn.executemany(f"INSERT OR IGNORE INTO {table} ({col_list}) VALUES ({placeholders})", batch)
                     recovered += len(batch)
             except Exception:
-                # Best-effort: keep whatever we got so far, move on.
+                # Best-effort: keep whatever we got so far, move on
                 pass
 
         new_conn.commit()
@@ -182,7 +191,7 @@ def _recover_malformed_db(old_db_file, new_conn):
 
 # Suspect counter files older than this (seconds) are removed by
 # cleanup_suspect_counters, so the .malformed-suspect/ dir doesn't accumulate
-# stale entries for db files that stopped being sampled.
+# stale entries for db files that stopped being sampled
 SUSPECT_COUNTER_STALE_SECONDS = 7 * 86400
 
 
@@ -208,7 +217,7 @@ def cleanup_suspect_counters(db_dir):
 
         count_file = os.path.join(suspect_dir, name)
 
-        # Each counter is named "<db_file_basename>.count" — recover the db path.
+        # Each counter is named "<db_file_basename>.count" — recover the db path
         db_name = name[:-len('.count')]
         db_file = os.path.join(db_dir, db_name)
 
@@ -226,7 +235,7 @@ def cleanup_suspect_counters(db_dir):
             except OSError:
                 pass
 
-    # Remove the suspect dir itself if empty (keep things tidy).
+    # Remove the suspect dir itself if empty (keep things tidy)
     try:
         os.rmdir(suspect_dir)
     except OSError:
@@ -302,7 +311,8 @@ def log_malformed_event(event, db_file, **detail):
 
 
 def datetime_strftime():
-    """ISO8601 timestamp for log records (avoids importing datetime at top)."""
+    """Timestamp "YYYY-MM-DD HH:MM:SS" for log records (avoids importing
+    datetime at top)."""
     import datetime
 
     return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -320,7 +330,8 @@ def _safe_getuser():
 
 def connect_db_file(db_file, mode='read'):
     """
-    Connect specified db_file with read/write mode.
+    Connect db_file in 'read' or 'write' mode (default 'read').
+    Returns (result, conn).
     """
     result = 'passed'
     conn = ''
@@ -355,14 +366,14 @@ def connect_db_file(db_file, mode='read'):
             return result, conn
 
     try:
-        # sqlite3.connect auto-creates the file; track existence beforehand.
+        # sqlite3.connect auto-creates the file; track existence beforehand
         db_file_existed = os.path.exists(db_file)
 
         conn = sqlite3.connect(db_file)
         conn.execute('PRAGMA busy_timeout=30000')
 
-        # New db files: 0o644 so the sampler owner writes, others only read.
-        # Shared multi-user logs (ai_log/run_log) re-chmod to 0o666 themselves.
+        # New db files: 0o644 so the sampler owner writes, others only read
+        # Shared multi-user logs (log.db / run_log.db) re-chmod to 0o666 themselves
         if mode == 'write' and not db_file_existed and os.path.exists(db_file):
             try:
                 os.chmod(db_file, 0o644)
@@ -373,7 +384,7 @@ def connect_db_file(db_file, mode='read'):
         # multi-GB NFS dbs, so it is NOT run on every connect. A malformed db
         # fails on the first write; the write wrappers catch that and call
         # _heal_malformed_db (quick_check → archive → recover → rebuild) then
-        # retry once. Zero cost on the healthy path.
+        # retry once. Zero cost on the healthy path
     except Exception as error:
         common.bprint(f'Failed on connecting database file "{db_file}".', level='Error')
         common.bprint(error, color='red', display_method=1, indent=9)
@@ -400,11 +411,12 @@ def _heal_malformed_db(db_file, conn):
                              the write on the original conn (closed+reopened).
       - ('locked', '')     : malformed but under MALFORMED_CONFIRM_THRESHOLD;
                              caller should skip this write (next run retries).
-      - ('failed', '')      : recovered+rebuilt (or recovery failed); caller
-                             should reconnect via connect_db_file and retry once.
+      - ('failed', '')      : the heal failed, or the rebuilt db could not be
+                             connected; caller should give up this write (the
+                             next run reconnects via connect_db_file).
     """
     # Caller's conn is no longer trusted after a failed write — close it and
-    # open a fresh one for quick_check.
+    # open a fresh one for quick_check
     if conn is not None and conn != '':
         try:
             conn.close()
@@ -420,7 +432,7 @@ def _heal_malformed_db(db_file, conn):
         is_malformed = (not check_result) or (str(check_result[0]).strip() != 'ok')
     except Exception:
         # Retry once — a transient I/O error on NFS / a still-running
-        # write should not be misread as permanent corruption.
+        # write should not be misread as permanent corruption
         try:
             conn.close()
         except Exception:
@@ -435,7 +447,7 @@ def _heal_malformed_db(db_file, conn):
             is_malformed = True
 
     # Healthy db: the write failure was transient (not corruption). Close the
-    # check conn and let the caller retry on a freshly opened connection.
+    # check conn and let the caller retry on a freshly opened connection
     if not is_malformed:
         _malformed_suspect_count(db_file, mode='reset')
 
@@ -477,8 +489,8 @@ def _heal_malformed_db(db_file, conn):
 
     # Recover readable rows into a temp db, then swap it in for the
     # corrupt one. .recover (CLI) isn't available here; row-by-row
-    # fetchone yields everything up to the first corrupt page.
-    # Whatever is recovered is kept; the rest is lost.
+    # fetchone yields everything up to the first corrupt page
+    # Whatever is recovered is kept; the rest is lost
     recovered_db = str(db_file) + '.recovering.' + str(int(time.time()))
     recovered_rows = 0
     new_conn = None
@@ -498,7 +510,7 @@ def _heal_malformed_db(db_file, conn):
             except Exception:
                 pass
 
-    # Swap: remove the corrupt file, move the recovered db into place.
+    # Swap: remove the corrupt file, move the recovered db into place
     try:
         os.remove(db_file)
 
@@ -520,7 +532,7 @@ def _heal_malformed_db(db_file, conn):
 
     log_malformed_event('recover_ok', db_file, rows_recovered=recovered_rows)
 
-    # Connect the rebuilt db.
+    # Connect the rebuilt db
     try:
         conn = sqlite3.connect(db_file)
         conn.execute('PRAGMA busy_timeout=30000')
@@ -594,8 +606,8 @@ def get_sql_table_key_list(db_file, orig_conn, table_name, key):
     key_list = []
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
-    # 'locked' (fresh -journal) 与 'failed' 都不可用,统一提前返回,避免对
-    # conn='' / curs=None 调用 .execute() / .close() 抛 AttributeError。
+    # 'locked' (fresh -journal) and 'failed' both mean unusable; return early
+    # so we never call .execute() / .close() on conn='' / curs=None
     if result != 'passed':
         return key_list
 
@@ -621,8 +633,8 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=None, select_con
     data_dic = {}
     (result, conn, curs) = connect_preprocess(db_file, orig_conn)
 
-    # 'locked' (fresh -journal) 与 'failed' 都不可用,统一提前返回,避免对
-    # conn='' / curs=None 调用 .execute() / .close() 抛 AttributeError。
+    # 'locked' (fresh -journal) and 'failed' both mean unusable; return early
+    # so we never call .execute() / .close() on conn='' / curs=None
     if result != 'passed':
         return data_dic
 
@@ -674,7 +686,8 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=None, select_con
 
 def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
     """
-    Create a table if it not exists, initialization the setting.
+    Create the table if it does not exist, using init_string as the column
+    definition.
     """
     (result, conn, curs) = connect_preprocess(db_file, orig_conn, mode='write')
 
@@ -693,7 +706,7 @@ def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
         common.bprint(error, color='red', display_method=1, indent=9)
 
         # Passive self-heal: heal malformed db and retry once. Skipped for
-        # orig_conn callers (healing a shared conn mid-transaction is unsafe).
+        # orig_conn callers (healing a shared conn mid-transaction is unsafe)
         if orig_conn == '':
             (heal_result, healed_conn) = _heal_malformed_db(db_file, conn)
 
@@ -714,7 +727,7 @@ def create_sql_table(db_file, orig_conn, table_name, init_string, commit=True):
                 except Exception:
                     pass
     finally:
-        if commit and orig_conn == '':
+        if orig_conn == '':
             conn.close()
 
 
@@ -739,7 +752,7 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
         common.bprint(error, color='red', display_method=1, indent=9)
 
         # Passive self-heal: heal malformed db and retry once. Skipped for
-        # orig_conn callers (healing a shared conn mid-transaction is unsafe).
+        # orig_conn callers (healing a shared conn mid-transaction is unsafe)
         if orig_conn == '':
             (heal_result, healed_conn) = _heal_malformed_db(db_file, conn)
 
@@ -760,7 +773,7 @@ def insert_into_sql_table(db_file, orig_conn, table_name, value_string, commit=T
                 except Exception:
                     pass
     finally:
-        if commit and orig_conn == '':
+        if orig_conn == '':
             conn.close()
 
 
@@ -789,7 +802,7 @@ def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', wher
             # (the common case this catches). quick_check → recover → rebuild, then
             # retry the write once on the rebuilt connection. orig_conn callers
             # manage their own connection — for them, just report and let the next
-            # run retry (healing a shared orig_conn mid-transaction is unsafe).
+            # run retry (healing a shared orig_conn mid-transaction is unsafe)
             if orig_conn == '':
                 (heal_result, healed_conn) = _heal_malformed_db(db_file, conn)
 
@@ -810,7 +823,7 @@ def update_sql_table_data(db_file, orig_conn, table_name, set_condition='', wher
                     except Exception:
                         pass
         finally:
-            if commit and orig_conn == '':
+            if orig_conn == '':
                 conn.close()
 
 

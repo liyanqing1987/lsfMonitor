@@ -1,23 +1,26 @@
 # -*- coding: utf-8 -*-
-#
-# common_run_log.py
-#
-# Author: liyanqing.1987
-# Created: 2026-08-31
-# Description: RUN panel command history database operations. Stores the
-#   command-history index in a shared SQLite db (<db_path>/run_log.db), one
-#   per-user table (run_history_<user>). Full stdout detail stays in text
-#   files (<db_path>/run/<user>/<date>_<time>.log); only its path is stored.
+################################
+# File Name   : common_run_log.py
+# Author      : liyanqing.1987
+# Created On  : 2026-08-31
+# Description : RUN panel command history database operations. Stores the
+#               command-history index in a shared SQLite db
+#               (<db_path>/run_log.db), one per-user table
+#               (run_history_<user>). Full stdout detail stays in text files
+#               (<db_path>/run/<user>/<date>_<time>.log); only its path is
+#               stored
+################################
 
 import os
 import sys
 import json
 
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
+if 'LSFMONITOR_INSTALL_PATH' in os.environ:
+    sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
 from common import common_sqlite3
 
 # 'id' is an auto-increment surrogate key (not a business key) so INSERT OR
-# IGNORE never drops a record — a user can legitimately run two commands/sec.
+# IGNORE never drops a record — a user can legitimately run two commands/sec
 TABLE_KEY_LIST = ['id', 'date', 'time', 'user', 'login_user', 'command', 'hosts', 'log']
 TABLE_KEY_TYPE_LIST = ['INTEGER PRIMARY KEY AUTOINCREMENT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
 
@@ -58,7 +61,7 @@ def _ensure_user_table(db_file, user):
 
     if not db_file_exists and os.path.exists(db_file):
         try:
-            # 0o666 (sticky bit is for dirs, not files): every user writes here.
+            # 0o666 (sticky bit is for dirs, not files): every user writes here
             os.chmod(db_file, 0o666)
         except PermissionError:
             pass
@@ -106,7 +109,7 @@ def search_run_history(db_file, user='', date_start='', date_end='', keyword='',
         conditions.append(f"date <= '{safe_date_end}'")
 
     if keyword:
-        # Escape LIKE wildcards so a literal "100%" search works.
+        # Escape LIKE wildcards so a literal "100%" search works
         safe_keyword = (keyword.replace('\\', '\\\\')
                                 .replace('%', '\\%')
                                 .replace('_', '\\_')
@@ -146,4 +149,4 @@ def search_run_history(db_file, user='', date_start='', date_end='', keyword='',
 
     entries.sort(key=lambda e: (e.get('date', ''), e.get('time', '')), reverse=True)
 
-    return entries[:limit]
+    return entries[:int(limit)]

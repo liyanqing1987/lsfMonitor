@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-#
-# common_db_path.py
-#
-# Author: liyanqing.1987
-# Created: 2026-09-03
-# Description: Resolve a subsystem's db_path with fallback to the top-level
-#               config.py.
+################################
+# File Name   : common_db_path.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-03
+# Description : Resolve a subsystem's db_path with fallback to the top-level
+#               config.py
 #
 #   Priority: config_<name>.db_path (if non-empty) > config.db_path/<name>
-#   > $LSFMONITOR_INSTALL_PATH/db/<name> (last resort when neither is set).
+#   > $LSFMONITOR_INSTALL_PATH/db/<name> (last resort when neither is set)
+################################
 
 import os
 

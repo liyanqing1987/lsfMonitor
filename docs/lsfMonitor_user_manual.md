@@ -638,6 +638,14 @@ bmonitor菜单栏包含File，Setup，Function，Help四部分。
 - **Function**：包含"Check Pend reason"、"Check Slow reason"和"Check Fail reason"三个功能。
 - **Help**：包含"Version"和"About lsfMonitor"两个信息项。
 
+表格通用操作（适用于所有页面的数据表格）：
+
+- 点击任意列标题，可以按该列排序（再次点击切换升序/降序）。
+- 列宽可以用鼠标拖拽调整；各列设有最小宽度下限，列标题不会被截断。
+- 手动调整后的列宽在刷新或重新查询后保持不变，不会被重置。
+- 右键表格任意位置，选择 "Reset column widths" 可以一键恢复默认列宽。
+- 数据加载/刷新期间排序暂时关闭，加载完成后恢复，保证各列数据不会错位。
+
 #### 4.2.4 LSF - JOB页
 
 JOB页主要用于查看指定job的详细信息，以及job内存用量和idle_factor（cputime/runtime）的历史曲线。
@@ -799,6 +807,7 @@ feature 利用率百分比统计，表头为 Feature / Vendor / Ut(%)，与采�
 
 - 顶部按 Status/Queue/Group 多选筛选主机（与 LSF-HOSTS tab 的筛选一致），勾选要执行的主机后输入命令并点 Run。
 - 选中主机后可只对勾选项执行；Output 列显示每台主机的命令输出，Result 列显示 OK/FAIL/TIMEOUT/UNREACH。
+- 点击任意列标题，可以按列排序执行结果（如按 Result 列快速找出失败主机）。
 - "Select" 表达式可按结果过滤显示（如 `'error' in output`、`result == 'FAIL'`、`startswith(host, 'n01')`），匹配行显示并勾选、不匹配行隐藏。表达式为空时显示全部行。
 - ssh 基命令、单主机超时、并发上限由 `config_run.py` 的 `default_ssh_command` / `parallel_timeout` / `max_parallel` 控制。
 - 每次执行的命令与结果会写入命令历史库（可在 LOG 子页检索）。
@@ -1328,7 +1337,7 @@ HOSTS页中的Mem值跟LOAD页中的mem值信息来源不一样，作用也不�
 | V2.2 | 2026.05 | AI页面，支持知识检索/信息查询/状态分析/任务执行 | 新增RAG和skills，建议重新安装 |
 | V2.3 | 2026.06 | bsample -m增加IDLE_FACTOR采样；bmonitor JOB页增加IDLE_FACTOR曲线展示；AI ANALYZE 分析报告（cluster/user/job/queue四类一键体检报告，GUI ANALYZE tab及bsample -A） | job_data目录取代job_mem目录 |
 | V2.4 | 2026.08 | host group支持：bsample -gH采样host group映射(落group_host_mapping.db)；HOSTS页增加GROUP列及Group下拉复选框(与Queue取交集筛选)；UTILIZATION页增加Group下拉复选框(与Queue互斥),支持按Queue/Group两个维度统计utilization；Queue/Group一方空选时自动切换到另一方维度(便于按Group维度展示全部) | 需在crontab中补充`bsample -gH`调度 |
-| V3.0 | 2026.09 | 新增 bmonitor_cli 命令行工具（实时查询 + db 历史数据查询子命令组，输出 JSON，面向脚本/AI）；修复 jobs 状态过滤（STAT列）、hosts --sort-load（ut百分号解析）、bprint 污染 stdout 等问题；RAG 向量库迁移至 db/ai/rag/ 并用 .gitignore 排除 | 无 |
+| V3.0 | 2026.09 | 新增 bmonitor_cli 命令行工具（实时查询 + db 历史数据查询子命令组，输出 JSON，面向脚本/AI）；修复 jobs 状态过滤（STAT列）、hosts --sort-load（ut百分号解析）、bprint 污染 stdout 等问题；RAG 向量库迁移至 db/ai/rag/ 并用 .gitignore 排除；表格列宽管理重构（列宽刷新后保持、逐列最小宽度下限、右键恢复默认列宽）；RUN 页启用表头排序 | 无 |
 |        |         |                                                              |                                    |
 
 ### 附2. LSF任务exit code含义

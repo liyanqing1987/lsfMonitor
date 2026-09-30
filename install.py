@@ -23,7 +23,7 @@ def read_args():
 
     parser.add_argument('-p', '--prefix',
                         default=CWD,
-                        help='Specify lsfMonitor install path on config file, default is current directory.')
+                        help='Specify the lsfMonitor install path (recorded in the generated config files); defaults to the current directory.')
     parser.add_argument('-c', '--clean',
                         action='store_true',
                         default=False,
@@ -62,7 +62,9 @@ class Installation():
             'tools/rag_builder',
             'tools/seedb'
         ]
-        # One config file per sidebar tab, loaded by common_config.load_config.
+        # One config file per sidebar tab (lsf/license/run/ai), loaded by
+        # common_config.load_config; config.py holds shared top-level defaults
+        # and is not loaded through load_config
         self.lsf_config_file = os.path.join(CWD, 'config', 'config_lsf.py')
         self.license_config_file = os.path.join(CWD, 'config', 'config_license.py')
         self.run_config_file = os.path.join(CWD, 'config', 'config_run.py')
@@ -128,7 +130,6 @@ class Installation():
             print(f'    Generate "{tool_path}".')
 
             try:
-                # Ensure directory exists
                 os.makedirs(os.path.dirname(tool_path), exist_ok=True)
 
                 with open(tool_path, 'w') as SP:
@@ -201,7 +202,7 @@ db_path = "{db_path}"
         unconditionally (not gated by config file existence) so a re-install
         still fixes db/ permissions.
 
-        Golden permission spec: docs/db_permissions.md (single source of truth).
+        Golden permission spec: docs/lsfMonitor_user_manual.md 附3.
 
         Also fix the mode of pre-existing shared db subdirs to 1777 if they
         exist — e.g. after a `cp -r` that stripped the sticky/write bits via
@@ -225,9 +226,9 @@ db_path = "{db_path}"
         except Exception as warning:
             print(f'    *Warning*: Failed on opening write permission for "{db_root}": {warning}')
 
-        # Shared db subdirs that must be 1777 (shared db files, multi-user write).
+        # Shared db subdirs that must be 1777 (shared db files, multi-user write)
         # Only fix mode if the dir already exists; do NOT create them here —
-        # each tool creates its own on first use.
+        # each tool creates its own on first use
         for name in ('ai', 'log', 'run'):
             sub = os.path.join(db_root, name)
 
@@ -241,7 +242,7 @@ db_path = "{db_path}"
         #   - ai_report/ and each <type>/ (cluster/job/queue/user)
         #   - rag/  (RAG index output, multi-user write)
         # A `cp -r` of the db tree leaves these at 0o755 via umask; without
-        # this fix, non-owner users cannot write AI reports / RAG files.
+        # this fix, non-owner users cannot write AI reports / RAG files
         for name in ('ai_report', 'rag'):
             top = os.path.join(db_root, 'ai', name)
 
@@ -258,6 +259,7 @@ db_path = "{db_path}"
         try:
             for entry in os.listdir(path):
                 sub = os.path.join(path, entry)
+
                 if os.path.isdir(sub) and not os.path.islink(sub):
                     yield sub
         except OSError:
@@ -289,7 +291,7 @@ cleanup_expire_days = {'job': 30, 'job_data': 30, 'user': 365, 'queue': 365, 'qu
             sys.exit(1)
 
         # Ensure config/lsf/ exists for LSF subsystem data files
-        # (exit_code.yaml, term_signal.yaml).
+        # (exit_code.yaml, term_signal.yaml)
         lsf_data_dir = os.path.join(self.prefix, 'config', 'lsf')
 
         try:
@@ -410,8 +412,7 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
 
     def gen_license_config_files(self):
         """
-        Generate license subsystem data files (LM_LICENSE_FILE, utilization
-        filter files) under <prefix>/config/.
+        Generate the license subsystem LM_LICENSE_FILE under <prefix>/config/.
         """
         config_dir = os.path.join(CWD, 'config')
 
@@ -419,7 +420,7 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
 
         self._gen_license_text_file(lm_license_file, '# Example:\n# 5280@lic_server1\n# 27020@lic_server2\n# 1717@lic_server3\n\n')
 
-        # Ensure config/license/ exists for license subsystem data files.
+        # Ensure config/license/ exists for license subsystem data files
         new_license_dir = os.path.join(config_dir, 'license')
         os.makedirs(new_license_dir, exist_ok=True)
 

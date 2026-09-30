@@ -5,7 +5,7 @@
 # Created On : 2026-08-24
 # Description : AppContext holds shared state across panels so they can access
 #               cluster info, db paths and each other without depending on
-#               MainWindow directly.
+#               MainWindow directly
 ################################
 
 
@@ -19,13 +19,15 @@ class AppContext:
         self.install_path = install_path
         self.dark_mode = dark_mode
 
-        # Populated by LsfPanel during init.
+        # tool/cluster/cluster_db_path: populated by LsfPanel during init
+        # license_dic: reserved, currently left empty (LicensePanel keeps its
+        # own self.license_dic)
         self.tool = None
         self.cluster = None
         self.cluster_db_path = None
         self.license_dic = {}
 
-        # Sibling panel refs, wired up by MainWindow after all panels built.
+        # Sibling panel refs, wired up by MainWindow after all panels built
         self.lsf_panel = None
         self.license_panel = None
         self.run_panel = None

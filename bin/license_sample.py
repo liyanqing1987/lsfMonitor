@@ -22,7 +22,7 @@ from common import common_license
 from common import common_sqlite3
 
 # License config loaded via the unified loader (base config/config_license.py
-# overlaid by ~/.lsfMonitor/config/config_license.py).
+# overlaid by ~/.lsfMonitor/config/config_license.py)
 config = common_config.load_config('license')
 os.environ['PYTHONUNBUFFERED'] = '1'
 
@@ -105,7 +105,7 @@ class Sampling:
         self.utilization_sampling = utilization_sampling
         self.cleanup_sampling = cleanup_sampling
 
-        # Get sample time.
+        # Get sample time
         self.sample_second = int(time.time())
         self.sample_date = datetime.datetime.today().strftime('%Y%m%d')
         self.sample_time = datetime.datetime.today().strftime('%Y%m%d_%H%M%S')
@@ -113,7 +113,7 @@ class Sampling:
         # Data retention days for cleanup. Mirrors bsample's mechanism: a dict
         # keyed by item name, overridable via config_license.py's
         # cleanup_expire_days. license_sample has no cluster reload so we read
-        # it directly here.
+        # it directly here
         default_cleanup_expire_days = {
             'usage': 90,
             'utilization': 90,
@@ -126,13 +126,13 @@ class Sampling:
         self.cleanup_expire_days = default_cleanup_expire_days
 
         # Cleanup mode does not need live license data (avoids a slow lmstat
-        # round-trip just to delete old rows).
+        # round-trip just to delete old rows)
         if self.cleanup_sampling and not self.usage_sampling and not self.utilization_sampling:
             self.license_dic = {}
 
             return
 
-        # Get self.license_dic.
+        # Get self.license_dic
         common.bprint('>>> Sampling license usage information ...', date_format='%Y-%m-%d %H:%M:%S')
 
         LM_LICENSE_FILE_file = str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/config/license/LM_LICENSE_FILE'
@@ -140,7 +140,7 @@ class Sampling:
         # Collect non-empty/non-comment lines first; only override the
         # LM_LICENSE_FILE environment variable when the platform file
         # actually yields servers. An empty (comment-only) file must fall
-        # back to the shell's LM_LICENSE_FILE instead of clobbering it.
+        # back to the shell's LM_LICENSE_FILE instead of clobbering it
         parsed_servers = []
 
         if os.path.exists(LM_LICENSE_FILE_file):
@@ -172,7 +172,7 @@ class Sampling:
                 common.bprint(f'Create directory "{db_path}".', date_format='%Y-%m-%d %H:%M:%S', indent=4)
                 # 0o755: license data is sampled by the dedicated sampler (owner)
                 # and only read by others via the GUI. makedirs(mode=) sets only
-                # the leaf; intermediate dirs follow umask (0o755).
+                # the leaf; intermediate dirs follow umask (0o755)
                 os.makedirs(db_path, mode=0o755, exist_ok=True)
                 os.chmod(db_path, 0o755)
             except Exception as error:
@@ -192,7 +192,7 @@ class Sampling:
         feature. usage/utilization use sample_second (INTEGER); utilization_day
         uses sample_date (TEXT 'YYYYMMDD').
         """
-        # resolve_db_path: config_license.db_path if set, else config.py db_path/license.
+        # resolve_db_path: config_license.db_path if set, else config.py db_path/license
         db_root = common_db_path.resolve_db_path(config, 'license')
         license_server_root = db_root + '/license_server'
 
@@ -250,7 +250,7 @@ class Sampling:
                             # auto-created when a table uses AUTOINCREMENT; it has
                             # no sample_second/sample_date column and must not be
                             # touched, otherwise the whole-db cleanup aborts on
-                            # "no such column").
+                            # "no such column")
                             if table_name.startswith('sqlite_'):
                                 continue
 
@@ -272,7 +272,7 @@ class Sampling:
 
                 # Sweep stale/orphaned malformed-suspect counter files in this
                 # vendor dir (db files removed above, or features that stopped
-                # sampling). Counter dir is created lazily by the self-heal path.
+                # sampling). Counter dir is created lazily by the self-heal path
                 try:
                     common_sqlite3.cleanup_suspect_counters(vendor_dir)
                 except Exception:
@@ -308,11 +308,10 @@ class Sampling:
                         common.bprint(f'Sampling usage info for "{license_server}/{vendor_daemon}/{feature}" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                         if usage_table_name not in usage_table_list:
-                            # Generate database table title.
+                            # Build the table schema and create the table
                             key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                             common_sqlite3.create_sql_table(usage_db_file, usage_db_conn, usage_table_name, key_string, commit=False)
 
-                            # Insert sql table value.
                             for usage_dic in self.license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info']:
                                 start_second = common_license.switch_start_time(usage_dic['start_time'], compare_second=self.sample_second)
                                 value_list = ['NULL', self.sample_second, self.sample_time, license_server, vendor_daemon, feature, usage_dic['user'], usage_dic['submit_host'], usage_dic['execute_host'], usage_dic['license_num'], usage_dic['version'], start_second, usage_dic['start_time']]
@@ -321,7 +320,7 @@ class Sampling:
                         else:
                             # Row-count cleanup (100000-item cap) removed; expiry
                             # is now time-based via `license_sample -c` reading
-                            # config_license.py's cleanup_expire_days.
+                            # config_license.py's cleanup_expire_days
 
                             for usage_dic in self.license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info']:
                                 select_condition = "WHERE server=? AND vendor=? AND feature=? AND user=? AND submit_host=? AND execute_host=? AND num=? AND version=? AND start_time=?"
@@ -329,12 +328,11 @@ class Sampling:
                                 usage_db_data_dic = common_sqlite3.get_sql_table_data(usage_db_file, usage_db_conn, usage_table_name, ['server', 'vendor', 'feature'], select_condition, select_params=select_params)
 
                                 if usage_db_data_dic:
-                                    # Replace sql table value.
+                                    # Replace sql table value
                                     set_condition = "SET sample_second='" + str(self.sample_second) + "', sample_time='" + str(self.sample_time) + "'"
                                     where_condition = "WHERE server='" + _q(license_server) + "' AND vendor='" + _q(vendor_daemon) + "' AND feature='" + _q(feature) + "' AND user='" + _q(usage_dic['user']) + "' AND submit_host='" + _q(usage_dic['submit_host']) + "' AND execute_host='" + _q(usage_dic['execute_host']) + "' AND num='" + _q(usage_dic['license_num']) + "' AND version='" + _q(usage_dic['version']) + "' AND start_time='" + _q(usage_dic['start_time']) + "'"
                                     common_sqlite3.update_sql_table_data(usage_db_file, usage_db_conn, usage_table_name, set_condition, where_condition, commit=False)
                                 else:
-                                    # Insert sql table value.
                                     start_second = common_license.switch_start_time(usage_dic['start_time'], compare_second=self.sample_second)
                                     value_list = ['NULL', self.sample_second, self.sample_time, license_server, vendor_daemon, feature, usage_dic['user'], usage_dic['submit_host'], usage_dic['execute_host'], usage_dic['license_num'], usage_dic['version'], start_second, usage_dic['start_time']]
                                     value_string = common_sqlite3.gen_sql_table_value_string(value_list, autoincrement=True)
@@ -376,14 +374,12 @@ class Sampling:
                         common.bprint(f'Sampling utilization info for "{license_server}/{vendor_daemon}/{feature}" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
                         # Row-count cleanup (100000-item cap) removed; expiry is
-                        # now time-based via `license_sample -c`.
+                        # now time-based via `license_sample -c`
 
-                        # Generate sql table.
                         if utilization_table_name not in utilization_table_list:
                             key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                             common_sqlite3.create_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, key_string, commit=False)
 
-                        # Insert sql table value.
                         value_list = [self.sample_second, self.sample_time, feature_dic['issued'], feature_dic['in_use'], feature_dic['utilization']]
                         value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                         common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
@@ -400,7 +396,7 @@ class Sampling:
         Get issued/in_use info from self.license_dic.
         Reture issued/in_use/utilization info with feature_utilization_dic.
         """
-        # Get feature issed/in_use information.
+        # Get feature issed/in_use information
         feature_utilization_dic = {}
 
         for license_server in self.license_dic.keys():
@@ -411,7 +407,7 @@ class Sampling:
                             feature_utilization_dic.setdefault(feature, [])
                             feature_utilization_dic[feature].append({'issued': feature_dic['issued'], 'in_use': feature_dic['in_use']})
 
-        # Get feature utilization information.
+        # Get feature utilization information
         for (feature, feature_dic_list) in feature_utilization_dic.items():
             feature_utilization_dic[feature] = {}
             issued_sum = 0
@@ -472,29 +468,26 @@ class Sampling:
 
                         common.bprint(f'Counting utilization (day average) info for "{license_server}/{vendor_daemon}/{utilization_day_table_name}" ...', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
-                        # Generate sql table.
                         if utilization_day_table_name not in utilization_day_table_list:
                             key_string = common_sqlite3.gen_sql_table_key_string(key_list, key_type_list)
                             common_sqlite3.create_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, key_string, commit=False)
 
-                            # Insert sql table value.
                             value_list = [self.sample_date, utilization_day_table_dic['issued'], utilization_day_table_dic['in_use'], utilization_day_table_dic['utilization']]
                             value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                             common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
                         else:
                             # Row-count cleanup (3650-item cap) removed; expiry is
-                            # now time-based via `license_sample -c`.
+                            # now time-based via `license_sample -c`
 
                             select_condition = "WHERE sample_date='" + str(self.sample_date) + "'"
                             utilization_day_db_data_dic = common_sqlite3.get_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, ['issued', 'in_use', 'utilization'], select_condition)
 
                             if utilization_day_db_data_dic:
-                                # Replace sql table value.
+                                # Replace sql table value
                                 set_condition = "SET issued='" + str(utilization_day_table_dic['issued']) + "', in_use='" + str(utilization_day_table_dic['in_use']) + "', utilization='" + str(utilization_day_table_dic['utilization']) + "'"
                                 where_condition = "WHERE sample_date='" + str(self.sample_date) + "'"
                                 common_sqlite3.update_sql_table_data(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, set_condition, where_condition, commit=False)
                             else:
-                                # Insert sql table value.
                                 value_list = [self.sample_date, utilization_day_table_dic['issued'], utilization_day_table_dic['in_use'], utilization_day_table_dic['utilization']]
                                 value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                                 common_sqlite3.insert_into_sql_table(utilization_day_db_file, utilization_day_db_conn, utilization_day_table_name, value_string, commit=False)
@@ -529,11 +522,11 @@ class Sampling:
                                 utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
 
                                 for utilization_table_name in utilization_table_list:
-                                    # Get current day issued/in_use/utilization from sqlite3 database.
+                                    # Get current day issued/in_use/utilization from sqlite3 database
                                     utilization_db_data_dic = common_sqlite3.get_sql_table_data(utilization_db_file, utilization_db_conn, utilization_table_name, ['issued', 'in_use', 'utilization'], select_condition)
 
                                     if utilization_db_data_dic:
-                                        # Get issued_sum/in_use_sum/utilization_sum info.
+                                        # Get issued_sum/in_use_sum/utilization_sum info
                                         issued_sum = 0
                                         in_use_sum = 0
                                         utilization_sum = 0
@@ -547,7 +540,7 @@ class Sampling:
                                             in_use_sum += int(utilization_db_data_dic['in_use'][i])
                                             utilization_sum += float(utilization_db_data_dic['utilization'][i])
 
-                                        # Get issued_avg/in_use_avg/utilization_avg info.
+                                        # Get issued_avg/in_use_avg/utilization_avg info
                                         if issued_sum == 'Uncounted':
                                             issued_avg = 'Uncounted'
                                         else:
@@ -564,9 +557,9 @@ class Sampling:
 
     def sampling(self):
         # db_path is resolved per-method via common_db_path.resolve_db_path
-        # (config_license.db_path if set, else config.py db_path/license).
-        # Cleanup runs on the main process (no lmstat needed); sampling
-        # runs in subprocesses. -c can be combined with -u/-U.
+        # (config_license.db_path if set, else config.py db_path/license)
+        # Cleanup and sampling both run in subprocesses; cleanup needs no
+        # lmstat. -c can be combined with -u/-U
         process_list = []
 
         if self.cleanup_sampling:
@@ -604,7 +597,7 @@ def main():
     # Ensure db_path root is 0o1777 before Sampling.sampling() creates
     # license/ subdirs under it. For a custom db_path created on first run,
     # makedirs would otherwise leave the root at 0o755 (umask) and lock out
-    # other sampler accounts from creating their own subsystem subdirs.
+    # other sampler accounts from creating their own subsystem subdirs
     try:
         license_root = common_db_path.resolve_db_path(config, 'license')
         common_db_path.ensure_db_root(os.path.dirname(license_root))

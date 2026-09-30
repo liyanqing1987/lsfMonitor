@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : process_tracer.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Show the process tree for a job / pid and trace process status
+################################
+
 import os
 import re
 import sys
@@ -48,7 +55,7 @@ class ProcessTracer(QMainWindow):
         self.job = job
         self.pid = pid
         # Populated by get_process_info when bsub/ps fails so gen_main_table can
-        # show a warning dialog instead of a silently empty table.
+        # show a warning dialog instead of a silently empty table
         self.trace_error = ''
 
         self.preprocess()
@@ -64,7 +71,7 @@ class ProcessTracer(QMainWindow):
             self.pid_list = self.check_pid(self.pid)
 
     def check_job(self, job):
-        command = 'bjobs -UF ' + str(job)
+        command = 'bjobs -UF ' + shlex.quote(str(job))
         job_dic = common_lsf.get_lsf_bjobs_uf_info(command)
 
         if job not in job_dic:
@@ -83,7 +90,7 @@ class ProcessTracer(QMainWindow):
 
     def check_pid(self, pid):
         pid_list = []
-        command = 'pstree -p ' + str(pid)
+        command = 'pstree -p ' + shlex.quote(str(pid))
 
         (return_code, stdout, stderr) = common.run_command(command)
 
@@ -120,9 +127,9 @@ class ProcessTracer(QMainWindow):
             if bsub_command:
                 command = str(bsub_command) + " '" + str(command) + "'"
             else:
-                # get_bsub_command already printed why (host not ok / no queue).
+                # get_bsub_command already printed why (host not ok / no queue)
                 # Fail loudly instead of silently returning an empty table so
-                # the user sees why Trace produced nothing.
+                # the user sees why Trace produced nothing
                 self.trace_error = 'Cannot build bsub command to reach the execution host (host not ok or no queue). Trace aborted.'
                 common.bprint(self.trace_error, level='Error')
 
@@ -133,7 +140,7 @@ class ProcessTracer(QMainWindow):
         # ps -p returns non-zero (and "PID ... not found" on stderr) when none
         # of the PIDs exist on the host the interactive bsub landed on — e.g. a
         # multi-host job whose PIDs live on a different execution host than the
-        # first one we submitted to. Surface that instead of an empty table.
+        # first one we submitted to. Surface that instead of an empty table
         if return_code != 0 and stderr:
             stderr_text = str(stderr, 'utf-8').strip()
 
@@ -193,24 +200,19 @@ class ProcessTracer(QMainWindow):
         return bsub_command
 
     def init_ui(self):
-        # Gen menubar
         self.gen_menubar()
 
-        # Add main_tab
         self.main_tab = QTabWidget(self)
         self.setCentralWidget(self.main_tab)
 
         self.main_frame = QFrame(self.main_tab)
 
-        # Grid
         main_grid = QGridLayout()
         main_grid.addWidget(self.main_frame, 0, 0)
         self.main_tab.setLayout(main_grid)
 
-        # Generate main_table
         self.gen_main_frame()
 
-        # Show main window
         if self.job:
             self.setWindowTitle('Process Tracer (job:' + str(self.job) + ')')
         elif self.pid:
@@ -222,14 +224,12 @@ class ProcessTracer(QMainWindow):
     def gen_menubar(self):
         menubar = self.menuBar()
 
-        # File
         exit_action = QAction('Exit', self)
         exit_action.triggered.connect(qApp.quit)
 
         file_menu = menubar.addMenu('File')
         file_menu.addAction(exit_action)
 
-        # Setup
         fresh_action = QAction('Refresh', self)
         fresh_action.triggered.connect(self.gen_main_table)
         self.periodic_fresh_timer = QTimer(self)
@@ -240,7 +240,6 @@ class ProcessTracer(QMainWindow):
         setup_menu.addAction(fresh_action)
         setup_menu.addAction(periodic_fresh_action)
 
-        # Help
         about_action = QAction('About process_tracer', self)
         about_action.triggered.connect(self.show_about)
 
@@ -267,10 +266,13 @@ class ProcessTracer(QMainWindow):
     def gen_main_frame(self):
         self.main_table = QTableWidget(self.main_frame)
 
-        # Grid
         main_frame_grid = QGridLayout()
         main_frame_grid.addWidget(self.main_table, 0, 0)
         self.main_frame.setLayout(main_frame_grid)
+
+        # Connect once here: gen_main_table runs on every refresh and a
+        # reconnect there would fire the handler once per refresh on each click
+        self.main_table.itemClicked.connect(self.main_tab_check_click)
 
         self.gen_main_table()
 
@@ -280,23 +282,22 @@ class ProcessTracer(QMainWindow):
         self.main_table.setColumnCount(7)
         self.main_table.setHorizontalHeaderLabels(['USER', 'PID', '%CPU', '%MEM', 'STAT', 'STARTED', 'COMMAND'])
 
-        # Set column width
-        self.main_table.setColumnWidth(1, 70)
-        self.main_table.setColumnWidth(2, 60)
-        self.main_table.setColumnWidth(3, 60)
-        self.main_table.setColumnWidth(4, 60)
-        self.main_table.setColumnWidth(5, 80)
-        self.main_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
-        common_pyqt5.auto_size_table_columns(self.main_table)
+        # Widths/auto-sizing are the table's defaults: apply them once only, a
+        # re-run would bake the user's dragged widths in as the new defaults
+        if not getattr(self, '_main_table_built', False):
+            self.main_table.setColumnWidth(1, 70)
+            self.main_table.setColumnWidth(2, 60)
+            self.main_table.setColumnWidth(3, 60)
+            self.main_table.setColumnWidth(4, 60)
+            self.main_table.setColumnWidth(5, 80)
+            self.main_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+            common_pyqt5.auto_size_table_columns(self.main_table)
+            self._main_table_built = True
 
-        # Set click behavior
-        self.main_table.itemClicked.connect(self.main_tab_check_click)
-
-        # Set item
         self.process_dic = self.get_process_info()
         self.main_table.setRowCount(len(self.process_dic['pid']))
 
-        # Pop a warning dialog instead of a silently black window with empty pid info.
+        # Pop a warning dialog instead of a silently black window with empty pid info
         if not self.process_dic['pid'] and self.trace_error:
             error_msg = self.trace_error
             QTimer.singleShot(0, lambda: QMessageBox.warning(self, 'Process Tracer', error_msg))

@@ -4,7 +4,8 @@
 # Author      : liyanqing.1987
 # Created On  : 2026-08-24
 # Description : AI helpdesk panel. Owns an inner QTabWidget with an 'AI' chat
-#               tab, and contributes an AI menu to the host menubar.
+#               tab and an 'ANALYZE' report tab; its exports go through the
+#               host menubar
 ################################
 
 import os
@@ -21,10 +22,11 @@ from PyQt5.QtGui import QPainter, QPainterPath, QPen, QPixmap, QTextCharFormat, 
 from PyQt5.QtWidgets import QWidget, QGridLayout, QTextEdit, QPushButton, QMessageBox, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QSplitter, QTabWidget, QLineEdit, QFrame, QMenu, QAction, QApplication, QDialog
 
 # QWebEngineView renders HTML reports inline (optional; falls back to browser if
-# absent). Disable GPU compositing to avoid "Xlib: sequence lost" on some X setups.
+# absent). Disable GPU compositing to avoid "Xlib: sequence lost" on some X setups
 os.environ.setdefault('QTWEBENGINE_CHROMIUM_FLAGS', '--disable-gpu')
 
-# root 下 Chromium sandbox 会崩,故 root 时不加载 QWebEngineView,走浏览器降级。
+# The Chromium sandbox crashes under root, so QWebEngineView is not loaded for
+# root and the panel falls back to an external browser
 IS_ROOT = os.geteuid() == 0
 
 try:
@@ -52,8 +54,8 @@ from common import common_pyqt5
 from gui.panel_base import PanelBase
 from gui.theme import PRIMARY, PRIMARY_BG, STATUS_RUN
 
-# lsf config_lsf (db_path, lmstat_*) and ai config_lsf (ai_*). Loaded by panel name so
-# each panel config_lsf lives in its own sys.modules slot.
+# config_lsf (db_path, lmstat_*), config_ai (ai_*) and config_license (lmstat_*)
+# Loaded by panel name so each config_* lives in its own sys.modules slot
 config_lsf = common_config.load_config('lsf')
 config_ai = common_config.load_config('ai')
 config_license = common_config.load_config('license')
@@ -61,8 +63,9 @@ config_license = common_config.load_config('license')
 from gui.version import USER
 
 
-# ANALYZE 子页配置：每个 report kind 的差异收敛到这份 dict，供子 tab 构建、
-# 报告列表加载、analyze 触发/完成文案等统一复用。
+# ANALYZE tab config: all per-report-kind differences live in this dict, shared
+# by sub-tab construction, report-list loading, and the analyze trigger/done
+# labels
 _ANALYZE_TAB_CONFIG_DICT = {
     'job': {
         'title': 'JOB',
@@ -115,14 +118,14 @@ _ANALYZE_TAB_CONFIG_DICT = {
 
 class AiPanel(PanelBase):
     """
-    AI helpdesk panel. Provides an AI chat tab and an AI menu with
-    record search, problem analyze, cluster analyze and record cleanup.
+    AI helpdesk panel. Inner tabs: AI (chat) and ANALYZE (JOB/USER/QUEUE/
+    CLUSTER report generation plus the generated-report list).
     """
 
     def __init__(self, context, parent=None, args=None):
         super().__init__(context, parent)
 
-        # AI state variables.
+        # AI state variables
         self.ai_thread = None
         self.ai_messages = []
         self.ai_doc_chunks = {"chunks": [], "embeddings": None}
@@ -130,7 +133,7 @@ class AiPanel(PanelBase):
         self.ai_configured = False
         self.dark_mode = getattr(args, 'dark_mode', False) if args else False
 
-        # Build the AI chat tab UI and load AI resources.
+        # Build the AI chat tab UI and load AI resources
         self.build_ai_tab()
 
     def apply_entry_args(self, args):
@@ -143,7 +146,7 @@ class AiPanel(PanelBase):
             self.ai_thread.stop()
             self.ai_thread.wait(3000)
 
-    # For AI TAB (begin) #
+    # ---- For AI TAB (begin) ----
     def build_ai_tab(self):
         """
         Generate the AI helpdesk tab.
@@ -154,7 +157,7 @@ class AiPanel(PanelBase):
         # single install can serve multiple clusters with different AI settings
         # (api_base_url / api_key / model). Cluster is populated by LsfPanel
         # during its init; AI panel is lazy-built when first shown, so context
-        # already has it. Falls back to the base config when no override exists.
+        # already has it. Falls back to the base config when no override exists
         cluster = getattr(self.context, 'cluster', None)
 
         if cluster:
@@ -163,32 +166,32 @@ class AiPanel(PanelBase):
             except Exception as error:
                 common.bprint(f'Failed to reload cluster AI config for "{cluster}": {error}', level='Warning')
 
-        # Check if AI is configured.
+        # Check if AI is configured
         self.ai_configured = False
 
         if hasattr(config_ai, 'ai_api_base_url') and config_ai.ai_api_base_url and hasattr(config_ai, 'ai_api_key') and config_ai.ai_api_key and hasattr(config_ai, 'ai_model_name') and config_ai.ai_model_name:
             self.ai_configured = True
 
-        # Container widget for the AI tab.
+        # Container widget for the AI tab
         self.ai_tab = QWidget()
 
-        # Chat display area.
+        # Chat display area
         self.ai_tab_chat_text = QTextEdit(self.ai_tab)
         self.ai_tab_chat_text.setReadOnly(True)
         # Custom context menu: Copy explicitly writes the selection to the
         # system clipboard (QClipboard.Clipboard mode = Ctrl+V target). The
         # default QTextEdit Copy can land in the X11 PRIMARY selection on some
-        # desktops (ETX/X11), so Ctrl+V into a terminal/editor pastes nothing.
+        # desktops (ETX/X11), so Ctrl+V into a terminal/editor pastes nothing
         self.ai_tab_chat_text.setContextMenuPolicy(Qt.CustomContextMenu)
         self.ai_tab_chat_text.customContextMenuRequested.connect(self._chat_context_menu)
         self._create_chat_avatars()
 
         if not self.ai_configured:
-            self.ai_tab_chat_text.setHtml('<p>AI helpdesk is not configured.</p><p>Please set <b>ai_api_base_url</b>, <b>ai_api_key</b>, and <b>ai_model_name</b> in config_lsf.py.</p>')
+            self.ai_tab_chat_text.setHtml('<p>AI helpdesk is not configured.</p><p>Please set <b>ai_api_base_url</b>, <b>ai_api_key</b>, and <b>ai_model_name</b> in config_ai.py.</p>')
         else:
             self.ai_tab_chat_text.setHtml(self._welcome_html())
 
-        # Input area (multi-line, Enter sends, Shift+Enter for newline).
+        # Input area (multi-line, Enter sends, Shift+Enter for newline)
         self.ai_tab_input = AiInputBox(self.ai_tab)
         self.ai_tab_input.setPlaceholderText('Ask AI about LSF jobs, cluster status, licenses ... (Enter to send, Shift+Enter for newline)')
         self.ai_tab_input.setFixedHeight(60)
@@ -197,7 +200,7 @@ class AiPanel(PanelBase):
         if not self.ai_configured:
             self.ai_tab_input.setEnabled(False)
 
-        # Buttons (stacked vertically, matching input height).
+        # Buttons (stacked vertically, matching input height)
         ai_tab_send_button = QPushButton('Send', self.ai_tab)
         ai_tab_send_button.setFixedHeight(28)
         ai_tab_send_button.clicked.connect(self.ai_tab_send_message)
@@ -211,7 +214,7 @@ class AiPanel(PanelBase):
         button_layout.addWidget(ai_tab_clear_button)
         button_layout.setSpacing(4)
 
-        # Layout.
+        # Layout
         ai_tab_grid = QGridLayout()
         ai_tab_grid.setContentsMargins(8, 8, 8, 8)
         ai_tab_grid.setSpacing(6)
@@ -222,9 +225,9 @@ class AiPanel(PanelBase):
         ai_tab_grid.setColumnStretch(1, 1)
         self.ai_tab.setLayout(ai_tab_grid)
 
-        # Chat display + input box: light/dark canvas to match the active theme.
+        # Chat display + input box: light/dark canvas to match the active theme
         # ai_panel previously hardcoded #FFFFFF so the whole panel stayed white in
-        # dark mode while the rest of the window went dark.
+        # dark mode while the rest of the window went dark
         if self.dark_mode:
             chat_bg = '#19232D'
             chat_border = '#3A4452'
@@ -232,11 +235,11 @@ class AiPanel(PanelBase):
             input_border = '#3A4452'
             input_text = '#E6EAF0'
             # AI message bubble + text colours for dark mode (black text on a white
-            # bubble is invisible in dark mode).
+            # bubble is invisible in dark mode)
             self._ai_bubble_bg = '#2A3744'
             self._ai_text_color = '#E6EAF0'
             # User message bubble: a dark blue-grey that sits on the dark canvas
-            # instead of the light-blue PRIMARY_BG, which read as a white block.
+            # instead of the light-blue PRIMARY_BG, which read as a white block
             self._user_bubble_bg = '#2A3D55'
             self._user_text_color = '#E6EAF0'
         else:
@@ -259,7 +262,7 @@ class AiPanel(PanelBase):
             }}
         """)
 
-        # Input box: rounded, soft border, focus accent.
+        # Input box: rounded, soft border, focus accent
         self.ai_tab_input.setStyleSheet(f"""
             QTextEdit {{
                 background: {input_bg};
@@ -273,25 +276,25 @@ class AiPanel(PanelBase):
             }}
         """)
 
-        # Add to main_tab.
+        # Add to main_tab
         self.main_tab.addTab(self.ai_tab, 'AI')
 
-        # Build the ANALYZE tab (Cluster Analyze button + history report list).
+        # Build the ANALYZE tab (Cluster Analyze button + history report list)
         self.build_analyze_tab()
 
-        # Init conversation history.
+        # Init conversation history
         self.ai_messages = [{"role": "system", "content": common_ai.SYSTEM_PROMPT + f"\n\nCurrent user: {USER}"}]
 
-        # AI data root: resolve via config_ai.db_path or fallback to config.py/ai.
-        # RAG vectors live under this root; rag_builder writes into <root>/rag.
+        # AI data root: resolve via config_ai.db_path or fallback to config.py/ai
+        # RAG vectors live under this root; rag_builder writes into <root>/rag
         install_path = os.environ.get('LSFMONITOR_INSTALL_PATH', '.')
 
         ai_db_root = common_db_path.resolve_db_path(config_ai, 'ai')
 
-        # Ensure the root exists (sticky, 1777) so rag_builder can write into it.
+        # Ensure the root exists (sticky, 1777) so rag_builder can write into it
         common.create_dir(ai_db_root, 0o1777)
 
-        # Load AI documents (RAG vectors or keyword chunks) in background.
+        # Load AI documents (RAG vectors or keyword chunks) in background
         common.bprint('Loading AI documents ...', date_format='%Y-%m-%d %H:%M:%S')
         self.ai_doc_chunks = {"chunks": [], "embeddings": None}
         docs_dir = os.path.join(ai_db_root, 'rag')
@@ -299,7 +302,7 @@ class AiPanel(PanelBase):
         self._doc_loader.finished_signal.connect(lambda doc_data: setattr(self, 'ai_doc_chunks', doc_data))
         self._doc_loader.start()
 
-        # Load skills.
+        # Load skills
         common.bprint('Loading AI skills ...', date_format='%Y-%m-%d %H:%M:%S')
         skills_dir = os.path.join(install_path, 'config', 'ai')
         self.ai_skills = common_ai.load_skills(skills_dir)
@@ -315,7 +318,7 @@ class AiPanel(PanelBase):
 
         # Analyze thread tracking: keyed by (kind, target) so multiple jobs
         # can run concurrently (each jobid is its own key). Other kinds
-        # (user/queue/cluster) naturally have a single target.
+        # (user/queue/cluster) naturally have a single target
         self._analyze_threads = {}    # (kind, target) -> AnalyzeReportThread
         self._analyze_msgboxes = {}   # (kind, target) -> QMessageBox
         self._analyze_canceled = {}   # (kind, target) -> bool
@@ -323,12 +326,12 @@ class AiPanel(PanelBase):
 
         # Wrap the QTabWidget in a QFrame (Box+Raised) that paints the tab-
         # strip background. QTabWidget under Fusion+QSS does NOT paint the
-        # area to the right of the last tab — it shows through to the parent.
+        # area to the right of the last tab — it shows through to the parent
         # This is the EXACT same pattern used by lsf_panel.job_tab_frame3 /
         # chartFrame (JOB page MEMORY/IDLE_FACTOR sub-tabs), which is proven
         # to work correctly: the frame (chartFrame/analyzeFrame) fills the
         # right-side gap with a tuned background color, and the QTabWidget's
-        # QSS paints its own QTabBar/QSS area on top.
+        # QSS paints its own QTabBar/QSS area on top
         self.analyze_subtabs_frame = QFrame(self.analyze_tab)
         self.analyze_subtabs_frame.setFrameShadow(QFrame.Raised)
         self.analyze_subtabs_frame.setFrameShape(QFrame.Box)
@@ -339,12 +342,12 @@ class AiPanel(PanelBase):
         self.analyze_subtabs = QTabWidget(self.analyze_subtabs_frame)
         self.analyze_subtabs.setObjectName('analyzeSubTab')
         # BoldAwareTabBar prevents label clipping when font-weight:600 kicks in
-        # on the selected tab (same reason as chartTab / mainTab).
+        # on the selected tab (same reason as chartTab / mainTab)
         self.analyze_subtabs.setTabBar(common_pyqt5.BoldAwareTabBar())
         # Do NOT set autoFillBackground / QPalette on the QTabWidget — that
         # creates two overlapping paint layers (frame + widget) and causes a
         # visible colour seam. chartTab also skips these and relies solely on
-        # the wrapping frame to fill the gap.
+        # the wrapping frame to fill the gap
 
         for kind in ('job', 'user', 'queue', 'cluster'):
             tab = self._build_report_subtab(kind, _ANALYZE_TAB_CONFIG_DICT[kind])
@@ -354,7 +357,7 @@ class AiPanel(PanelBase):
         _frame_layout.addWidget(self.analyze_subtabs)
         layout.addWidget(self.analyze_subtabs_frame, 1)
 
-        # Lazy-load name/queue completers on first edit of the input.
+        # Lazy-load name/queue completers on first edit of the input
         for kind in ('user', 'queue'):
             input_widget = self._analyze_views[kind]['input']
 
@@ -363,7 +366,7 @@ class AiPanel(PanelBase):
 
         self.main_tab.addTab(self.analyze_tab, 'ANALYZE')
 
-        # Populate with existing reports (deferred so it doesn't block startup).
+        # Populate with existing reports (deferred so it doesn't block startup)
         QTimer.singleShot(0, self.load_analyze_reports)
 
     def _build_report_subtab(self, kind, cfg):
@@ -373,7 +376,7 @@ class AiPanel(PanelBase):
         tab_layout.setContentsMargins(8, 8, 8, 8)
         tab_layout.setSpacing(6)
 
-        # Action bar (QFrame matches lsf_panel frame0 style).
+        # Action bar (QFrame matches lsf_panel frame0 style)
         action_frame = QFrame(tab)
         action_frame.setFrameShadow(QFrame.Raised)
         action_frame.setFrameShape(QFrame.Box)
@@ -381,8 +384,9 @@ class AiPanel(PanelBase):
 
         button = QPushButton(cfg['button'], action_frame)
         button.setFixedHeight(28)
-        # QPushButton.clicked 会发射 checked(bool) 参数，须用 _checked 占位接收，
-        # 否则会覆盖默认参数 k，导致 _start_analyze 收到 False。
+        # QPushButton.clicked emits a checked(bool) argument; it must be absorbed
+        # by the _checked placeholder, otherwise it would overwrite the default
+        # argument k and _start_analyze would receive False
         button.clicked.connect(lambda _checked, k=kind: self._start_analyze(k))
         bar.addWidget(button)
 
@@ -445,7 +449,7 @@ class AiPanel(PanelBase):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        # 单行:按钮在前、路径在后,路径自适应折行。
+        # Single row: button first, path after, with the path wrapping
         row = QHBoxLayout()
 
         open_button = QPushButton('用浏览器打开')
@@ -517,7 +521,7 @@ class AiPanel(PanelBase):
                 list_widget.setCurrentRow(0)
             else:
                 # QWebEngineView shows a placeholder HTML; the root fallback
-                # widget shows the message in its path label + disabled button.
+                # widget shows the message in its path label + disabled button
                 if HAS_WEBENGINE:
                     view['web'].setHtml(self._placeholder_html(_ANALYZE_TAB_CONFIG_DICT[kind]['empty']))
                 else:
@@ -600,7 +604,7 @@ class AiPanel(PanelBase):
 
             return
 
-        # Remove from list and refresh.
+        # Remove from list and refresh
         row = list_widget.row(item)
         list_widget.takeItem(row)
         self.load_analyze_reports()
@@ -640,7 +644,7 @@ class AiPanel(PanelBase):
 
             return
 
-        # Update item display + stored path, then refresh web.
+        # Update item display + stored path, then refresh web
         item.setText(new_name.replace('.html', ''))
         item.setData(Qt.UserRole, new_path)
         self.load_analyze_reports()
@@ -689,7 +693,7 @@ class AiPanel(PanelBase):
         """
         # Welcome text colours follow the active theme: the chat canvas is dark
         # (#19232D) in dark mode, so the light-theme dark text (#0F172A/#334155)
-        # would be nearly invisible — switch to light text then.
+        # would be nearly invisible — switch to light text then
         if self.dark_mode:
             text_main = '#CBD5E1'
             text_head = '#FFFFFF'
@@ -763,13 +767,13 @@ class AiPanel(PanelBase):
         text = cursor.selectedText()
 
         # QTextCursor.selectedText uses U+2029 (paragraph separator) for
-        # newlines; convert to '\n' so pasted text has real line breaks.
-        text = text.replace(' ', '\n')
+        # newlines; convert to '\n' so pasted text has real line breaks
+        text = text.replace('\u2029', '\n')
 
         # setText() with no mode arg defaults to QClipboard.Clipboard (the
         # Ctrl+V target). Don't pass mode=QApplication.clipboard().Clipboard —
         # accessing the enum via the instance is unreliable in PyQt5 and can
-        # make setText silently fail.
+        # make setText silently fail
         QApplication.clipboard().setText(text)
 
     def _create_chat_avatars(self):
@@ -777,11 +781,11 @@ class AiPanel(PanelBase):
         size = 32
         doc = self.ai_tab_chat_text.document()
 
-        # Circular clip path.
+        # Circular clip path
         clip = QPainterPath()
         clip.addEllipse(0, 0, size, size)
 
-        # --- User avatar: blue circle, white person silhouette ---
+        # ---- User avatar: blue circle, white person silhouette ----
         user_pm = QPixmap(size, size)
         user_pm.fill(Qt.transparent)
         p = QPainter(user_pm)
@@ -794,7 +798,7 @@ class AiPanel(PanelBase):
         p.drawEllipse(4, 17, 24, 22)
         p.end()
 
-        # --- AI avatar: green circle, white robot face ---
+        # ---- AI avatar: green circle, white robot face ----
         ai_pm = QPixmap(size, size)
         ai_pm.fill(Qt.transparent)
         p = QPainter(ai_pm)
@@ -846,14 +850,14 @@ class AiPanel(PanelBase):
         if not user_text:
             return
 
-        # Don't send while AI is still responding.
+        # Don't send while AI is still responding
         if self.ai_thread and self.ai_thread.isRunning():
             return
 
-        # Display user message (right-aligned light blue bubble with avatar).
-        # The bubble background is PRIMARY_BG (light blue) in both themes, so the
-        # text must be explicitly dark — in dark mode the QTextEdit palette is
-        # light, which would render light text on the light bubble unreadable.
+        # Display user message (right-aligned bubble with avatar). Bubble
+        # background/text come from self._user_bubble_bg / _user_text_color, so
+        # the colors must be set explicitly — the QTextEdit palette would
+        # otherwise render unreadable text on the bubble
         user_html = html.escape(user_text).replace('\n', '<br>')
         self.ai_tab_chat_text.append(
             f'<table width="100%" cellspacing="0" cellpadding="0"><tr>'
@@ -866,22 +870,21 @@ class AiPanel(PanelBase):
         )
         self.ai_tab_input.clear()
 
-        # Log the question.
-
-        # Track timing and tool calls for the current question.
+        # Track timing and tool calls for the current question
         self._ai_send_time = time.time()
 
         self._current_ai_question = user_text
         self._current_ai_tool_calls = []
 
-        # Add to messages.
+        # Add to messages
         self.ai_messages.append({"role": "user", "content": user_text})
 
-        # Trim context if too long (keep system prompt + last 30 messages).
+        # Trim context if too long (keep system prompt + last 30 messages)
         if len(self.ai_messages) > 40:
             self.ai_messages = [self.ai_messages[0]] + self.ai_messages[-30:]
 
-        # Get config_lsf.
+        # Dangerous-command list and lmstat invocation come from config_ai /
+        # config_license
         dangerous_commands = common_ai.DEFAULT_DANGEROUS_COMMANDS
 
         if hasattr(config_ai, 'ai_dangerous_commands') and config_ai.ai_dangerous_commands:
@@ -890,10 +893,11 @@ class AiPanel(PanelBase):
         lmstat_path = config_license.lmstat_path if hasattr(config_license, 'lmstat_path') else 'lmstat'
         lmstat_bsub_command = config_license.lmstat_bsub_command if hasattr(config_license, 'lmstat_bsub_command') else ''
 
-        # Insert "AI" label and prepare block format for streaming text.
+        # Insert the AI avatar + "Thinking." placeholder and prepare the
+        # streaming cell
         self._ai_tab_start_ai_block()
 
-        # Start AI thread.
+        # Start AI thread
         embedding_model = config_ai.ai_embedding_model_name if hasattr(config_ai, 'ai_embedding_model_name') else ''
         embedding_api_base_url = config_ai.ai_embedding_api_base_url if hasattr(config_ai, 'ai_embedding_api_base_url') else ''
         embedding_api_key = config_ai.ai_embedding_api_key if hasattr(config_ai, 'ai_embedding_api_key') else ''
@@ -930,7 +934,7 @@ class AiPanel(PanelBase):
         cursor = self.ai_tab_chat_text.textCursor()
         cursor.movePosition(cursor.End)
 
-        # Two-column table: left=avatar, right=gray message area (mirrors user HTML table).
+        # Two-column table: left=avatar, right=gray message area (mirrors user HTML table)
         table_fmt = QTextTableFormat()
         table_fmt.setBorder(0)
         table_fmt.setCellPadding(6)
@@ -944,7 +948,7 @@ class AiPanel(PanelBase):
         ])
         table = cursor.insertTable(1, 2, table_fmt)
 
-        # Left cell: avatar.
+        # Left cell: avatar
         avatar_cursor = table.cellAt(0, 0).firstCursorPosition()
         img_fmt = QTextImageFormat()
         img_fmt.setName("ai_avatar")
@@ -952,7 +956,7 @@ class AiPanel(PanelBase):
         img_fmt.setHeight(32)
         avatar_cursor.insertImage(img_fmt)
 
-        # Right cell: soft gray-blue message bubble (matches theme BG_TABLE_ALT).
+        # Right cell: soft gray-blue message bubble (matches theme BG_TABLE_ALT)
         self._ai_msg_cell = table.cellAt(0, 1)
         cell_fmt = self._ai_msg_cell.format()
         cell_fmt.setBackground(QColor(self._ai_bubble_bg))
@@ -960,7 +964,7 @@ class AiPanel(PanelBase):
 
         cursor = self._ai_msg_cell.firstCursorPosition()
 
-        # Animated status placeholder in gray italic.
+        # Animated status placeholder in gray italic
         self._ai_thinking_pos = cursor.position()
         self._ai_thinking_fmt = QTextCharFormat()
         self._ai_thinking_fmt.setForeground(QColor('#999999'))
@@ -970,14 +974,14 @@ class AiPanel(PanelBase):
         self._ai_first_token = True
         self._ai_thinking_dots = 1
 
-        # Start dot animation timer.
+        # Start dot animation timer
         if not hasattr(self, '_ai_thinking_timer'):
             self._ai_thinking_timer = QTimer(self)
             self._ai_thinking_timer.timeout.connect(self._ai_tab_animate_thinking)
 
         self._ai_thinking_timer.start(500)
 
-        # Normal text format for streaming content.
+        # Normal text format for streaming content
         self._ai_text_fmt = QTextCharFormat()
         self._ai_text_fmt.setForeground(QColor(self._ai_text_color))
 
@@ -989,7 +993,7 @@ class AiPanel(PanelBase):
         if hasattr(self, '_ai_msg_cell') and self._ai_msg_cell:
             return self._ai_msg_cell.lastCursorPosition().position()
 
-        # Fallback: document end.
+        # Fallback: document end
         return self.ai_tab_chat_text.document().characterCount() - 1
 
     def _ai_tab_animate_thinking(self):
@@ -1057,17 +1061,17 @@ class AiPanel(PanelBase):
         self._ai_thinking_dots = 0
         self._ai_tab_animate_thinking()
 
-        # Track tool call for AI log.
+        # Track tool call for AI log
         self._current_ai_tool_calls.append({'name': tool_name, 'args': description, 'result': ''})
 
     def ai_tab_on_tool_result(self, tool_name, result):
         """Tool call finished - start a new AI block for the response."""
 
-        # Update the latest tool call with its result.
+        # Update the latest tool call with its result
         if self._current_ai_tool_calls:
             self._current_ai_tool_calls[-1]['result'] = result[:1000]
 
-        # Start new AI block (shows Thinking... while API processes tool results).
+        # Start new AI block (shows Thinking... while API processes tool results)
         self._ai_tab_start_ai_block()
 
     def ai_tab_on_sources(self, sources):
@@ -1081,14 +1085,14 @@ class AiPanel(PanelBase):
 
         cursor = self._ai_msg_cell.lastCursorPosition()
 
-        # Separator line.
+        # Separator line
         cursor.insertBlock()
         sep_fmt = QTextCharFormat()
         sep_fmt.setForeground(QColor('#AAAAAA'))
         sep_fmt.setFontPointSize(8)
         cursor.insertText('─' * 40, sep_fmt)
 
-        # "Sources:" label.
+        # "Sources:" label
         cursor.insertBlock()
         label_fmt = QTextCharFormat()
         label_fmt.setForeground(QColor('#666666'))
@@ -1096,13 +1100,13 @@ class AiPanel(PanelBase):
         label_fmt.setFontItalic(True)
         cursor.insertText('Sources:', label_fmt)
 
-        # Item format.
+        # Item format
         item_fmt = QTextCharFormat()
         item_fmt.setForeground(QColor('#888888'))
         item_fmt.setFontPointSize(8)
         item_fmt.setFontItalic(True)
 
-        # RAG sources (deduplicated by source+page).
+        # RAG sources (deduplicated by source+page)
         seen = set()
 
         for meta in rag_sources:
@@ -1122,7 +1126,7 @@ class AiPanel(PanelBase):
 
             cursor.insertText(text, item_fmt)
 
-        # Skill sources.
+        # Skill sources
         for skill_name in skills:
             cursor.insertBlock()
             cursor.insertText(f'  · Skill: {skill_name}', item_fmt)
@@ -1131,19 +1135,19 @@ class AiPanel(PanelBase):
 
     def ai_tab_on_finished(self):
         """Called when AI response is complete."""
-        # Render sources block if any sources were collected.
+        # Render sources block if any sources were collected
         rag_sources = self._ai_sources.get('rag_sources', []) if self._ai_sources else []
         skills = self._ai_sources.get('skills', []) if self._ai_sources else []
 
         if rag_sources or skills:
             self._ai_tab_render_sources(rag_sources, skills)
 
-        # Append total elapsed time.
+        # Append total elapsed time
         if hasattr(self, '_ai_send_time') and self._ai_send_time:
             elapsed = time.time() - self._ai_send_time
             time_text = f'⏱ Total time: {elapsed:.1f}s'
 
-            # Always append LLM performance metrics.
+            # Always append LLM performance metrics
             if self.ai_thread and hasattr(self.ai_thread, '_timing_stats'):
                 stats = self.ai_thread._timing_stats
                 first_token_max = stats.get('llm_first_token_max', 0)
@@ -1178,7 +1182,7 @@ class AiPanel(PanelBase):
             cursor.insertHtml(f'<span style="color: #888888; font-size: 11px;">{time_text}</span>')
             self.ai_tab_chat_text.setTextCursor(cursor)
 
-        # Add a blank separator line.
+        # Add a blank separator line
         cursor = self.ai_tab_chat_text.textCursor()
         cursor.movePosition(cursor.End)
         cursor.insertBlock(QTextBlockFormat())
@@ -1216,7 +1220,7 @@ class AiPanel(PanelBase):
         # time out. We must NEVER drop the last Python reference to a still-
         # running QThread (that raises "QThread: Destroyed while thread is
         # still running" and crashes the app), and its queued signals must not
-        # fire into the cleared QTextEdit afterward.
+        # fire into the cleared QTextEdit afterward
         self._release_ai_thread(clear_ui_state=True)
 
         self.ai_tab_chat_text.clear()
@@ -1240,23 +1244,28 @@ class AiPanel(PanelBase):
         if thread is None:
             if clear_ui_state:
                 self._reset_ai_streaming_state()
+
             return
 
         if not thread.isRunning():
             self.ai_thread = None
+
             if clear_ui_state:
                 self._reset_ai_streaming_state()
+
             return
 
         thread.stop()
 
         # Gave it a moment to notice the flag and exit between tool calls /
         # stream chunks. A full LLM call can take far longer, so don't block
-        # the UI — handle the still-running case below.
+        # the UI — handle the still-running case below
         if thread.wait(500):
             self.ai_thread = None
+
             if clear_ui_state:
                 self._reset_ai_streaming_state()
+
             return
 
         # Still running (blocked in IO). Disconnect all signals so its queued
@@ -1273,9 +1282,10 @@ class AiPanel(PanelBase):
                 pass
 
         # Park the reference until the thread truly exits; dropping it now
-        # would destroy a running QThread and crash. Reclaim on finished.
+        # would destroy a running QThread and crash. Reclaim on finished
         if not hasattr(self, '_ai_pending_threads'):
             self._ai_pending_threads = []
+
         self._ai_pending_threads.append(thread)
 
         try:
@@ -1307,7 +1317,7 @@ class AiPanel(PanelBase):
         # Invalidate the old message-cell reference — the QTextTable it points
         # into was destroyed by chat_text.clear(), and reusing its cursor would
         # segfault. ai_tab_on_token falls back to the document cursor when this
-        # is None.
+        # is None
         self._ai_msg_cell = None
         self._ai_first_token = False
 
@@ -1328,7 +1338,7 @@ class AiPanel(PanelBase):
         layout.setContentsMargins(20, 18, 20, 16)
         layout.setSpacing(12)
 
-        # Title row: warning icon (red dot) + title text.
+        # Title row: warning icon (red dot) + title text
         title_row = QHBoxLayout()
         title_row.setSpacing(8)
 
@@ -1343,12 +1353,12 @@ class AiPanel(PanelBase):
         title_row.addStretch()
         layout.addLayout(title_row)
 
-        # Hint line.
+        # Hint line
         hint = QLabel('该命令会改变集群状态，请确认是否允许执行：')
         hint.setStyleSheet(f'color: {theme.TEXT_SECONDARY}; font-size: {theme.FONT_SIZE}px;')
         layout.addWidget(hint)
 
-        # Command display (monospace, in a bordered box).
+        # Command display (monospace, in a bordered box)
         cmd_label = QLabel(command)
         cmd_label.setWordWrap(True)
         cmd_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -1363,7 +1373,7 @@ class AiPanel(PanelBase):
         )
         layout.addWidget(cmd_label)
 
-        # Button row: Reject (default) + Allow.
+        # Button row: Reject (default) + Allow
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
@@ -1399,7 +1409,7 @@ class AiPanel(PanelBase):
 
         self.ai_thread.set_confirm_result(dialog.exec_() == 1)
 
-    # For AI TAB (end) #
+    # ---- For AI TAB (end) ----
 
     def _start_analyze(self, kind):
         """Trigger an analyze report of the given kind (job/user/queue/cluster).
@@ -1417,7 +1427,7 @@ class AiPanel(PanelBase):
 
         cfg = _ANALYZE_TAB_CONFIG_DICT[kind]
 
-        # Resolve the target (cluster from context, others from the sub-tab input).
+        # Resolve the target (cluster from context, others from the sub-tab input)
         view = self._analyze_views.get(kind)
 
         if kind == 'cluster':
@@ -1426,14 +1436,14 @@ class AiPanel(PanelBase):
             raw = view['input'].text().strip() if view and view['input'] else ''
 
             # job/user/queue all support multiple targets (space/comma/newline
-            # separated); each target launches its own analyze thread.
+            # separated); each target launches its own analyze thread
             targets = [t.strip() for t in re.split(r'[\s,]+', raw) if t.strip()]
 
         if not any(targets):
             QMessageBox.warning(self, 'Warning', cfg.get('no_target', '请输入要分析的目标。'))
             return
 
-        # Launch each target as its own analyze (concurrent for multiple jobs).
+        # Launch each target as its own analyze (concurrent for multiple jobs)
         for target in targets:
             if not target:
                 continue
@@ -1441,7 +1451,7 @@ class AiPanel(PanelBase):
             key = (kind, target)
             thread = self._analyze_threads.get(key)
 
-            # Guard against re-entry of the SAME target.
+            # Guard against re-entry of the SAME target
             if thread is not None and thread.isRunning():
                 QMessageBox.information(self, cfg['dialog'], f'目标 "{target}" 的分析报告正在生成中，请稍候 ...')
                 continue
@@ -1496,7 +1506,7 @@ class AiPanel(PanelBase):
         Thread/msgbox/canceled/start are tracked by (kind, target) so multiple
         jobs can run concurrently without clobbering each other's state.
         """
-        # Output path: <ai_db_path>/ai_report/<kind>/<target>[_<status>]_<timestamp>.html.
+        # Output path: <ai_db_path>/ai_report/<kind>/<target>[_<status>]_<timestamp>.html
         report_dir = common_ai.resolve_report_dir(kind)
         safe_target = re.sub(r'\[(\d+)\]', r'_\1', str(target))
         safe_target = re.sub(r'[^A-Za-z0-9._-]', '_', safe_target)
@@ -1539,12 +1549,12 @@ class AiPanel(PanelBase):
         thread.error_signal.connect(lambda msg, k=kind, t=target: self._analyze_error(k, t, msg))
         thread.start()
 
-        # Switch to the sub-tab so the input/spinner is visible while running.
+        # Switch to the sub-tab so the input/spinner is visible while running
         if HAS_WEBENGINE:
             self.main_tab.setCurrentWidget(self.analyze_tab)
             self.analyze_subtabs.setCurrentWidget(view['tab'])
 
-        # Non-modal progress dialog with Cancel (one per target).
+        # Non-modal progress dialog with Cancel (one per target)
         msgbox = QMessageBox(QMessageBox.Information, cfg['dialog'],
                              cfg['working'].format(target=target) + '\n'
                              '（耗时通常数十秒到数分钟，完成后会在 ANALYZE 页面展示报告）\n\n'
@@ -1582,7 +1592,7 @@ class AiPanel(PanelBase):
         self._analyze_close_msgbox(kind, target)
 
         if self._analyze_canceled.get(key, False):
-            # Cleanup tracking state; don't show a result.
+            # Cleanup tracking state; don't show a result
             self._analyze_threads.pop(key, None)
             self._analyze_canceled.pop(key, None)
             self._analyze_starts.pop(key, None)
@@ -1592,7 +1602,7 @@ class AiPanel(PanelBase):
         cfg = _ANALYZE_TAB_CONFIG_DICT[kind]
 
         # Refresh the ANALYZE tab history list so the new report appears; inline
-        # mode auto-selects row 0 and renders it in the QWebEngineView.
+        # mode auto-selects row 0 and renders it in the QWebEngineView
         self.load_analyze_reports()
 
         if HAS_WEBENGINE:
@@ -1602,7 +1612,7 @@ class AiPanel(PanelBase):
             text = cfg['done_prefix'] + f'，报告已在 ANALYZE 页面展示。\n\n耗时：{elapsed:.1f} 秒\n\n报告路径：\n{output_file}'
             QMessageBox.information(self, cfg['dialog'], text)
         else:
-            # Fallback: open in external browser.
+            # Fallback: open in external browser
             opened = self._open_in_browser(output_file)
 
             if opened:
@@ -1612,7 +1622,7 @@ class AiPanel(PanelBase):
 
             QMessageBox.information(self, cfg['dialog'], text)
 
-        # Cleanup tracking state for this (kind, target).
+        # Cleanup tracking state for this (kind, target)
         self._analyze_threads.pop(key, None)
         self._analyze_canceled.pop(key, None)
         self._analyze_starts.pop(key, None)
@@ -1681,7 +1691,7 @@ class AiPanel(PanelBase):
 
         QMessageBox.warning(self, 'Error', f'Failed to generate {kind} analyze report for "{target}":\n{error_msg}')
 
-        # Cleanup tracking state for this (kind, target).
+        # Cleanup tracking state for this (kind, target)
         self._analyze_threads.pop(key, None)
         self._analyze_canceled.pop(key, None)
         self._analyze_starts.pop(key, None)

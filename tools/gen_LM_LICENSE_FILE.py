@@ -1,4 +1,12 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : gen_LM_LICENSE_FILE.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Generate LM_LICENSE_FILE by extracting license server entries
+#               from the module files under a directory
+################################
+
 import os
 import re
 import sys
@@ -12,7 +20,7 @@ from common import common
 from common import common_config
 from common import common_license
 
-# License config loaded via the unified loader.
+# License config loaded via the unified loader
 config = common_config.load_config('license')
 
 
@@ -71,6 +79,7 @@ def get_LM_LICENSE_FILE_setting(module_files_dir_list):
                         else:
                             for license_server in re.findall(r'\d+@\S+', line):
                                 print('    Find ' + str(license_server))
+
                                 if license_server not in LM_LICENSE_FILE_list:
                                     LM_LICENSE_FILE_list.append(license_server)
 
@@ -80,7 +89,7 @@ def get_LM_LICENSE_FILE_setting(module_files_dir_list):
         print('')
         print('>>> Checking license server status ...')
 
-        # Remove DOWN license servers.
+        # Remove DOWN license servers
         os.environ['LM_LICENSE_FILE'] = ':'.join(LM_LICENSE_FILE_list)
         my_get_license_info = common_license.GetLicenseInfo(lmstat_path=config.lmstat_path, bsub_command=config.lmstat_bsub_command)
         license_dic = my_get_license_info.get_license_info()

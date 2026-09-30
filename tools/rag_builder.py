@@ -4,7 +4,7 @@
 # Author      : liyanqing.1987
 # Created On  : 2026-05-01 00:00:00
 # Description : Build/update RAG vector database (rag_chunks.json + rag_faiss.index)
-#               from PDF, text, markdown, and reStructuredText files.
+#               from PDF, text, markdown, and reStructuredText files
 ################################
 import os
 import sys
@@ -123,7 +123,7 @@ class RagBuilder():
         self.workers = args.workers
         self.compress = args.compress
 
-        # Default output dir: config_ai.db_path/rag, or config.py db_path/ai/rag.
+        # Default output dir: config_ai.db_path/rag, or config.py db_path/ai/rag
         if args.output_dir:
             self.output_dir = args.output_dir
         else:
@@ -135,7 +135,8 @@ class RagBuilder():
         self.metadata_file = os.path.join(self.output_dir, f'{prefix}_metadata.json')
         self.embeddings_file = os.path.join(self.output_dir, f'{prefix}_embeddings.npy')
 
-        # Resolve embedding API config_ai (fall back to main AI config_ai if embedding-specific is empty).
+        # Resolve the embedding API settings from config_ai (fall back to the
+        # main AI settings when the embedding-specific ones are empty)
         self.api_base_url = getattr(config_ai, 'ai_embedding_api_base_url', '') or getattr(config_ai, 'ai_api_base_url', '')
         self.api_key = getattr(config_ai, 'ai_embedding_api_key', '') or getattr(config_ai, 'ai_api_key', '')
         self.embedding_model = getattr(config_ai, 'ai_embedding_model_name', '')
@@ -164,7 +165,7 @@ class RagBuilder():
             else:
                 common.bprint(f'Path not found: {path}', level='Warning')
 
-        # Deduplicate while preserving order.
+        # Deduplicate while preserving order
         seen = set()
         unique = []
 
@@ -204,14 +205,14 @@ class RagBuilder():
             try:
                 embeddings = np.load(self.embeddings_file)
 
-                # .npy may be saved as float16 to halve disk size; convert back to float32 for FAISS compatibility on load.
+                # .npy may be saved as float16 to halve disk size; convert back to float32 for FAISS compatibility on load
                 if embeddings.dtype == np.float16:
                     embeddings = embeddings.astype(np.float32)
             except Exception as error:
                 common.bprint(f'Failed to load {self.embeddings_file}: {error}', level='Warning')
                 embeddings = None
 
-        # Validate consistency.
+        # Validate consistency
         if chunks and embeddings is not None:
             if len(chunks) != embeddings.shape[0]:
                 common.bprint('Mismatch between chunks and embeddings count, will rebuild embeddings.', level='Warning')
@@ -222,7 +223,7 @@ class RagBuilder():
             common.bprint('Mismatch between chunks and metadata count, clearing metadata.', level='Warning')
             metadata = []
 
-        # If old data exists without embeddings cache, user must --rebuild.
+        # If old data exists without embeddings cache, user must --rebuild
         if chunks and embeddings is None:
             common.bprint(f'Existing {os.path.basename(self.chunks_file)} found but no {os.path.basename(self.embeddings_file)} (first migration from old data).', level='Error')
             common.bprint('Please use --rebuild and provide all source files to regenerate.', level='Error')
@@ -296,7 +297,7 @@ class RagBuilder():
         """Split text into chunks at paragraph/sentence boundaries."""
         chunks = []
 
-        # Split into paragraphs first.
+        # Split into paragraphs first
         paragraphs = text.split('\n\n')
         current_chunk = ''
 
@@ -315,14 +316,14 @@ class RagBuilder():
                 if current_chunk:
                     chunks.append(current_chunk)
 
-                    # Keep overlap from end of previous chunk.
+                    # Keep overlap from end of previous chunk
                     if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
                         overlap_text = current_chunk[-self.chunk_overlap:]
                         current_chunk = overlap_text + '\n\n' + para
                     else:
                         current_chunk = para
                 else:
-                    # Single paragraph exceeds chunk_size, split by sentences.
+                    # Single paragraph exceeds chunk_size, split by sentences
                     sub_chunks = self._split_long_text(para)
                     chunks.extend(sub_chunks[:-1])
                     current_chunk = sub_chunks[-1] if sub_chunks else ''
@@ -344,7 +345,7 @@ class RagBuilder():
                 chunks.append(text[start:])
                 break
 
-            # Try to find a sentence boundary.
+            # Try to find a sentence boundary
             boundary = -1
 
             for sep in ['. ', '。', '! ', '? ', '\n']:
@@ -356,10 +357,10 @@ class RagBuilder():
             if boundary > start:
                 chunks.append(text[start:boundary])
                 new_start = boundary - self.chunk_overlap if self.chunk_overlap > 0 else boundary
-                # Ensure forward progress: overlap must not push start backwards.
+                # Ensure forward progress: overlap must not push start backwards
                 start = new_start if new_start > start else boundary
             else:
-                # No boundary found, split at space or hard cut.
+                # No boundary found, split at space or hard cut
                 space_pos = text.rfind(' ', start, end)
 
                 if space_pos > start:
@@ -396,7 +397,7 @@ class RagBuilder():
                     if isinstance(data, list) and len(data) == len(batch_texts):
                         return [item['embedding'] for item in data]
 
-                    # Response format: {"data": {"embedding": [...]}} — single only, batch not supported.
+                    # Response format: {"data": {"embedding": [...]}} — single only, batch not supported
                     if isinstance(data, dict):
                         return None
 
@@ -464,7 +465,7 @@ class RagBuilder():
         # workers can corrupt the connection pool. Probe runs in the main thread
         # (safe to reuse `session`); worker threads instead each get their own
         # Session via this thread-local, so connections are never shared across
-        # threads.
+        # threads
         import threading
 
         _tls = threading.local()
@@ -479,14 +480,14 @@ class RagBuilder():
             return sess
 
         total = len(texts)
-        all_embeddings = [None] * total  # Pre-allocate to preserve order.
+        all_embeddings = [None] * total  # Pre-allocate to preserve order
         done_count = 0
         total_batches = (total + self.batch_size - 1) // self.batch_size
-        use_batch = None  # None = not yet probed, True/False = detected.
+        use_batch = None  # None = not yet probed, True/False = detected
 
         common.bprint(f'  Total: {total} chunks, batch_size={self.batch_size}, workers={self.workers}', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Probe batch mode on the first batch.
+        # Probe batch mode on the first batch
         first_batch = texts[:min(self.batch_size, total)]
 
         if len(first_batch) > 1:
@@ -500,7 +501,7 @@ class RagBuilder():
                 common.bprint(f'  Batch embedding not supported, using concurrent single-text mode (workers={self.workers}).', date_format='%Y-%m-%d %H:%M:%S')
 
         if use_batch:
-            # Batch mode: send batch_size texts per API call, parallelize across batches.
+            # Batch mode: send batch_size texts per API call, parallelize across batches
             batch_ranges = []
 
             for batch_idx in range(total_batches):
@@ -508,7 +509,7 @@ class RagBuilder():
                 e = min(s + self.batch_size, total)
                 batch_ranges.append((batch_idx, s, e))
 
-            # First batch already done during probe.
+            # First batch already done during probe
             first_s, first_e = batch_ranges[0][1], batch_ranges[0][2]
 
             for i, emb in enumerate(result):
@@ -534,7 +535,7 @@ class RagBuilder():
                         for i, emb in enumerate(batch_result):
                             all_embeddings[s + i] = emb
                     else:
-                        # Fallback: sequential single-text for this batch.
+                        # Fallback: sequential single-text for this batch
                         common.bprint(f'  Batch call failed at offset {s}, falling back to single-text.', level='Warning')
 
                         for i, text in enumerate(texts[s:e]):
@@ -546,7 +547,7 @@ class RagBuilder():
                     if done_count % (self.batch_size * 5) < self.batch_size or done_count == total:
                         common.bprint(f'  Progress: {done_count}/{total} ...', date_format='%Y-%m-%d %H:%M:%S')
         else:
-            # Concurrent single-text mode.
+            # Concurrent single-text mode
             def _single_worker(idx_text):
                 idx, text = idx_text
                 return (idx, self._get_embedding_single(text, url, headers, _worker_session()))
@@ -568,7 +569,7 @@ class RagBuilder():
         """Build a FAISS index from L2-normalized embeddings."""
         import faiss
 
-        # L2-normalize so inner product == cosine similarity.
+        # L2-normalize so inner product == cosine similarity
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         norms[norms == 0] = 1
         normalized = embeddings / norms
@@ -587,7 +588,7 @@ class RagBuilder():
             index.train(normalized)
             index.add(normalized)
         elif self.compress in pq_types:
-            min_train = 256  # PQ needs at least 256 training points per sub-quantizer.
+            min_train = 256  # PQ needs at least 256 training points per sub-quantizer
 
             if normalized.shape[0] < min_train:
                 common.bprint(f'PQ requires at least {min_train} vectors but only {normalized.shape[0]} available, falling back to flat.', level='Warning')
@@ -616,7 +617,7 @@ class RagBuilder():
         # Create output dir as 0o1777 (shared write + sticky) so multiple
         # users can write RAG files; standard files are then 0o644 so a
         # non-owner cannot overwrite the first builder's files (sticky also
-        # blocks delete). Golden spec: docs/db_permissions.md.
+        # blocks delete). Golden spec: docs/lsfMonitor_user_manual.md 附3
         common.create_dir(self.output_dir, 0o1777)
 
         with open(self.chunks_file, 'w') as f:
@@ -663,7 +664,7 @@ class RagBuilder():
             common.bprint(f'Failed to load {self.metadata_file}: {error}', level='Error')
             return
 
-        # Aggregate by source.
+        # Aggregate by source
         source_stats = {}
 
         for entry in metadata:
@@ -694,7 +695,7 @@ class RagBuilder():
 
     def delete_sources(self, patterns):
         """Delete documents matching patterns from the RAG database."""
-        # Load existing data.
+        # Load existing data
         if not os.path.exists(self.metadata_file) or not os.path.exists(self.chunks_file):
             common.bprint('RAG database not found or incomplete.', level='Error')
             return
@@ -722,7 +723,7 @@ class RagBuilder():
             common.bprint('Embeddings and chunks count mismatch, cannot proceed.', level='Error')
             return
 
-        # Find chunks to delete (match source path by substring).
+        # Find chunks to delete (match source path by substring)
         delete_indices = set()
         matched_sources = set()
 
@@ -748,14 +749,14 @@ class RagBuilder():
         for source in sorted(matched_sources):
             common.bprint(f'  - {source}')
 
-        # Filter out deleted indices.
+        # Filter out deleted indices
         keep_indices = [i for i in range(len(chunks)) if i not in delete_indices]
         new_chunks = [chunks[i] for i in keep_indices]
         new_metadata = [metadata[i] for i in keep_indices]
         new_embeddings = embeddings[keep_indices] if embeddings is not None else None
 
         if not new_chunks:
-            # All chunks deleted, remove all files.
+            # All chunks deleted, remove all files
             for f in [self.chunks_file, self.faiss_file, self.metadata_file, self.embeddings_file]:
                 if os.path.exists(f):
                     os.remove(f)
@@ -764,7 +765,7 @@ class RagBuilder():
             common.bprint('All documents deleted, RAG database removed.')
             return
 
-        # Rebuild FAISS index.
+        # Rebuild FAISS index
         common.bprint('Rebuilding FAISS index...')
 
         if new_embeddings is None:
@@ -776,7 +777,7 @@ class RagBuilder():
 
         faiss_index = self.build_faiss_index(new_embeddings)
 
-        # Save.
+        # Save
         common.bprint('Saving...')
         self.save(new_chunks, new_metadata, new_embeddings, faiss_index)
         common.bprint(f'=== Done. Remaining: {len(new_chunks)} chunks ===')
@@ -785,7 +786,7 @@ class RagBuilder():
         """Main execution flow."""
         common.bprint('=== RAG Builder ===')
 
-        # 1. Collect input files.
+        # 1. Collect input files
         common.bprint('Collecting input files...')
         file_list = self.collect_files()
 
@@ -795,13 +796,13 @@ class RagBuilder():
 
         common.bprint(f'  Found {len(file_list)} file(s)')
 
-        # 2. Load existing data (append mode).
+        # 2. Load existing data (append mode)
         existing_chunks, existing_metadata, existing_embeddings = self.load_existing_data()
 
         if existing_chunks:
             common.bprint(f'  Loaded {len(existing_chunks)} existing chunks')
 
-        # 3. Determine which files to process (skip already-indexed in append mode).
+        # 3. Determine which files to process (skip already-indexed in append mode)
         existing_sources = self.get_existing_sources(existing_metadata)
         new_files = [f for f in file_list if f not in existing_sources]
 
@@ -815,7 +816,7 @@ class RagBuilder():
 
         common.bprint(f'  Processing {len(new_files)} new file(s)')
 
-        # 4. Extract text and chunk.
+        # 4. Extract text and chunk
         common.bprint('Extracting text and chunking...')
         new_chunks = []
         new_metadata = []
@@ -854,12 +855,12 @@ class RagBuilder():
 
         common.bprint(f'  Total new chunks: {len(new_chunks)}', date_format='%Y-%m-%d %H:%M:%S')
 
-        # 5. Generate embeddings.
+        # 5. Generate embeddings
         common.bprint('Generating embeddings...', date_format='%Y-%m-%d %H:%M:%S')
         new_embeddings = self.get_embeddings(new_chunks)
         common.bprint(f'  Generated {new_embeddings.shape[0]} embeddings (dim={new_embeddings.shape[1]})', date_format='%Y-%m-%d %H:%M:%S')
 
-        # 6. Merge with existing data.
+        # 6. Merge with existing data
         all_chunks = existing_chunks + new_chunks
         all_metadata = existing_metadata + new_metadata
 
@@ -868,12 +869,12 @@ class RagBuilder():
         else:
             all_embeddings = new_embeddings
 
-        # 7. Build FAISS index.
+        # 7. Build FAISS index
         common.bprint('Building FAISS index...', date_format='%Y-%m-%d %H:%M:%S')
         faiss_index = self.build_faiss_index(all_embeddings)
         common.bprint(f'  Index contains {faiss_index.ntotal} vectors', date_format='%Y-%m-%d %H:%M:%S')
 
-        # 8. Save.
+        # 8. Save
         common.bprint('Saving output files...', date_format='%Y-%m-%d %H:%M:%S')
         self.save(all_chunks, all_metadata, all_embeddings, faiss_index)
 
@@ -886,9 +887,9 @@ class RagBuilder():
 def main():
     args = read_args()
 
-    # Ensure db_path root is 0o1777 before save() writes under db_path/ai/rag.
+    # Ensure db_path root is 0o1777 before save() writes under db_path/ai/rag
     # For a custom db_path created on first run, makedirs would otherwise leave
-    # the root at 0o755 (umask) and lock out other sampler accounts.
+    # the root at 0o755 (umask) and lock out other sampler accounts
     try:
         ai_root = common_db_path.resolve_db_path(config_ai, 'ai')
         common_db_path.ensure_db_root(os.path.dirname(ai_root))

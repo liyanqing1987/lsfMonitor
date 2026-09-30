@@ -6,7 +6,7 @@
 # Description : Background executor for the Run panel. Runs a shell command across
 #               many hosts concurrently with per-host timeout, emitting signals
 #               as each host finishes so the GUI can stream results. Assumes ssh
-#               passwordless access is already configured on the target hosts.
+#               passwordless access is already configured on the target hosts
 ################################
 
 import shlex
@@ -28,8 +28,8 @@ def _ssh_command(host, command, ssh_command_base):
     """Build the ssh command string used to run `command` on `host`.
 
     ``ssh_command_base`` is the configurable base ssh command from config_run.py
-    (default_ssh_command). It already includes ConnectTimeout (same as the run executor).
-    The host and the shlex-quoted command are appended.
+    (default_ssh_command). It is expected to already include options such as
+    ConnectTimeout. The host and the shlex-quoted command are appended.
     """
     return f'{ssh_command_base} {host} ' + shlex.quote(command)
 
@@ -73,7 +73,7 @@ def _run_on_host(host, command, timeout, ssh_command_base):
         result['status'] = 'TIMEOUT'
         result['output'] = f'Timeout after {timeout}s.'
     except pexpect.exceptions.EOF:
-        # ssh exited without producing the expected EOF marker (e.g. unreachable).
+        # ssh exited without producing the expected EOF marker (e.g. unreachable)
         result['status'] = 'UNREACH'
         result['output'] = 'Host unreachable or ssh failed to connect.'
     except Exception as error:
@@ -95,7 +95,7 @@ class RunThread(QThread):
     Signals:
         host_finished(str, dict): (host, result) emitted as each host completes.
         progress(int, int): (done, total) emitted as each host completes.
-        all_finished(): emitted when every host has been processed (or stopped).
+        all_finished(): emitted after every host has been processed.
     """
 
     host_finished = pyqtSignal(str, dict)
@@ -108,10 +108,10 @@ class RunThread(QThread):
         self.command = command
         self.timeout = timeout
         self.max_parallel = max(1, int(max_parallel))
-        # Configurable base ssh command from config_run.py (default_ssh_command).
+        # Configurable base ssh command from config_run.py (default_ssh_command)
         self.ssh_command_base = ssh_command_base or 'ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o GSSAPIAuthentication=no -t -q'
         # {display_name: ssh_connect_addr}. When a host is absent, ssh to the
-        # display name itself (hostname sourced from LSF has no separate addr).
+        # display name itself (hostname sourced from LSF has no separate addr)
         self.ssh_targets = ssh_targets or {}
         self._lock = threading.Lock()
         self._done = 0
@@ -141,8 +141,8 @@ class RunThread(QThread):
 
     def _worker(self, host, semaphore):
         try:
-            # Connect to the ssh target (IP) but report results under the
-            # display name (hostname) so the GUI row matches the Host column.
+            # Connect to the ssh target address but report results under the
+            # display name so the GUI row matches the Host column
             ssh_target = self.ssh_targets.get(host, host)
             result = _run_on_host(ssh_target, self.command, self.timeout, self.ssh_command_base)
             result['host'] = host

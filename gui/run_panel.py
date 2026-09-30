@@ -7,10 +7,10 @@
 #               cluster hosts. Embedded as an outer sidebar panel (between LICENSE
 #               and AI). Two inner tabs: RUN (filter hosts by Queue/Group, run
 #               commands, select/filter results by expression) and LOG (query
-#               past command history).
+#               past command history)
 #
 # Host inventory source: LSF bhosts output (same as the LSF HOSTS tab), via
-# context.get_lsf_host_info(). Assumes ssh passwordless access is configured.
+# context.get_lsf_host_info(). Assumes ssh passwordless access is configured
 ################################
 
 import os
@@ -20,7 +20,7 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QIcon, QColor
 from PyQt5.QtWidgets import (
     QAction, QDateEdit, QFileDialog, QGridLayout, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox,
+    QLabel, QLineEdit, QMessageBox,
     QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QTextEdit, QWidget,
 )
 
@@ -45,21 +45,22 @@ class RunPanel(PanelBase):
 
         self.config_run = common_config.load_config('run')
 
-        # Initialize the run-history SQLite db file (shared, per-user tables).
-        # resolve_db_path: config_run.db_path if set, else config.py db_path/run.
+        # Initialize the run-history SQLite db file (shared, per-user tables)
+        # resolve_db_path: config_run.db_path if set, else config.py db_path/run
         run_db_path = common_db_path.resolve_db_path(self.config_run, 'run')
         self.run_log_db_file = common_run_log.init_run_log_db(run_db_path)
 
         self.run_thread = None
         self.result_dict = {}  # {host: {output, status, exit_code, duration, queue, groups}}
-        self.host_inventory = {}  # {host: groups_str} from LSF bhosts
+        self.host_inventory = {}  # {host: ''} — host name set only; group/queue live in lsf_host_info
         self.ssh_target_dict = {}  # {host: ssh_connect_addr} (= hostname)
         self.lsf_host_info = {}  # {host: {status, queue, group}} same source as HOSTS tab
         self.queue_host_dic = {}  # {queue: [hosts]} derived from lsf_host_info
         self.group_host_dic = {}  # {group: [hosts]} derived from lsf_host_info
 
         self.init_ui()
-        # Load host inventory after the widget is shown (uses LSF panel if fallback needed).
+        # Load host inventory once the event loop runs (host list comes from the
+        # LSF panel via context)
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, self.refresh_hosts)
 
@@ -87,9 +88,9 @@ class RunPanel(PanelBase):
         export_log_action.triggered.connect(self.export_log_table)
         file_menu.addAction(export_log_action)
 
-    # ======================================================================
+    # ============================================================================
     # UI construction
-    # ======================================================================
+    # ============================================================================
     def init_ui(self):
         """Build the inner RUN / LOG tabs."""
         self.run_tab = QWidget()
@@ -105,7 +106,7 @@ class RunPanel(PanelBase):
         RUN tab layout (top to bottom):
             Timeout(s) [_30_]  Status [multi-select v]  Queue [multi-select v]  Group [multi-select v]  Command [________]  [Run]
             Select [____________expression (enter to apply)____________]
-            Host | Status | Queue | Group | Output  (Host column has checkboxes)
+            Host | Status | Queue | Group | Result | Output  (Host column has checkboxes)
         """
         def bold(text):
             lbl = QLabel(text)
@@ -116,7 +117,7 @@ class RunPanel(PanelBase):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Row 0: Timeout(s) | Status | Queue | Group | Command | Run.
+        # Row 0: Timeout(s) | Status | Queue | Group | Command | Run
         top_row = QHBoxLayout()
         top_row.setSpacing(8)
 
@@ -166,7 +167,7 @@ class RunPanel(PanelBase):
         top_row.addWidget(self.run_button)
         layout.addLayout(top_row, 0, 0)
 
-        # Row 1: Select expression (run-style, matches rows by host/queue/group/status/output).
+        # Row 1: Select expression (run-style, matches rows by host/queue/group/status/output)
         select_row = QHBoxLayout()
         self.select_input = QLineEdit()
         self.select_input.setPlaceholderText(
@@ -180,42 +181,36 @@ class RunPanel(PanelBase):
         select_row.addWidget(self.select_check_button)
         layout.addLayout(select_row, 1, 0)
 
-        # Row 2: unified host/result table.
-        # Columns: Host (with checkbox) | Status | Queue | Group | Output
+        # Row 2: unified host/result table
+        # Columns: Host (with checkbox) | Status | Queue | Group | Result | Output
         # Use Interactive (not ResizeToContents) with sensible initial widths,
         # because ResizeToContents collapses columns to header-size before the
         # first data load and users can't see them. Output gets Stretch to eat
         # the remaining width; auto_size_table_columns ensures no column drops
-        # below its bold-header width.
+        # below its bold-header width
         self.host_table = QTableWidget(0, 6)
         common_pyqt5.make_table_readonly(self.host_table)
         # Disable word wrap so long Queue/Group text truncates with an ellipsis
         # (single line) instead of wrapping to a second row — qdarkstyle's
         # dark-mode QSS widens cell padding, which made 130px-wide Queue cells
-        # wrap long queue names onto two lines.
+        # wrap long queue names onto two lines
         self.host_table.setWordWrap(False)
         self.host_table.setHorizontalHeaderLabels(['Host', 'Status', 'Queue', 'Group', 'Result', 'Output'])
         # Show the row-number column (vertical header) so the user can see how
-        # many hosts are listed / selected, mirroring the LSF-HOSTS tab.
+        # many hosts are listed / selected, mirroring the LSF-HOSTS tab
         self.host_table.verticalHeader().setVisible(True)
         self.host_table.verticalHeader().setDefaultSectionSize(40)
         self.host_table.setAlternatingRowColors(True)
-        self.host_table.setColumnWidth(0, 160)   # Host
-        self.host_table.setColumnWidth(1, 115)   # Status (ok/closed_Busy/closed_Full/unreach)
-        self.host_table.setColumnWidth(2, 130)   # Queue
-        self.host_table.setColumnWidth(3, 140)   # Group
-        self.host_table.setColumnWidth(4, 90)    # Result (OK/FAIL/TIMEOUT/UNREACH)
-        self.host_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
-        self.host_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
-        self.host_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
-        self.host_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Interactive)
-        self.host_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Interactive)
-        self.host_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        common_pyqt5.auto_size_table_columns(self.host_table)
+        self.host_table.setColumnWidth(0, 140)  # min 74
+        self.host_table.setColumnWidth(1, 110)  # min 88
+        self.host_table.setColumnWidth(2, 180)  # min 87
+        self.host_table.setColumnWidth(3, 150)  # min 85
+        self.host_table.setColumnWidth(4, 90)   # min 86
+        common_pyqt5.auto_size_table_columns(self.host_table, flex_cols=[5])
         layout.addWidget(self.host_table, 2, 0)
 
         # Progress overlay: shown while a batch command is running, displaying
-        # "done/total 执行中" centered over the table.
+        # "done/total 执行中" ("running") centered over the table
         self._progress_overlay = QLabel(self.run_tab)
         self._progress_overlay.setAlignment(Qt.AlignCenter)
         self._progress_overlay.setStyleSheet("""
@@ -230,15 +225,15 @@ class RunPanel(PanelBase):
         """)
         self._progress_overlay.hide()
 
-        # Debounce timer so rapid checkbox toggles don't rebuild the table on each click.
+        # Debounce timer so rapid checkbox toggles don't rebuild the table on each click
         from PyQt5.QtCore import QTimer
         self._dim_filter_timer = QTimer(self)
         self._dim_filter_timer.setSingleShot(True)
         self._dim_filter_timer.timeout.connect(self._apply_dimension_filter)
 
     def gen_log_tab(self):
-        """LOG tab: search command history (jsonl) by user/date/keyword, with
-        a right-side log detail panel — mirrors the run LOG tab layout."""
+        """LOG tab: search command history (SQLite run_log.db) by
+        user/date/keyword, with a right-side log detail pane."""
         def bold(text):
             lbl = QLabel(text)
             lbl.setStyleSheet('font-weight: bold;')
@@ -249,7 +244,7 @@ class RunPanel(PanelBase):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
-        # Filter row.
+        # Filter row
         filter_row = QHBoxLayout()
         filter_row.setSpacing(8)
         filter_row.addWidget(bold('User'))
@@ -288,20 +283,17 @@ class RunPanel(PanelBase):
         filter_row.addWidget(self.log_search_button)
         layout.addLayout(filter_row, 0, 0)
 
-        # Left: history table; Right: log detail text.
+        # Left: history table; Right: log detail text
         self.log_table = QTableWidget(0, 5)
         common_pyqt5.make_table_readonly(self.log_table)
         self.log_table.setHorizontalHeaderLabels(['Date', 'User', 'Login_User', 'Command', 'Log'])
         self.log_table.verticalHeader().setVisible(False)
-        self.log_table.setColumnWidth(0, 155)
-        self.log_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
-        self.log_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.log_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.log_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.log_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.log_table.setColumnWidth(4, 40)
+        self.log_table.setColumnWidth(0, 155)  # min 75
+        self.log_table.setColumnWidth(1, 130)  # min 74
+        self.log_table.setColumnWidth(2, 130)  # min 120
+        self.log_table.setColumnWidth(4, 67)   # min 67
         self.log_table.itemClicked.connect(self._on_log_row_clicked)
-        common_pyqt5.auto_size_table_columns(self.log_table)
+        common_pyqt5.auto_size_table_columns(self.log_table, flex_cols=[3])
 
         self.log_detail_text = QTextEdit()
         self.log_detail_text.setReadOnly(True)
@@ -309,13 +301,16 @@ class RunPanel(PanelBase):
         splitter = QSplitter(Qt.Horizontal)
         splitter.addWidget(self.log_table)
         splitter.addWidget(self.log_detail_text)
+        splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(6)
+        splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
         splitter.setStretchFactor(0, 3)
         splitter.setStretchFactor(1, 2)
         layout.addWidget(splitter, 1, 0)
 
         self.log_dic_list = []
 
-        # Auto-load recent history on first show (local DB, fast).
+        # Auto-load recent history on first show (local DB, fast)
         from PyQt5.QtCore import QTimer
         QTimer.singleShot(0, self.query_log)
 
@@ -335,7 +330,7 @@ class RunPanel(PanelBase):
             except Exception as warning:
                 self.log_detail_text.setPlainText(f'Failed to read log: {warning}')
         else:
-            # No log file — show the command + output summary from the record.
+            # No log file — show the command + output summary from the record
             entry = self.log_dic_list[row]
             summary = f"Command: {entry.get('command', '')}\n"
             summary += f"User: {entry.get('user', '')} (login: {entry.get('login_user', '')})\n"
@@ -346,9 +341,9 @@ class RunPanel(PanelBase):
 
             self.log_detail_text.setPlainText(summary)
 
-    # ======================================================================
+    # ============================================================================
     # Host inventory + Queue/Group combo population
-    # ======================================================================
+    # ============================================================================
     def refresh_hosts(self):
         """Reload host inventory + LSF host info, rebuild combos and table.
 
@@ -387,7 +382,7 @@ class RunPanel(PanelBase):
 
     def _populate_combos(self):
         """(Re)populate Status/Queue/Group QComboCheckBox items, keeping current selections when possible."""
-        # Status combo — gather all status values from LSF host info.
+        # Status combo — gather all status values from LSF host info
         prev_statuses = list(self.status_combo.selectedItems().values()) if hasattr(self, 'status_combo') else []
         self.status_combo.blockSignals(True)
         self.status_combo.clear()
@@ -407,7 +402,7 @@ class RunPanel(PanelBase):
         self._restore_combo_selection(self.status_combo, prev_statuses, default_all=True)
         self.status_combo.blockSignals(False)
 
-        # Queue combo.
+        # Queue combo
         prev_queues = list(self.queue_combo.selectedItems().values()) if hasattr(self, 'queue_combo') else []
         self.queue_combo.blockSignals(True)
         self.queue_combo.clear()
@@ -416,12 +411,12 @@ class RunPanel(PanelBase):
         for q in sorted(self.queue_host_dic.keys()):
             self.queue_combo.addCheckBoxItem(q)
 
-        # Restore previous selection or default ALL.
+        # Restore previous selection or default ALL
         self._restore_combo_selection(self.queue_combo, prev_queues, default_all=True)
         self.queue_combo.blockSignals(False)
 
         # Group combo — gather groups from LSF host_group info (same source as
-        # HOSTS tab); one host can be in multiple space-separated groups.
+        # HOSTS tab); one host can be in multiple space-separated groups
         prev_groups = list(self.group_combo.selectedItems().values()) if hasattr(self, 'group_combo') else []
         self.group_combo.blockSignals(True)
         self.group_combo.clear()
@@ -445,9 +440,9 @@ class RunPanel(PanelBase):
         for cb in combo.checkBoxList:
             cb.setChecked(cb.text() in to_check)
 
-    # ======================================================================
-    # Queue/Group mutual exclusion (mirrors UTILIZATION tab behavior).
-    # ======================================================================
+    # ============================================================================
+    # Queue/Group mutual exclusion (mirrors UTILIZATION tab behavior)
+    # ============================================================================
     @staticmethod
     def _combo_has_non_all(combo):
         for text in combo.selectedItems().values():
@@ -552,9 +547,9 @@ class RunPanel(PanelBase):
 
         self._populate_host_table(hosts)
 
-    # ======================================================================
+    # ============================================================================
     # Table rendering
-    # ======================================================================
+    # ============================================================================
     def _populate_host_table(self, hosts):
         """Fill the table with ``hosts``; Status/Queue/Group from LSF bhosts.
 
@@ -562,14 +557,15 @@ class RunPanel(PanelBase):
         overwritten by command results. Result (OK/FAIL/TIMEOUT/UNREACH) and
         Output are filled by on_host_finished after a command runs.
         """
+        self.host_table.setSortingEnabled(False)
         self.host_table.setRowCount(0)
         self.host_table.setRowCount(len(hosts))
         # Secondary text color (slate-600) — visible but not loud, unlike
-        # TEXT_DISABLED which is too faint to read against white.
+        # TEXT_DISABLED which is too faint to read against white
         dim_color = QColor(TEXT_SECONDARY)
 
         for row, host in enumerate(hosts):
-            # Host column: checkbox + host text via editable item's setCheckState.
+            # Host column: checkbox + host text via editable item's setCheckState
             host_item = QTableWidgetItem(host)
             host_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             host_item.setCheckState(Qt.Checked)
@@ -578,12 +574,14 @@ class RunPanel(PanelBase):
             info = self.lsf_host_info.get(host, {})
 
             # Status: LSF bhosts status (ok/closed/unreach) — never overwritten.
+            # Colored like the LSF-HOSTS tab: ok green, fatal states red, the
+            # other closed_* states magenta
             status = info.get('status', '') or '-'
             status_item = QTableWidgetItem(status)
-            status_item.setForeground(dim_color)
+            status_item.setForeground(QColor(self._lsf_status_color(status)))
             self.host_table.setItem(row, 1, status_item)
 
-            # Queue: from LSF only ('-' if the host has no queue).
+            # Queue: from LSF only ('-' if the host has no queue)
             queue = info.get('queue', '') or '-'
             queue_item = QTableWidgetItem(queue)
 
@@ -592,7 +590,7 @@ class RunPanel(PanelBase):
 
             self.host_table.setItem(row, 2, queue_item)
 
-            # Group: from LSF host_group info ('-' if none).
+            # Group: from LSF host_group info ('-' if none)
             groups = info.get('group', '') or '-'
             group_item = QTableWidgetItem(groups)
 
@@ -601,14 +599,15 @@ class RunPanel(PanelBase):
 
             self.host_table.setItem(row, 3, group_item)
 
-            # Result: empty until a command runs (on_host_finished fills it).
+            # Result: empty until a command runs (on_host_finished fills it)
             self.host_table.setItem(row, 4, QTableWidgetItem(''))
 
-            # Output: empty until a command runs.
+            # Output: empty until a command runs
             self.host_table.setItem(row, 5, QTableWidgetItem(''))
 
-        # Re-apply any active Select expression so checked/visible state tracks the filter.
+        # Re-apply any active Select expression so checked/visible state tracks the filter
         self.apply_select()
+        self.host_table.setSortingEnabled(True)
 
     def _row_for_host(self, host):
         for row in range(self.host_table.rowCount()):
@@ -619,9 +618,9 @@ class RunPanel(PanelBase):
 
         return -1
 
-    # ======================================================================
+    # ============================================================================
     # Run / Stop
-    # ======================================================================
+    # ============================================================================
     def run_command(self):
         """Start batch execution on the checked (visible) hosts."""
         if self.run_thread and self.run_thread.isRunning():
@@ -656,8 +655,8 @@ class RunPanel(PanelBase):
         max_parallel = getattr(self.config_run, 'max_parallel', 512)
         default_ssh_command = getattr(self.config_run, 'default_ssh_command', None)
 
-        # Reset results for the hosts we are about to (re)run.
-        # Status (col 1) stays as the LSF bhosts status — it is never overwritten.
+        # Reset results for the hosts we are about to (re)run
+        # Status (col 1) stays as the LSF bhosts status — it is never overwritten
         self.result_dict = {}
         targets = set(hosts_list)
 
@@ -683,7 +682,7 @@ class RunPanel(PanelBase):
 
         self.run_button.setEnabled(False)
 
-        # Show progress overlay.
+        # Show progress overlay
         self._update_progress_overlay(0, len(hosts_list))
         self._progress_overlay.show()
         self._progress_overlay.raise_()
@@ -704,7 +703,9 @@ class RunPanel(PanelBase):
         self._progress_overlay.setText(f'{done}/{total} 执行中')
         self._progress_overlay.adjustSize()
 
-        table_rect = self.host_table.rect()
+        # geometry() gives the rect in the parent's (run_tab) coordinates, which
+        # is what setGeometry on the overlay (a run_tab child) expects
+        table_rect = self.host_table.geometry()
         label_w = self._progress_overlay.width()
         label_h = self._progress_overlay.height()
         x = table_rect.center().x() - label_w // 2
@@ -727,15 +728,33 @@ class RunPanel(PanelBase):
         if row < 0:
             return
 
-        # Result column (col 4): ssh execution outcome (OK/FAIL/TIMEOUT/...).
+        # Result column (col 4): ssh execution outcome (OK/FAIL/TIMEOUT/...)
         result_text = result.get('status', '')
         result_item = QTableWidgetItem(result_text)
         result_item.setForeground(QColor(self._status_color(result_text)))
-        self.host_table.setItem(row, 4, result_item)
 
-        # Output column (col 5): command stdout.
+        # Output column (col 5): command stdout
         output_item = QTableWidgetItem(result.get('output', ''))
+
+        # Both writes must land before any re-sort, or the row index moves.
+        self.host_table.setSortingEnabled(False)
+        self.host_table.setItem(row, 4, result_item)
         self.host_table.setItem(row, 5, output_item)
+        self.host_table.setSortingEnabled(True)
+
+    @staticmethod
+    def _lsf_status_color(status):
+        """Color an LSF host status the way the LSF-HOSTS tab does."""
+        if status == 'ok':
+            return STATUS_RUN
+
+        if status in ('unavail', 'unreach', 'closed_LIM'):
+            return STATUS_EXIT
+
+        if status in ('-', ''):
+            return TEXT_DISABLED
+
+        return '#FF00FF'
 
     @staticmethod
     def _status_color(status):
@@ -757,19 +776,19 @@ class RunPanel(PanelBase):
         self._progress_overlay.hide()
         self._record_history_end()
 
-        # Apply any active Select expression now that results are ready.
+        # Apply any active Select expression now that results are ready
         if self.select_input.text().strip():
             self.apply_select(force=True)
 
-    # ======================================================================
+    # ============================================================================
     # Select expression (run-style): matched rows are visible+checked,
-    # mismatched rows are hidden+unchecked. Empty expression → show+check all.
-    # ======================================================================
+    # mismatched rows are hidden+unchecked. Empty expression → show+check all
+    # ============================================================================
     def apply_select(self, force=False):
         # Not while a batch is running — results are incomplete, re-applying
-        # mid-run would hide/check rows whose output hasn't arrived yet.
+        # mid-run would hide/check rows whose output hasn't arrived yet
         # force=True bypasses this for the all-finished callback (run() has
-        # returned but QThread.isRunning() may still be briefly True).
+        # returned but QThread.isRunning() may still be briefly True)
         if not force and self.run_thread and self.run_thread.isRunning():
             return
 
@@ -834,11 +853,11 @@ class RunPanel(PanelBase):
                 level='Warning',
             )
 
-    # ======================================================================
+    # ============================================================================
     # Export
-    # ======================================================================
+    # ============================================================================
     def export_result_table(self):
-        """Export the visible rows that have results to CSV."""
+        """Export the visible rows with a known host status to CSV."""
         current_time_string = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         default_output_file = './run_result_' + current_time_string + '.csv'
         csv_file, _ = QFileDialog.getSaveFileName(
@@ -888,9 +907,9 @@ class RunPanel(PanelBase):
 
         common.write_csv(csv_file, content_dic)
 
-    # ======================================================================
+    # ============================================================================
     # Command history
-    # ======================================================================
+    # ============================================================================
     def _record_history_start(self, command, hosts_list):
         self._history_meta = {
             'date': datetime.datetime.now().strftime('%Y%m%d'),
@@ -930,16 +949,16 @@ class RunPanel(PanelBase):
             # it calls sys.exit(1) on failure, which would kill the whole GUI
             # just because a per-user history log dir is not writable. Use
             # makedirs/open directly and degrade gracefully (history is a
-            # convenience, not a critical function).
+            # convenience, not a critical function)
             os.makedirs(log_dir, exist_ok=True)
 
-            # 0o700: 每个用户的命令明细日志目录仅本人可读写。
+            # 0o700: each user's command-detail log dir is owner-only
             os.chmod(log_dir, 0o700)
 
             # Write the per-run detail log (one section per host: status +
             # stdout) so the RUN-LOG table can show a magnifier icon and the
             # right pane can display full output. Named <date>_<time>.log;
-            # its path is stored in run_log.db for the LOG tab to open.
+            # its path is stored in run_log.db for the LOG tab to open
             log_file = os.path.join(log_dir, f"{meta.get('date', '')}_{meta.get('time', '')}.log")
 
             try:
@@ -964,7 +983,7 @@ class RunPanel(PanelBase):
                         else:
                             LF.write('(no output)\n')
 
-                # 0o600: 明细日志含命令输出,仅本人可读写。
+                # 0o600: the detail log holds command output, owner-only
                 os.chmod(log_file, 0o600)
                 meta['log'] = log_file
             except Exception as warning:
@@ -972,7 +991,7 @@ class RunPanel(PanelBase):
 
             # Write the history index to SQLite (replaces the old command.his
             # JSONL append). The detail .log path is stored so the LOG tab can
-            # open it on row click.
+            # open it on row click
             common_run_log.save_run_history(
                 db_file=self.run_log_db_file,
                 user=meta.get('user', '') or USER,
@@ -995,6 +1014,7 @@ class RunPanel(PanelBase):
         to_date = self.log_to_date.date().toString('yyyyMMdd')
         keyword = self.log_keyword_input.text().strip()
 
+        self.log_table.setSortingEnabled(False)
         self.log_table.setRowCount(0)
         self.log_dic_list = []
 
@@ -1018,7 +1038,7 @@ class RunPanel(PanelBase):
 
             # Log icon column (col 4). Magnifier = a log file exists
             # (click the row to view it on the right); '-' = no log
-            # file (click shows the command/output summary instead).
+            # file (click shows the command/output summary instead)
             log_file = entry.get('log', '')
 
             if log_file and os.path.exists(log_file):
@@ -1027,3 +1047,5 @@ class RunPanel(PanelBase):
                 self.log_table.setItem(row, 4, log_item)
             else:
                 self.log_table.setItem(row, 4, QTableWidgetItem('-'))
+
+        self.log_table.setSortingEnabled(True)

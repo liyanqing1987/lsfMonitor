@@ -5,9 +5,9 @@
 # Created On : 2026-08-24
 # Description : Unified config loader for the four sidebar panels. Each panel
 #               reads its own config_<name>.py from config/ (lsf / license /
-#               run / ai), overlaid by ~/.lsfMonitor/config/config_<name>.py.
+#               run / ai), overlaid by ~/.lsfMonitor/config/config_<name>.py
 #               Loaded into sys.modules['config_<name>'] via importlib so panel
-#               configs never collide with each other.
+#               configs never collide with each other
 ################################
 
 import os

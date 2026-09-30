@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+################################
+# File Name   : common_license.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Parse lmstat output into the license dictionary (servers,
+#               vendor daemons, features, usage)
+################################
+
 import os
 import re
 import sys
@@ -5,7 +14,8 @@ import time
 import datetime
 from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
 
-sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
+if 'LSFMONITOR_INSTALL_PATH' in os.environ:
+    sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
 from common import common
 
 os.environ['PYTHONUNBUFFERED'] = '1'
@@ -14,7 +24,7 @@ os.environ['PYTHONUNBUFFERED'] = '1'
 class GetLicenseInfo():
     """
     Get license information with tool "lmstat".
-    Save it into a dictory and return.
+    Save it into a dictionary and return.
     """
     def __init__(self, specified_servers=None, specified_feature='', lmstat_path='lmstat', bsub_command='bsub -q normal -Is'):
         if specified_servers is None:
@@ -80,7 +90,7 @@ class GetLicenseInfo():
                                        },
                       }
         """
-        # Get lmstat output message.
+        # Get lmstat output message
         if 'LM_LICENSE_FILE' in os.environ:
             stdout_list = []
             lm_license_file_list = os.environ.get('LM_LICENSE_FILE', '').split(':')
@@ -112,7 +122,7 @@ class GetLicenseInfo():
             (return_code, stdout, stderr) = common.run_command(lmstat_command)
             stdout_list = stdout.decode('utf-8', errors='replace').split('\n')
 
-        # Parse lmstat output message.
+        # Parse lmstat output message
         license_dic = {}
         license_server = ''
         vendor_daemon = ''
@@ -181,7 +191,7 @@ class GetLicenseInfo():
                              'start_time': my_match.group(8),
                              'license_num': '1'}
 
-                # Update submit_host.
+                # Update submit_host
                 display_setting = my_match.group(3)
 
                 if display_setting:
@@ -189,19 +199,19 @@ class GetLicenseInfo():
                         display_match = re.match(r'^(.+):.+$', display_setting)
                         usage_dic['submit_host'] = display_match.group(1)
 
-                # Update start_time.
+                # Update start_time
                 if re.match(r'^(.+?)\s*\(.*\)\s*$', usage_dic['start_time']):
                     start_time_match = re.match(r'^(.+?)\s*\(.*\)\s*$', usage_dic['start_time'])
                     usage_dic['start_time'] = start_time_match.group(1)
 
-                # Update license_num.
+                # Update license_num
                 if my_match.group(9):
                     usage_dic['license_num'] = my_match.group(10)
 
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info_string'].append(line.strip())
                 license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use_info'].append(usage_dic)
 
-                # Update in_use num with "Uncounted" issued num.
+                # Update in_use num with "Uncounted" issued num
                 if license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['issued'] == 'Uncounted':
                     license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use'] = str(int(license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']) + int(usage_dic['license_num']))
             elif license_compile_dic['reservation'].match(line):
@@ -239,11 +249,9 @@ class GetLicenseInfo():
                 my_match = license_compile_dic['license_files'].match(line)
                 license_dic[license_server]['license_files'] = my_match.group(2)
             elif license_compile_dic['license_server'].match(line):
-                # License Manager Status—Status of each license server manager. Click the Update Status button to immediately refresh the status display for the license server.
-                # • Up—License server is currently running.
-                # • Down—License server is currently not running.
-                # • Unknown—License server status is not known.
-                # • Lost quorum—For license-server triads, this means that the quorum has been lost. A quorum requires that at least two of the three license servers are running and communicating with each other.
+                # License server manager status line, e.g.
+                # "<server>: license server UP v11.19"; group(2) is the status
+                # (UP/DOWN/UNKNOWN), group(3) the server version
                 my_match = license_compile_dic['license_server'].match(line)
                 license_dic[license_server]['license_server_status'] = my_match.group(2)
                 license_dic[license_server]['license_server_version'] = my_match.group(3)
@@ -329,7 +337,7 @@ class FilterLicenseDic():
         if 'ALL' in feature_list:
             return license_dic
 
-        # Collect all feature names, then match exact-preferred.
+        # Collect all feature names, then match exact-preferred
         all_feature_list = []
 
         for license_server in license_dic.keys():
@@ -340,7 +348,7 @@ class FilterLicenseDic():
 
         filtered_feature_list = match_exact_or_fuzzy(feature_list, all_feature_list)
 
-        # Filter by feature.
+        # Filter by feature
         new_license_dic = {}
 
         if filtered_feature_list:
@@ -373,7 +381,7 @@ class FilterLicenseDic():
         if 'ALL' in feature_usage_attribute_value_list:
             return license_dic
 
-        # Collect all values for this attribute, then match exact-preferred.
+        # Collect all values for this attribute, then match exact-preferred
         all_value_list = []
 
         for license_server in license_dic.keys():
@@ -385,7 +393,7 @@ class FilterLicenseDic():
 
         filtered_feature_usage_attribute_value_list = match_exact_or_fuzzy(feature_usage_attribute_value_list, all_value_list)
 
-        # Filter by usage attribute.
+        # Filter by usage attribute
         new_license_dic = {}
 
         if filtered_feature_usage_attribute_value_list:
@@ -441,7 +449,7 @@ class FilterLicenseDic():
         ANY of the selected modes (OR semantics). Modes: "IN_USE/NOT_USED" or
         "Expired/Nearly_Expired/Unexpired". 'ALL' / empty means no filtering.
         """
-        # Normalize to a list of modes; drop ALL / empties (they mean no filter).
+        # Normalize to a list of modes; drop ALL / empties (they mean no filter)
         if isinstance(show_mode, str):
             mode_list = [show_mode]
         else:
@@ -463,7 +471,7 @@ class FilterLicenseDic():
                         in_use = license_dic[license_server]['vendor_daemon'][vendor_daemon]['feature'][feature]['in_use']
 
                         # Keep the feature's expires records only if the feature
-                        # matches at least one selected IN_USE/NOT_USED mode.
+                        # matches at least one selected IN_USE/NOT_USED mode
                         if (('IN_USE' in mode_list) and (in_use != '0')) or (('NOT_USED' in mode_list) and (in_use == '0')):
                             if feature in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires']:
                                 for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
@@ -475,7 +483,7 @@ class FilterLicenseDic():
                             for expire_dic in license_dic[license_server]['vendor_daemon'][vendor_daemon]['expires'][feature]:
                                 expire_mark = check_expire_date(expire_dic['expires'])
 
-                                # OR semantics: keep if it matches any selected mode.
+                                # OR semantics: keep if it matches any selected mode
                                 keep = False
 
                                 if ('Expired' in mode_list) and (expire_mark == -1):
@@ -546,8 +554,8 @@ class FilterLicenseDic():
         if user_list:
             filtered_license_dic = self.filter_by_user(filtered_license_dic, user_list)
 
-        # show_mode may be a single string (legacy) or a list (multi-select).
-        # Filter only when there's at least one non-ALL mode selected.
+        # show_mode may be a single string (legacy) or a list (multi-select)
+        # Filter only when there's at least one non-ALL mode selected
         if isinstance(show_mode, str):
             do_filter = show_mode and show_mode != 'ALL'
         else:
@@ -566,7 +574,7 @@ def switch_start_time(start_time, compare_second='', format=''):
     new_start_time = start_time
 
     if start_time and (start_time != 'N/A') and (start_time != 'RESERVATION'):
-        # Switch start_time to start_second.
+        # Switch start_time to start_second
         current_year = datetime.date.today().year
         start_time_with_year = str(current_year) + ' ' + str(start_time)
 
@@ -584,7 +592,7 @@ def switch_start_time(start_time, compare_second='', format=''):
             start_time_with_year = str(current_year) + ' ' + str(start_time)
             start_second = time.mktime(time.strptime(start_time_with_year, '%Y %a %m/%d %H:%M'))
 
-        # Switch start_second to expected time format.
+        # Switch start_second to expected time format
         if format:
             new_start_time = time.strftime(format, time.localtime(start_second))
         else:

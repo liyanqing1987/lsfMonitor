@@ -4,7 +4,7 @@
 # Author      : liyanqing.1987
 # Created On  : 2026-08-30
 # Description : lsfMonitor CLI — exposes LSF/License query capabilities as a
-#               command-line tool that outputs JSON.
+#               command-line tool that outputs JSON
 #
 # Usage:
 #   bmonitor_cli job <jobid>                          # Job details
@@ -76,7 +76,7 @@ def _bprint_to_stderr(message, color='', background_color='', display_method='',
 
 
 # CLI outputs pure JSON on stdout; route common.bprint (used by common_lsf /
-# common_license / common_sqlite3) to stderr so warnings never pollute it.
+# common_license / common_sqlite3) to stderr so warnings never pollute it
 common.bprint = _bprint_to_stderr
 config_lsf = common_config.load_config('lsf')
 config_license = common_config.load_config('license')
@@ -118,8 +118,8 @@ def _sample_down(data, max_points=100):
     if total <= max_points:
         return data
 
-    # 向上取整,否则 total 落在 (max_points, 2*max_points) 时 step=1 会原样
-    # 返回全部点,反而超过 max_points 上限。
+    # Round up: with step=1 and total in (max_points, 2*max_points) the whole
+    # series would be returned, overshooting the max_points cap
     step = (total + max_points - 1) // max_points
 
     return {k: v[::step] for k, v in data.items()}
@@ -137,7 +137,7 @@ def _resolve_lsf_db_root():
     if not db_path or not os.path.isdir(db_path):
         return ('', '')
 
-    # Try to identify the current cluster from lsid.
+    # Try to identify the current cluster from lsid
     cluster = ''
 
     try:
@@ -150,7 +150,7 @@ def _resolve_lsf_db_root():
     if db_root and os.path.isdir(db_root):
         return (db_root, cluster)
 
-    # Fallback: pick the first sub-directory under db_path as the cluster.
+    # Fallback: pick the first sub-directory under db_path as the cluster
     for entry in os.listdir(db_path):
         full = os.path.join(db_path, entry)
 
@@ -178,6 +178,11 @@ def _date_range(days):
     Used to enumerate date-partitioned DB files (job/<date>.db, user/<date>.db).
     """
     end_dt = datetime.datetime.now()
+
+    # --days 0 (or negative) means "today only", matching the documented behavior
+    if days <= 0:
+        days = 1
+
     begin_dt = end_dt - datetime.timedelta(days=days - 1)
     end_second = int(end_dt.timestamp())
     begin_second = int(begin_dt.timestamp())
@@ -190,9 +195,9 @@ def _date_range(days):
     return (begin_second, end_second, date_list)
 
 
-# =========================================================================
+# ============================================================================
 # LSF cluster info
-# =========================================================================
+# ============================================================================
 
 def cmd_cluster_info(args):
     """Get cluster basic info (lsid)."""
@@ -216,13 +221,22 @@ def cmd_host_groups(args):
     _json_output(result)
 
 
-# =========================================================================
+# ============================================================================
 # LSF jobs
-# =========================================================================
+# ============================================================================
 
 def _validate_jobid(jobid):
     """Return True if jobid is a safe LSF job id (digits with optional [index])."""
     return bool(re.match(r'^\d+(\[\d+\])?$', str(jobid)))
+
+
+def _validate_identifier(name):
+    """Return True if name is safe to use as an SQL table-name suffix.
+
+    Table names are built as '<prefix><name>' and spliced into the SQL string,
+    so a name containing a quote would break out of the literal.
+    """
+    return bool(re.match(r'^[A-Za-z0-9_.\-]+$', str(name)))
 
 
 def cmd_job(args):
@@ -293,7 +307,6 @@ def cmd_job_diagnose(args):
         result['queue'] = job.get('queue', '')
         result['requested_resources'] = job.get('requested_resources', '')
 
-        # Check queue slots
         queues_dic = common_lsf.get_bqueues_info()
         queue_name = job.get('queue', '')
 
@@ -311,9 +324,9 @@ def cmd_job_diagnose(args):
         result['started_on'] = job.get('started_on', '')
         result['started_time'] = job.get('started_time', '')
 
-        # Check host load
         started_on = job.get('started_on', '').strip().split()
-        hosts = started_on[:1]  # first host
+        # An LSF job may span several exec hosts; diagnose load on the first
+        hosts = started_on[:1]
 
         if hosts:
             lsload_dic = common_lsf.get_lsload_info()
@@ -333,7 +346,6 @@ def cmd_job_diagnose(args):
         result['run_limit'] = job.get('run_limit', '')
         result['cpu_time'] = job.get('cpu_time', '')
 
-        # Interpret exit code and term signal
         exit_code_file = os.path.join(_INSTALL_PATH, 'config', 'lsf', 'exit_code.yaml')
         term_signal_file = os.path.join(_INSTALL_PATH, 'config', 'lsf', 'term_signal.yaml')
         exit_code_str = str(job.get('exit_code', ''))
@@ -345,17 +357,15 @@ def cmd_job_diagnose(args):
         if term_signal_str:
             result['term_signal_reason'] = _lookup_yaml(term_signal_file, term_signal_str)
 
-        # Collect all possible causes (OOM + timeout may both apply).
+        # Collect all possible causes (OOM + timeout may both apply)
         possible_causes = []
 
-        # OOM check
         max_mem = _safe_float(job.get('max_mem', ''))
         rusage_mem = _safe_float(job.get('rusage_mem', ''))
 
         if max_mem and rusage_mem and max_mem >= rusage_mem * 0.95:
             possible_causes.append('Memory limit exceeded (OOM): max_mem >= rusage_mem')
 
-        # Timeout check
         cpu_time = _safe_float(job.get('cpu_time', ''))
         run_limit = str(job.get('run_limit', ''))
 
@@ -403,7 +413,7 @@ def cmd_jobs(args):
 
     # LSF status flag selects a coarse category; the exact status is filtered
     # client-side on the STAT column. PEND uses no flag because `bjobs -p`
-    # appends per-job pending-reason lines that break the -w table parsing.
+    # appends per-job pending-reason lines that break the -w table parsing
     status_flag = {
         'RUN': '-r',
         'DONE': '-d',
@@ -418,7 +428,7 @@ def cmd_jobs(args):
 
     job_dic = common_lsf.get_bjobs_info(command)
 
-    # Client-side status filter on the STAT column (exact match).
+    # Client-side status filter on the STAT column (exact match)
     if args.status and 'STAT' in job_dic:
         keep = []
 
@@ -428,7 +438,6 @@ def cmd_jobs(args):
 
         job_dic = _filter_dic_by_indices(job_dic, keep)
 
-    # Host filter
     if args.host and 'EXEC_HOST' in job_dic:
         keep = []
 
@@ -440,7 +449,6 @@ def cmd_jobs(args):
 
         job_dic = _filter_dic_by_indices(job_dic, keep)
 
-    # Queue filter
     if args.queue and 'QUEUE' in job_dic:
         keep = []
 
@@ -452,11 +460,10 @@ def cmd_jobs(args):
 
         job_dic = _filter_dic_by_indices(job_dic, keep)
 
-    # Convert to list of dicts
     result = _dic_to_list(job_dic)
 
     # Row cap (0 = unlimited). On a 60k-job cluster an unfiltered `jobs` would
-    # otherwise emit megabytes of JSON; --limit lets callers bound it.
+    # otherwise emit megabytes of JSON; --limit lets callers bound it
     if args.limit and args.limit > 0:
         result = result[:args.limit]
 
@@ -493,9 +500,9 @@ def _dic_to_list(dic):
     return rows
 
 
-# =========================================================================
+# ============================================================================
 # LSF hosts
-# =========================================================================
+# ============================================================================
 
 def cmd_hosts(args):
     """List hosts with optional filters."""
@@ -505,7 +512,8 @@ def cmd_hosts(args):
     host_queue_dic = common_lsf.get_host_queue_info()
     host_group_dic = common_lsf.get_host_group_info()
 
-    # Build load lookup (use 'load_status' to avoid overwriting bhosts 'status')
+    # Build load lookup with keys 'ut'/'mem' (distinct from the bhosts 'status'
+    # key, so entry.update() below cannot overwrite it)
     load_lookup = {}
 
     if 'HOST_NAME' in lsload_dic:
@@ -517,7 +525,7 @@ def cmd_hosts(args):
 
     # Build static-config lookup from lshosts (ncpus / maxmem / maxswp / type /
     # model). lshosts -w columns: HOST_NAME type model cpuf ncpus maxmem maxswp
-    # server RESOURCES. Only a subset is exposed to keep the output focused.
+    # server RESOURCES. Only a subset is exposed to keep the output focused
     config_lookup = {}
 
     if 'HOST_NAME' in lshosts_dic:
@@ -530,13 +538,12 @@ def cmd_hosts(args):
                 'model': lshosts_dic.get('model', [''])[i] if i < len(lshosts_dic.get('model', [])) else '',
             }
 
-    # Build queue lookup
     queue_lookup = {}
 
     for host, queues in host_queue_dic.items():
         queue_lookup[host] = queues
 
-    # Build group lookup. get_host_group_info already returns {host: [groups]}.
+    # Build group lookup. get_host_group_info already returns {host: [groups]}
     group_lookup = host_group_dic
     result = []
     host_names = bhosts_dic.get('HOST_NAME', [])
@@ -544,18 +551,15 @@ def cmd_hosts(args):
     for i, host in enumerate(host_names):
         status = bhosts_dic.get('STATUS', [''])[i] if i < len(bhosts_dic.get('STATUS', [])) else ''
 
-        # Status filter
         if args.status and status != args.status:
             continue
 
         queues = queue_lookup.get(host, [])
         host_groups = group_lookup.get(host, [])
 
-        # Group filter
         if args.group and args.group not in host_groups:
             continue
 
-        # Queue filter
         if args.queue and args.queue not in queues:
             continue
 
@@ -573,21 +577,20 @@ def cmd_hosts(args):
         entry.update(config_lookup.get(host, {}))
         result.append(entry)
 
-    # Sort by load if requested
     if args.sort_load:
-        # ut is a percentage string like "2%"; strip the suffix before sorting.
+        # ut is a percentage string like "2%"; strip the suffix before sorting
         result.sort(key=lambda x: _safe_float(str(x.get('ut', '0')).rstrip('%')), reverse=True)
 
-    # Row cap (0 = unlimited).
+    # Row cap (0 = unlimited)
     if args.limit and args.limit > 0:
         result = result[:args.limit]
 
     _json_output(result)
 
 
-# =========================================================================
+# ============================================================================
 # LSF queues
-# =========================================================================
+# ============================================================================
 
 def cmd_queues(args):
     """List queue status."""
@@ -596,9 +599,9 @@ def cmd_queues(args):
     _json_output(result)
 
 
-# =========================================================================
+# ============================================================================
 # LSF users (busers all)
-# =========================================================================
+# ============================================================================
 
 def cmd_users(args):
     """List per-user job counts (busers all).
@@ -609,8 +612,7 @@ def cmd_users(args):
     busers_dic = common_lsf.get_busers_info()
     rows = _dic_to_list(busers_dic)
 
-    # argparse default='RUN' guarantees args.sort is set; use it directly so an
-    # explicit empty string isn't silently replaced (matches the --days fix).
+    # argparse default='RUN' sets args.sort; a falsy --sort falls back to 'RUN'
     sort_key = (args.sort if args.sort else 'RUN').upper()
 
     # busers columns: USER/GROUP JL/P MAX NJOBS PEND RUN SSUSP USUSP RSV
@@ -631,9 +633,9 @@ def cmd_users(args):
     })
 
 
-# =========================================================================
+# ============================================================================
 # LSF queue detail (bqueues -l config) / pending reasons / cluster summary
-# =========================================================================
+# ============================================================================
 
 def _grab(pattern, text, flags=0):
     """First regex group(1) match in text, or '' if none. Used to parse bqueues -l."""
@@ -651,7 +653,7 @@ def cmd_queue(args):
     """
     queue = args.queue
 
-    # bqueues -w row.
+    # bqueues -w row
     bqueues_dic = common_lsf.get_bqueues_info()
     w_row = {}
 
@@ -659,13 +661,13 @@ def cmd_queue(args):
         idx = bqueues_dic['QUEUE_NAME'].index(queue)
         w_row = {k: (bqueues_dic[k][idx] if idx < len(bqueues_dic[k]) else '') for k in bqueues_dic}
 
-    # bqueues -l detail text (real constraints).
+    # bqueues -l detail text (real constraints)
     bqueues_l_text = ''
 
     try:
         # shlex.quote: queue comes from a CLI arg; quote it so shell meta-
         # characters can't inject (queue names are normally identifiers, but
-        # defense-in-depth).
+        # defense-in-depth)
         (return_code, stdout, stderr) = common.run_command('bqueues -l ' + shlex.quote(queue))
         bqueues_l_text = stdout.decode('utf-8', 'ignore') if stdout else ''
     except Exception:
@@ -680,7 +682,7 @@ def cmd_queue(args):
         'user_shares': _grab(r'^\s*USER_SHARES:\s*(.+)$', bqueues_l_text, re.MULTILINE),
     }
 
-    # Member host count from queue_host_mapping (current).
+    # Member host count from queue_host_mapping (current)
     member_count = None
     member_hosts = []
 
@@ -711,11 +713,11 @@ def cmd_pending_reasons(args):
 
     # argparse default=10 already guarantees args.top is set; use it directly
     # instead of `args.top or 10` so that --top 0 is honored (0 is falsy and
-    # would otherwise fall back to 10).
+    # would otherwise fall back to 10)
     top_n = args.top
     reasons = common_ai._aggregate_pending_reasons('bjobs -u all -p', top_n=top_n)
 
-    # Total pending jobs (bjobs -p lists only PEND jobs) for context.
+    # Total pending jobs (bjobs -p lists only PEND jobs) for context
     total_pend = None
 
     try:
@@ -744,7 +746,7 @@ def cmd_cluster_summary(args):
 
     (tool, _version, _cluster, _master) = common_lsf.get_lsid_info('lsid')
 
-    # common_ai auto-detects openlava vs lsf from lsid; pass the resolved tool.
+    # common_ai auto-detects openlava vs lsf from lsid; pass the resolved tool
     tool_name = tool or 'lsf'
 
     raw_data = common_ai._collect_raw_data(tool_name)
@@ -753,14 +755,19 @@ def cmd_cluster_summary(args):
     _json_output(metrics)
 
 
-# =========================================================================
+# ============================================================================
 # LSF host load (historical, from DB)
-# =========================================================================
+# ============================================================================
 
 def cmd_host_load(args):
     """Get host load history from DB."""
     hostname = args.hostname
     days = args.days
+
+    if not _validate_identifier(hostname):
+        _json_output({'error': f'Invalid hostname "{hostname}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -779,9 +786,9 @@ def cmd_host_load(args):
     select_condition = f"WHERE sample_second BETWEEN '{begin_second}' AND '{end_second}'"
     (result, conn) = common_sqlite3.connect_db_file(load_db, mode='read')
 
-    # 'locked' (fresh -journal) 与 'failed' 都不可用,统一提前返回(与 BUG-1
-    # 修复后的 get_sql_table_data 风格一致)。read 模式实际不返回 locked,此处
-    # 保持全文件判断方式统一。
+    # 'locked' (fresh -journal) and 'failed' both mean unusable; return early
+    # for both, matching the get_sql_table_data style. read mode never actually
+    # returns 'locked' — this only keeps the check uniform across the file
     if result != 'passed':
         _json_output({'error': f'Failed to connect to {load_db}.'})
         return
@@ -817,15 +824,15 @@ def cmd_host_detail(args):
         _json_output({'error': f'No load detail for host "{hostname}".'})
         return
 
-    # get_bhosts_load_info returns {hostname: {...}}, unwrap to the host's dict.
+    # get_bhosts_load_info returns {hostname: {...}}, unwrap to the host's dict
     detail = dict(result.get(hostname, result))
     detail['host'] = hostname
     _json_output(detail)
 
 
-# =========================================================================
+# ============================================================================
 # LSF historical data (from DB)
-# =========================================================================
+# ============================================================================
 
 def _list_sub_dirs(path):
     """List immediate sub-directory names under path."""
@@ -861,7 +868,7 @@ def cmd_db_clusters(args):
     for cluster in sorted(_list_sub_dirs(db_path)):
         cluster_root = os.path.join(db_path, cluster)
 
-        # Collect date range from job/<date>.db and user/<date>.db.
+        # Collect date range from job/<date>.db and user/<date>.db
         dates_list = []
 
         for sub in ['job', 'user']:
@@ -879,7 +886,7 @@ def cmd_db_clusters(args):
             entry['date_to'] = dates_list[-1]
             entry['date_count'] = len(dates_list)
 
-        # List sampled hosts and queues from load.db / queue.db table names.
+        # List sampled hosts and queues from load.db / queue.db table names
         for (db_name, key) in [('load.db', 'hosts'), ('queue.db', 'queues')]:
             db_file = os.path.join(cluster_root, db_name)
 
@@ -960,12 +967,12 @@ def cmd_db_jobs(args):
         _json_output({'error': 'No historical job DB directory.'})
         return
 
-    # Determine which date DB files to scan.
+    # Determine which date DB files to scan
     if args.date:
         date_list = [args.date]
     else:
         # argparse default=7 guarantees args.days is set; use it directly so
-        # --days 0 is honored (0 is falsy and `or 7` would wrongly fall back).
+        # --days 0 is honored (0 is falsy and `or 7` would wrongly fall back)
         days = args.days
         (_begin_second, _end_second, date_list) = _date_range(days)
 
@@ -975,7 +982,7 @@ def cmd_db_jobs(args):
     exit_filter = args.exit_code
 
     # Build a WHERE clause + bound params so SQLite filters at the DB layer
-    # instead of Python loading a 3GB+ full-table SELECT * into memory.
+    # instead of Python loading a 3GB+ full-table SELECT * into memory
     conditions = []
     params = []
 
@@ -1004,7 +1011,7 @@ def cmd_db_jobs(args):
     # safety cap so the CLI never streams an unbounded JSON blob back — a
     # 3GB+ day can otherwise exhaust memory. There is deliberately NO way to
     # fetch truly unbounded rows; narrow the search with --user/--status/
-    # --queue/--exit-code/--days or raise --limit instead.
+    # --queue/--exit-code/--days or raise --limit instead
     if args.limit and args.limit > 0:
         per_db_limit = args.limit * 2
     else:
@@ -1027,7 +1034,7 @@ def cmd_db_jobs(args):
             row['finished_date'] = date_str
             result.append(row)
 
-        # Global limit across all dates.
+        # Global limit across all dates
         if args.limit and args.limit > 0 and len(result) >= args.limit:
             result = result[:args.limit]
             break
@@ -1057,7 +1064,7 @@ def cmd_db_job_mem(args):
     # job_data/<head>_<tail>.db. range_size changed from 1M to 100K (smaller
     # files = smaller blast radius on malformed). Look up new 100K-shard first,
     # fall back to legacy 1M-shard so old sampled data stays readable until the
-    # 30-day cleanup rolls it out.
+    # 30-day cleanup rolls it out
     job_num = re.sub(r'\[.*', '', jobid)
 
     try:
@@ -1108,6 +1115,11 @@ def cmd_db_job_mem(args):
 def cmd_db_user(args):
     """Get user finished-job summary from user/<date>.db files."""
     username = args.user
+
+    if not _validate_identifier(username):
+        _json_output({'error': f'Invalid user "{username}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1185,6 +1197,11 @@ def cmd_db_queue(args):
     """Get queue NJOBS/PEND/RUN trend from queue.db."""
     queue = args.queue
     days = args.days
+
+    if not _validate_identifier(queue):
+        _json_output({'error': f'Invalid queue "{queue}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1211,6 +1228,11 @@ def cmd_db_host_jobs(args):
     """Get host NJOBS/RUN trend from host.db."""
     hostname = args.host
     days = args.days
+
+    if not _validate_identifier(hostname):
+        _json_output({'error': f'Invalid host "{hostname}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1240,6 +1262,11 @@ def cmd_db_host_util(args):
     """
     hostname = args.host
     days = args.days
+
+    if not _validate_identifier(hostname):
+        _json_output({'error': f'Invalid host "{hostname}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1247,7 +1274,7 @@ def cmd_db_host_util(args):
         return
 
     if args.daily:
-        # utilization_day.db keyed by sample_date (YYYYMMDD), not sample_second.
+        # utilization_day.db keyed by sample_date (YYYYMMDD), not sample_second
         db_file = os.path.join(db_root, 'utilization_day.db')
 
         if not os.path.exists(db_file):
@@ -1319,6 +1346,11 @@ def cmd_db_queue_hosts(args):
     """
     queue = args.queue
     days = args.days
+
+    if not _validate_identifier(queue):
+        _json_output({'error': f'Invalid queue "{queue}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1352,6 +1384,11 @@ def cmd_db_group_hosts(args):
     """
     group = args.group
     days = args.days
+
+    if not _validate_identifier(group):
+        _json_output({'error': f'Invalid group "{group}".'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1378,9 +1415,9 @@ def cmd_db_group_hosts(args):
     })
 
 
-# =========================================================================
+# ============================================================================
 # License
-# =========================================================================
+# ============================================================================
 
 def _get_license_dic():
     """Get license dic via lmstat (submitted through bsub).
@@ -1396,7 +1433,7 @@ def _get_license_dic():
 
     # Collect non-empty/non-comment lines; only override LM_LICENSE_FILE when the
     # platform file actually yields servers (a comment-only file falls back to
-    # the shell env). Matches license_sample's behavior.
+    # the shell env). Matches license_sample's behavior
     parsed_servers = []
 
     if os.path.exists(LM_LICENSE_FILE):
@@ -1411,7 +1448,7 @@ def _get_license_dic():
         os.environ['LM_LICENSE_FILE'] = ':'.join(parsed_servers)
 
     # Default to bsub submission: lmstat must run on a host that can reach the
-    # license servers, which is rarely the local CLI host.
+    # license servers, which is rarely the local CLI host
     if not lmstat_bsub_command:
         lmstat_bsub_command = 'bsub -q normal -Is'
 
@@ -1444,7 +1481,6 @@ def cmd_license(args):
                 in_use = feat_info.get('in_use', '0')
                 in_use_info = feat_info.get('in_use_info', [])
 
-                # Filter by user
                 users = []
 
                 for usage in in_use_info:
@@ -1506,7 +1542,6 @@ def cmd_license_expires(args):
                         'license_count': lic.get('license', ''),
                     })
 
-    # Sort by expiry date
     result.sort(key=lambda x: x.get('expires', ''))
     _json_output(result)
 
@@ -1548,9 +1583,9 @@ def cmd_license_usage(args):
     _json_output(result)
 
 
-# =========================================================================
+# ============================================================================
 # License historical data (from DB)
-# =========================================================================
+# ============================================================================
 
 def _license_vendor_features(specified_feature=''):
     """Yield (vendor_dir, server, vendor, [feature_tables]) tuples.
@@ -1580,7 +1615,7 @@ def _license_vendor_features(specified_feature=''):
             if not os.path.isdir(vendor_dir):
                 continue
 
-            # Roster: first existing DB's table list.
+            # Roster: first existing DB's table list
             features = []
 
             for db_name in ['usage.db', 'utilization.db', 'utilization_day.db']:
@@ -1650,7 +1685,7 @@ def cmd_db_license_usage(args):
 
     # Collect vendor dirs first, then process them in parallel. Each worker
     # opens its own connection (sqlite3 connections are thread-local), so the
-    # 3766-feature query fan-out runs across N vendor_dirs concurrently.
+    # 3766-feature query fan-out runs across N vendor_dirs concurrently
     vendors = list(_license_vendor_features(args.feature))
 
     def _process(vendor_entry):
@@ -1665,7 +1700,7 @@ def cmd_db_license_usage(args):
 
         # try/finally guarantees the connection is closed even if a future
         # code change lets an exception escape get_sql_table_data/_dic_to_list
-        # (currently they swallow internally, so this is defensive).
+        # (currently they swallow internally, so this is defensive)
         try:
             for feature in features:
                 data = common_sqlite3.get_sql_table_data(db_file, conn, feature, None, select_condition)
@@ -1720,7 +1755,7 @@ def cmd_db_license_util(args):
         select_condition = f"WHERE sample_second BETWEEN '{begin_second}' AND '{end_second}' ORDER BY sample_second"
 
     # Collect vendor dirs first, then process in parallel (each worker opens its
-    # own connection; sqlite3 connections are thread-local).
+    # own connection; sqlite3 connections are thread-local)
     vendors = list(_license_vendor_features(args.feature))
 
     def _process(vendor_entry):
@@ -1734,7 +1769,7 @@ def cmd_db_license_util(args):
         out = []
 
         # try/finally guarantees the connection is closed even if a future
-        # code change lets an exception escape (currently defensive).
+        # code change lets an exception escape (currently defensive)
         try:
             for feature in features:
                 data = common_sqlite3.get_sql_table_data(db_file, conn, feature, None, select_condition)
@@ -1768,9 +1803,9 @@ def cmd_db_license_util(args):
     })
 
 
-# =========================================================================
+# ============================================================================
 # Main
-# =========================================================================
+# ============================================================================
 
 def main():
     parser = argparse.ArgumentParser(
@@ -1904,7 +1939,6 @@ lsfMonitor CLI — 查询 LSF/License 信息，输出 JSON。
 
     subparsers = parser.add_subparsers(dest='command', help='可用子命令')
 
-    # job — 作业详情 / 诊断
     p_job = subparsers.add_parser(
         'job',
         help='job <jobid> [--diagnose pend|slow|fail]  作业详情/诊断',
@@ -1931,7 +1965,6 @@ lsfMonitor CLI — 查询 LSF/License 信息，输出 JSON。
     p_job.add_argument('jobid', type=str, help='作业 ID，例如 12345')
     p_job.add_argument('--diagnose', choices=['pend', 'slow', 'fail'], help='诊断原因：pend=排队不动 / slow=跑得慢 / fail=失败')
 
-    # job-hist — 作业历史(bhist,已完成作业 bjobs 看不到)
     p_job_hist = subparsers.add_parser(
         'job-hist',
         help='job-hist <jobid>  作业历史事件(bhist -l)',
@@ -1947,7 +1980,6 @@ events 事件流水列表 + raw 原文兜底。
     )
     p_job_hist.add_argument('jobid', type=str, help='作业 ID')
 
-    # job-output — 作业输出(bpeek)
     p_job_output = subparsers.add_parser(
         'job-output',
         help='job-output <jobid>  作业 stdout 输出(bpeek)',
@@ -1956,7 +1988,6 @@ events 事件流水列表 + raw 原文兜底。
     )
     p_job_output.add_argument('jobid', type=str, help='作业 ID')
 
-    # jobs — 作业列表
     p_jobs = subparsers.add_parser(
         'jobs',
         help='jobs [--user X] [--status RUN/PEND/DONE/EXIT] [--queue X] [--host X]  作业列表',
@@ -1985,7 +2016,6 @@ JOB_NAME、SUBMIT_TIME 等。
     p_jobs.add_argument('--host', default='', help='按执行主机筛选（模糊匹配）')
     p_jobs.add_argument('--limit', type=int, default=0, help='限制返回条数，默认 0 不限')
 
-    # hosts — 主机状态
     p_hosts = subparsers.add_parser(
         'hosts',
         help='hosts [--status ok/unavail/closed] [--queue X] [--group X] [--sort-load]  主机状态',
@@ -2012,7 +2042,6 @@ JOB_NAME、SUBMIT_TIME 等。
     p_hosts.add_argument('--sort-load', action='store_true', help='按负载(ut)从高到低排序')
     p_hosts.add_argument('--limit', type=int, default=0, help='限制返回条数，默认 0 不限')
 
-    # queues — 队列状态
     subparsers.add_parser(
         'queues',
         help='queues  队列状态总览',
@@ -2020,7 +2049,6 @@ JOB_NAME、SUBMIT_TIME 等。
         epilog='示例:\n  bmonitor_cli queues',
     )
 
-    # queue — 单队列详情（配置 + 计数）
     p_queue = subparsers.add_parser(
         'queue',
         help='queue <name>  单队列详情（配置 + 计数）',
@@ -2039,7 +2067,6 @@ bqueues -w 的 MAX/JL_* 通常是 '-'（不限制），真正约束在 -l 的 RU
     )
     p_queue.add_argument('queue', type=str, help='队列名')
 
-    # users — 用户级作业计数
     p_users = subparsers.add_parser(
         'users',
         help='users [--sort RUN/NJOBS/PEND]  用户级作业计数',
@@ -2059,7 +2086,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
     )
     p_users.add_argument('--sort', default='RUN', help='排序列（默认 RUN）：JL/P, MAX, NJOBS, PEND, RUN, SSUSP, USUSP, RSV')
 
-    # pending-reasons — 集群级排队原因
     p_pend = subparsers.add_parser(
         'pending-reasons',
         help='pending-reasons [--top N]  集群级排队原因 Top',
@@ -2078,7 +2104,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
     )
     p_pend.add_argument('--top', type=int, default=10, help='返回 Top-N 原因（默认 10）')
 
-    # cluster-summary — 集群汇总指标
     subparsers.add_parser(
         'cluster-summary',
         help='cluster-summary  集群汇总指标（slot/cpu/mem 利用率 + 作业计数）',
@@ -2092,7 +2117,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
         epilog='示例:\n  bmonitor_cli cluster-summary',
     )
 
-    # host-load — 主机历史负载
     p_host_load = subparsers.add_parser(
         'host-load',
         help='host-load <hostname> [--days N]  主机历史负载',
@@ -2112,7 +2136,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
     p_host_load.add_argument('hostname', type=str, help='主机名，例如 n019-123-001')
     p_host_load.add_argument('--days', type=int, default=7, help='查询天数（默认 7 天）')
 
-    # host-detail — 单机调度负载详情(bhosts -l)
     p_host_detail = subparsers.add_parser(
         'host-detail',
         help='host-detail <hostname>  单机调度负载详情(bhosts -l)',
@@ -2127,7 +2150,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
     )
     p_host_detail.add_argument('hostname', type=str, help='主机名')
 
-    # cluster-info
     subparsers.add_parser(
         'cluster-info',
         help='cluster-info  集群基本信息',
@@ -2135,7 +2157,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
         epilog='示例:\n  bmonitor_cli cluster-info',
     )
 
-    # host-groups
     subparsers.add_parser(
         'host-groups',
         help='host-groups  host group 列表',
@@ -2143,7 +2164,6 @@ USER/GROUP、JL/P、MAX、NJOBS、PEND、RUN、SSUSP、USUSP、RSV。
         epilog='示例:\n  bmonitor_cli host-groups',
     )
 
-    # license — feature 占用
     p_license = subparsers.add_parser(
         'license',
         help='license [--feature X] [--user X]  License feature 占用',
@@ -2165,7 +2185,6 @@ issued（总量）、in_use（在用）、available（可用）、当前占用�
     p_license.add_argument('--feature', default='', help='按 feature 名称筛选（模糊匹配，大小写不敏感）')
     p_license.add_argument('--user', default='', help='按用户筛选（模糊匹配，大小写不敏感）')
 
-    # license-expires
     p_expires = subparsers.add_parser(
         'license-expires',
         help='license-expires [--feature X]  License 到期时间',
@@ -2182,7 +2201,6 @@ issued（总量）、in_use（在用）、available（可用）、当前占用�
     )
     p_expires.add_argument('--feature', default='', help='按 feature 名称筛选（模糊匹配）')
 
-    # license-usage
     p_usage = subparsers.add_parser(
         'license-usage',
         help='license-usage [--user X]  License 用户使用详情',
@@ -2201,7 +2219,7 @@ feature、user、数量、版本、开始时间、提交主机、执行主机。
     )
     p_usage.add_argument('--user', default='', help='按用户筛选（模糊匹配，大小写不敏感）')
 
-    # ===== db — 历史数据查询（读采样 DB） =====
+    # ---- db — historical data queries (reads the sampled DBs) ----
     p_db = subparsers.add_parser(
         'db',
         help='db <clusters|job|jobs|job-mem|user|queue|queue-hosts|group-hosts|host-jobs|host-util|license-servers|license-usage|license-util>  历史采样数据',
@@ -2234,14 +2252,11 @@ License DB 路径：<config_license.db_path or config.db_path/license>/license_s
     )
     db_subparsers = p_db.add_subparsers(dest='db_command', metavar='子命令')
 
-    # db clusters
     db_subparsers.add_parser('clusters', help='clusters  已采样集群及数据日期范围')
 
-    # db job
     p_db_job = db_subparsers.add_parser('job', help='job <jobid>  已完成作业详情')
     p_db_job.add_argument('jobid', type=str, help='作业 ID')
 
-    # db jobs
     p_db_jobs = db_subparsers.add_parser('jobs', help='jobs [--user X] [--status X] [--queue X] [--exit-code N] [--date YYYYMMDD] [--days N] [--limit N]  历史完成作业')
     p_db_jobs.add_argument('--user', default='', help='按用户筛选（精确匹配）')
     p_db_jobs.add_argument('--status', default='', help='按状态筛选：RUN/DONE/EXIT 等')
@@ -2251,55 +2266,45 @@ License DB 路径：<config_license.db_path or config.db_path/license>/license_s
     p_db_jobs.add_argument('--date', default='', help='指定完成日期 YYYYMMDD（与 --days 互斥）')
     p_db_jobs.add_argument('--limit', type=int, default=0, help='限制返回总条数；默认 0 表示不强制限制但每天仍有 5000 条安全上限（大集群单日作业可达数十万，无上限会爆内存）')
 
-    # db job-mem
     p_db_job_mem = db_subparsers.add_parser('job-mem', help='job-mem <jobid> [--days N]  作业内存/idle_factor 时序')
     p_db_job_mem.add_argument('jobid', type=str, help='作业 ID')
     p_db_job_mem.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
 
-    # db user
     p_db_user = db_subparsers.add_parser('user', help='user <user> [--date YYYYMMDD] [--days N] [--limit N]  用户已完成作业汇总')
     p_db_user.add_argument('user', type=str, help='用户名')
     p_db_user.add_argument('--days', type=int, default=7, help='查询天数，默认 7（与 --date 互斥）')
     p_db_user.add_argument('--date', default='', help='指定完成日期 YYYYMMDD（与 --days 互斥）')
     p_db_user.add_argument('--limit', type=int, default=0, help='限制返回条数，默认 0 不限')
 
-    # db queue
     p_db_queue = db_subparsers.add_parser('queue', help='queue <queue> [--days N]  队列负载趋势')
     p_db_queue.add_argument('queue', type=str, help='队列名')
     p_db_queue.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
 
-    # db queue-hosts
     p_db_qh = db_subparsers.add_parser('queue-hosts', help='queue-hosts <queue> [--days N]  队列成员主机历史')
     p_db_qh.add_argument('queue', type=str, help='队列名')
     p_db_qh.add_argument('--days', type=int, default=30, help='查询天数，默认 30')
 
-    # db group-hosts
     p_db_gh = db_subparsers.add_parser('group-hosts', help='group-hosts <group> [--days N]  主机组成员历史')
     p_db_gh.add_argument('group', type=str, help='主机组名')
     p_db_gh.add_argument('--days', type=int, default=30, help='查询天数，默认 30')
 
-    # db host-jobs
     p_db_host_jobs = db_subparsers.add_parser('host-jobs', help='host-jobs <host> [--days N]  主机作业数趋势')
     p_db_host_jobs.add_argument('host', type=str, help='主机名')
     p_db_host_jobs.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
 
-    # db host-util
     p_db_host_util = db_subparsers.add_parser('host-util', help='host-util <host> [--days N] [--daily]  主机利用率趋势')
     p_db_host_util.add_argument('host', type=str, help='主机名')
     p_db_host_util.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
     p_db_host_util.add_argument('--daily', action='store_true', help='返回日均（utilization_day.db）')
 
-    # db license-servers
     p_db_lic_servers = db_subparsers.add_parser('license-servers', help='license-servers [--feature X]  已采样 license server/vendor/feature')
     p_db_lic_servers.add_argument('--feature', default='', help='按 feature 名称筛选（模糊匹配）')
 
-    # db license-usage
     p_db_lic_usage = db_subparsers.add_parser('license-usage', help='license-usage [--feature X] [--user X] [--days N]  历史 license 占用记录')
     p_db_lic_usage.add_argument('--feature', default='', help='按 feature 名称筛选（模糊匹配）')
     p_db_lic_usage.add_argument('--user', default='', help='按用户筛选（模糊匹配）')
     p_db_lic_usage.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
 
-    # db license-util
     p_db_lic_util = db_subparsers.add_parser('license-util', help='license-util [--feature X] [--days N] [--daily]  license feature 利用率趋势')
     p_db_lic_util.add_argument('--feature', default='', help='按 feature 名称筛选（模糊匹配）')
     p_db_lic_util.add_argument('--days', type=int, default=7, help='查询天数，默认 7')
@@ -2311,12 +2316,11 @@ License DB 路径：<config_license.db_path or config.db_path/license>/license_s
         parser.print_help()
         sys.exit(1)
 
-    # db 子命令需要二级命令
+    # 'db' requires a second-level subcommand
     if args.command == 'db' and not getattr(args, 'db_command', None):
         p_db.print_help()
         sys.exit(1)
 
-    # Dispatch
     db_dispatch = {
         'clusters': cmd_db_clusters,
         'job': cmd_db_job,

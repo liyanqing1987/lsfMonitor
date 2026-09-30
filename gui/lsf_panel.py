@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+################################
+# File Name   : lsf_panel.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : LSF panel: JOB / JOBS / HOSTS / LOAD / USERS / QUEUES /
+#               UTILIZATION inner tabs
+################################
 
 import os
 import re
@@ -13,7 +20,7 @@ import numpy as np
 
 from PyQt5.QtCore import QDate, Qt, QThread, QTimer
 from PyQt5.QtGui import QBrush, QColor, QFont, QIcon
-from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget, QInputDialog
+from PyQt5.QtWidgets import QAction, QApplication, QDateEdit, QFileDialog, QFrame, QGridLayout, QHeaderView, QLabel, QLineEdit, QMenu, QMessageBox, QPushButton, QSplitter, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget, QInputDialog
 
 LSFMONITOR_INSTALL_PATH = Path(os.environ['LSFMONITOR_INSTALL_PATH'])
 sys.path.append(str(LSFMONITOR_INSTALL_PATH))
@@ -23,10 +30,10 @@ from common import common_lsf
 from common import common_pyqt5
 from common import common_sqlite3
 
-# Shared loading-prompt QThread (tracked subprocess + safe terminate()).
+# Shared loading-prompt QThread (tracked subprocess + safe terminate())
 # lsf_panel previously had its own unsafe ShowMessage (os.system + no
 # terminate() override); rebinding its local while still running aborted with
-# "QThread: Destroyed while thread is still running".
+# "QThread: Destroyed while thread is still running"
 ShowMessage = common_pyqt5.ShowMessage
 
 from common import common_config
@@ -39,10 +46,9 @@ config_lsf = common_config.load_config('lsf')
 
 from gui.version import VERSION, RELEASE_DATE, USER
 
-# Constants
 DEFAULT_RUNTIME_DIR = Path('/tmp') / f'runtime-{USER}'
 
-# Inner tab names (avoid magic strings scattered through tab_dic / addTab).
+# Inner tab names (avoid magic strings scattered through tab_dic / addTab)
 TAB_JOB = 'JOB'
 TAB_JOBS = 'JOBS'
 TAB_HOSTS = 'HOSTS'
@@ -51,7 +57,6 @@ TAB_USERS = 'USERS'
 TAB_QUEUES = 'QUEUES'
 TAB_UTILIZATION = 'UTILIZATION'
 
-# Environment configuration
 os.environ.update({
     'LSB_NTRIES': '3',
     'PYTHONUNBUFFERED': '1',
@@ -63,40 +68,50 @@ DEFAULT_RUNTIME_DIR.mkdir(exist_ok=True)
 DEFAULT_RUNTIME_DIR.chmod(0o700)
 
 
+def _safe_int(value):
+    """int() with a 0 fallback for 'N/A'/empty sampler values (e.g. the
+    lost_and_found queue writes TOTAL='N/A' into queue.db)."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 class LsfPanel(PanelBase):
     """
     LSF monitoring panel. Embedded as an outer tab in the unified MainWindow.
-    Owns an inner QTabWidget (JOB/JOBS/HOSTS/LOAD/USERS/QUEUES/UTILIZATION/LICENSE).
+    Owns an inner QTabWidget (JOB/JOBS/HOSTS/LOAD/USERS/QUEUES/UTILIZATION).
     AI tab is provided by the separate AiPanel.
     """
 
     def __init__(self, context, parent=None, args=None):
         super().__init__(context, parent)
 
-        # Show version information.
+        # Show version information
         common.bprint(f'lsfMonitor Version: {VERSION} ({RELEASE_DATE})', date_format='%Y-%m-%d %H:%M:%S')
         common.bprint('', date_format='%Y-%m-%d %H:%M:%S')
 
         # Entry args. -u/-H/-f are now nargs='+' lists; join back to a
         # space-separated string so the downstream GUI inputs (which .split()
-        # on whitespace) keep working unchanged.
+        # on whitespace) keep working unchanged
         self.specified_job = getattr(args, 'jobid', 0) if args else 0
         self.specified_user = ' '.join(getattr(args, 'user', []) or []) if args else ''
         self.specified_host = ' '.join(getattr(args, 'host', []) or []) if args else ''
         self.specified_tab = getattr(args, 'tab', '') if args else ''
         self.dark_mode = getattr(args, 'dark_mode', False) if args else False
 
-        # Check cluster info.
+        # Check cluster info
         common.bprint('Checking cluster information ...', date_format='%Y-%m-%d %H:%M:%S')
         (self.tool, self.cluster) = self.check_cluster_info()
 
-        # Reload cluster-specific config_lsf if exists.
+        # Reload cluster-specific config_lsf if exists
         common_config.reload_config_for_cluster(self.cluster)
 
-        # Set db_path. Defaults to config_lsf.db_path (e.g. <prefix>/db/lsf); when a
-        # cluster is detected, scope to <db_path>/<cluster>. This matches bsample's
-        # db_path layout so GUI reads exactly where the sampler writes.
-        # resolve_db_path: config_lsf.db_path if set, else config.py db_path/lsf.
+        # Set db_path. Defaults to config_lsf.db_path (e.g. <prefix>/db/lsf);
+        # when a cluster is detected, scope to <db_path>/<cluster>. This
+        # matches bsample's db_path layout so GUI reads exactly where the
+        # sampler writes resolve_db_path: config_lsf.db_path if set, else
+        # config.py db_path/lsf
         self.lsf_db_root = common_db_path.resolve_db_path(config_lsf, 'lsf')
         self.cluster_db_path = self.lsf_db_root
 
@@ -105,16 +120,17 @@ class LsfPanel(PanelBase):
 
         # Sampling dirs are written by bsample (owner); the GUI only reads, so
         # these are 0o755. create_dir() is a no-op when the dir already exists,
-        # so it never alters a sampler-created dir's owner/mode.
+        # so it never alters a sampler-created dir's owner/mode
         common.create_dir(self.lsf_db_root, 0o755)
         common.create_dir(self.cluster_db_path, 0o755)
 
-        # Publish cluster context onto AppContext for sibling panels (e.g. AiPanel).
+        # Publish cluster context onto AppContext for sibling panels (e.g.
+        # AiPanel)
         self.context.tool = self.tool
         self.context.cluster = self.cluster
         self.context.cluster_db_path = self.cluster_db_path
 
-        # Enable detail information on QUEUE/UTILIZATION tab.
+        # Enable detail information on QUEUE/UTILIZATION tab
         self.enable_queue_detail = False
         self.enable_utilization_detail = False
 
@@ -122,7 +138,7 @@ class LsfPanel(PanelBase):
         self.utilization_cache = {}
         self.utilization_cache_timeout = 3600
 
-        # Init LSF information related variables.
+        # Init LSF information related variables
         self.bhosts_dic = {}
         self.busers_dic = {}
         self.lsload_dic = {}
@@ -134,17 +150,19 @@ class LsfPanel(PanelBase):
         self.bhosts_load_dic = {}
 
         # Set self.lsf_info_dic for how to get LSF information.
-        self.lsf_info_dic = {'bhosts': {'exec_cmd': 'self.bhosts_dic = common_lsf.get_bhosts_info()', 'update_second': 0},
-                             'lsload': {'exec_cmd': 'self.lsload_dic = common_lsf.get_lsload_info()', 'update_second': 0},
-                             'bqueues': {'exec_cmd': 'self.bqueues_dic = common_lsf.get_bqueues_info()', 'update_second': 0},
-                             'busers': {'exec_cmd': 'self.busers_dic = common_lsf.get_busers_info()', 'update_second': 0},
-                             'lshosts': {'exec_cmd': 'self.lshosts_dic = common_lsf.get_lshosts_info()', 'update_second': 0},
-                             'queue_host': {'exec_cmd': 'self.queue_host_dic = common_lsf.get_queue_host_info()', 'update_second': 0},
-                             'host_queue': {'exec_cmd': 'self.host_queue_dic = common_lsf.get_host_queue_info()', 'update_second': 0},
-                             'host_group': {'exec_cmd': 'self.host_group_dic = common_lsf.get_host_group_info()', 'update_second': 0},
-                             'bhosts_load': {'exec_cmd': 'self.bhosts_load_dic = common_lsf.get_bhosts_load_info()', 'update_second': 0}}
+        # 'fetch' builds the value and 'attr' names the attribute it is stored on
+        self.lsf_info_dic = {'bhosts': {'fetch': lambda: common_lsf.get_bhosts_info(), 'attr': 'bhosts_dic', 'update_second': 0},
+                             'lsload': {'fetch': lambda: common_lsf.get_lsload_info(), 'attr': 'lsload_dic', 'update_second': 0},
+                             'bqueues': {'fetch': lambda: common_lsf.get_bqueues_info(), 'attr': 'bqueues_dic', 'update_second': 0},
+                             'busers': {'fetch': lambda: common_lsf.get_busers_info(), 'attr': 'busers_dic', 'update_second': 0},
+                             'lshosts': {'fetch': lambda: common_lsf.get_lshosts_info(), 'attr': 'lshosts_dic', 'update_second': 0},
+                             'queue_host': {'fetch': lambda: common_lsf.get_queue_host_info(), 'attr': 'queue_host_dic', 'update_second': 0},
+                             'host_queue': {'fetch': lambda: common_lsf.get_host_queue_info(), 'attr': 'host_queue_dic', 'update_second': 0},
+                             'host_group': {'fetch': lambda: common_lsf.get_host_group_info(), 'attr': 'host_group_dic', 'update_second': 0},
+                             'bhosts_load': {'fetch': lambda: common_lsf.get_bhosts_load_info(), 'attr': 'bhosts_load_dic', 'update_second': 0}}
 
-        # Just update specified_job info if specified_job argument is specified.
+        # With --jobid, mark every entry as freshly updated so fresh_lsf_info()
+        # does not re-run the LSF commands at startup
         if self.specified_job:
             current_second = int(time.time())
 
@@ -152,7 +170,7 @@ class LsfPanel(PanelBase):
                 self.lsf_info_dic[item]['update_second'] = current_second
 
         # Generate GUI (creates tab placeholders; the initial visible tab is
-        # built eagerly in init_ui, the rest lazily on first click).
+        # built eagerly in init_ui, the rest lazily on first click)
         self.init_ui()
 
         common.bprint('lsfMonitor is ready.', date_format='%Y-%m-%d %H:%M:%S')
@@ -165,7 +183,7 @@ class LsfPanel(PanelBase):
         lazy construction), and pre-fills filter fields + auto-clicks Check.
         """
         # Infer initial tab: explicit --tab > --jobid(JOB) > --host(LOAD) >
-        # --user(JOBS) > JOBS(default).
+        # JOBS(default)
         if not self.specified_tab:
             if self.specified_job:
                 self.specified_tab = TAB_JOB
@@ -176,7 +194,7 @@ class LsfPanel(PanelBase):
 
         self.switch_tab(self.specified_tab)
 
-        # Pre-fill all relevant tabs with the specified values and auto-check.
+        # Pre-fill all relevant tabs with the specified values and auto-check
         self.apply_entry_args(None)
 
     def apply_entry_args(self, args):
@@ -186,7 +204,7 @@ class LsfPanel(PanelBase):
         values stored in self (specified_job/specified_user/specified_host)
         rather than re-reading args.
         """
-        # JOBS tab: fill user + auto-check.
+        # JOBS tab: fill user + auto-check
         if self.specified_user:
             self._ensure_inner_tab_built(self.jobs_tab)
 
@@ -196,11 +214,11 @@ class LsfPanel(PanelBase):
 
         # JOB tab: fill jobid + auto-check (on_first_show already built it if
         # specified_job was set; gen_job_tab handles the Check via
-        # check_job_on_job_tab).
+        # check_job_on_job_tab)
         # (handled during gen_job_tab build, no extra action needed here)
 
         # HOSTS tab: fill host line (space-separated multi-host, the line's
-        # consumer splits on whitespace so multiple hosts all apply).
+        # consumer splits on whitespace so multiple hosts all apply)
         if self.specified_host:
             self._ensure_inner_tab_built(self.hosts_tab)
 
@@ -209,7 +227,7 @@ class LsfPanel(PanelBase):
                 self.gen_hosts_tab_table()
 
         # LOAD tab: only accepts a single host. When -H passed multiple, fill
-        # the first one and warn about the rest so the user knows why.
+        # the first one and warn about the rest so the user knows why
         if self.specified_host:
             host_list = str(self.specified_host).split()
             first_host = host_list[0] if host_list else ''
@@ -224,7 +242,7 @@ class LsfPanel(PanelBase):
                 self.load_tab_host_line.setText(first_host)
                 self.update_load_tab_load_info()
 
-        # USERS tab: fill user/queue + auto-check.
+        # USERS tab: fill user/queue + auto-check
         if self.specified_user:
             self._ensure_inner_tab_built(self.users_tab)
 
@@ -272,8 +290,9 @@ class LsfPanel(PanelBase):
                 my_show_message = ShowMessage('Info', f'Loading LSF {lsf_info} information ...', persistent=True)
                 my_show_message.start()
 
-                exec(self.lsf_info_dic[lsf_info]['exec_cmd'])
-                self.lsf_info_dic[lsf_info]['update_second'] = current_second
+                info = self.lsf_info_dic[lsf_info]
+                setattr(self, info['attr'], info['fetch']())
+                info['update_second'] = current_second
 
                 time.sleep(0.01)
                 my_show_message.terminate()
@@ -284,13 +303,13 @@ class LsfPanel(PanelBase):
         正确拆分 '{cluster}-{queue}' 格式，处理集群名含 '-' 的情况。
         返回 (cluster, queue_name)，无法识别则返回 (None, full_name)。
         """
-        # 优先匹配当前集群
+        # Prefer a match on the current cluster
         prefix = self.cluster + '-'
 
         if full_name.startswith(prefix):
             return (self.cluster, full_name[len(prefix):])
 
-        # 遍历 DB 中所有已知集群
+        # Walk every cluster known to the DB
         db_root_path = Path(self.lsf_db_root)
 
         if db_root_path.exists() and db_root_path.is_dir():
@@ -314,15 +333,15 @@ class LsfPanel(PanelBase):
         """
         Create placeholder QWidgets for every inner tab, add them to main_tab
         (so the tab bar is fully visible), then build ONLY the tab that will
-        be shown first. Heavy tabs (HOSTS/USERS/QUEUES/UTILIZATION/INNER-LICENSE)
+        be shown first. Heavy tabs (HOSTS/USERS/QUEUES/UTILIZATION)
         are registered for lazy construction via ``_register_lazy_tab`` so that
-        their LSF/license command invocations do not run at startup.
+        their LSF command invocations do not run at startup.
         """
         # main_tab is provided by PanelBase; menubar is contributed by
         # register_menubar_actions() onto the host MainWindow. AI tab is owned
-        # by the separate AiPanel, not added here.
+        # by the separate AiPanel, not added here
 
-        # Define sub-tab placeholders.
+        # Define sub-tab placeholders
         self.job_tab = QWidget()
         self.jobs_tab = QWidget()
         self.hosts_tab = QWidget()
@@ -331,9 +350,9 @@ class LsfPanel(PanelBase):
         self.queues_tab = QWidget()
         self.utilization_tab = QWidget()
 
-        # Add the sub-tabs into main Tab widget (labels visible immediately).
+        # Add the sub-tabs into main Tab widget (labels visible immediately)
         # The LSF inner LICENSE tab is removed; license monitoring lives in the
-        # outer LICENSE panel instead.
+        # outer LICENSE panel instead
         self.main_tab.addTab(self.job_tab, TAB_JOB)
         self.main_tab.addTab(self.jobs_tab, TAB_JOBS)
         self.main_tab.addTab(self.hosts_tab, TAB_HOSTS)
@@ -342,8 +361,8 @@ class LsfPanel(PanelBase):
         self.main_tab.addTab(self.queues_tab, TAB_QUEUES)
         self.main_tab.addTab(self.utilization_tab, TAB_UTILIZATION)
 
-        # Decide which tab to build eagerly (the initial visible tab).
-        # All other tabs are registered for lazy build on first click.
+        # Decide which tab to build eagerly (the initial visible tab)
+        # All other tabs are registered for lazy build on first click
         if self.specified_job:
             initial_tab = self.job_tab
             initial_builder = self.gen_job_tab
@@ -370,7 +389,7 @@ class LsfPanel(PanelBase):
             initial_tab = self.jobs_tab
             initial_builder = self.gen_jobs_tab
 
-        # Build the initial tab eagerly.
+        # Build the initial tab eagerly
         common.bprint('Generating {} tab ...'.format(
             self.main_tab.tabText(self.main_tab.indexOf(initial_tab))
         ), date_format='%Y-%m-%d %H:%M:%S')
@@ -378,7 +397,7 @@ class LsfPanel(PanelBase):
 
         # Register every OTHER tab for lazy construction. We detect whether a
         # tab has already been built by checking if its layout is set (every
-        # gen_*_tab method calls tab.setLayout before returning).
+        # gen_*_tab method calls tab.setLayout before returning)
         lazy_specs = [
             (self.job_tab, self.gen_job_tab, TAB_JOB),
             (self.jobs_tab, self.gen_jobs_tab, TAB_JOBS),
@@ -396,8 +415,8 @@ class LsfPanel(PanelBase):
             if tab_widget.layout() is None:
                 self._register_lazy_tab(tab_widget, self._make_lazy_builder(gen_method, tab_name))
 
-        # Window chrome (title/icon/resize/center/dark stylesheet) is handled by
-        # the host MainWindow; this panel is an embedded QWidget.
+        # Window chrome (title/icon/resize/center/dark stylesheet) is handled
+        # by the host MainWindow; this panel is an embedded QWidget
 
     def _make_lazy_builder(self, gen_method, tab_name):
         """Return a zero-arg callable that logs and invokes gen_method."""
@@ -424,7 +443,7 @@ class LsfPanel(PanelBase):
                    TAB_QUEUES: self.queues_tab,
                    TAB_UTILIZATION: self.utilization_tab}
 
-        # Tab name is case-insensitive (user may type job/Jobs/JOBS).
+        # Tab name is case-insensitive (user may type job/Jobs/JOBS)
         specified_tab = specified_tab.upper() if specified_tab else ''
 
         if specified_tab not in tab_dic:
@@ -442,7 +461,7 @@ class LsfPanel(PanelBase):
         function_menu = shared_menus['Function']
         help_menu = shared_menus['Help']
 
-        # ----- File (LSF exports) -----
+        # ---- File (LSF exports) ----
         export_jobs_table_action = QAction('Export LSF jobs table', self)
         export_jobs_table_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/save.png'))
         export_jobs_table_action.triggered.connect(self.export_jobs_table)
@@ -468,7 +487,7 @@ class LsfPanel(PanelBase):
                     export_utilization_table_action):
             file_menu.addAction(act)
 
-        # ----- Setup (LSF) -----
+        # ---- Setup (LSF) ----
         self.enable_queue_detail_action = QAction('Enable LSF queue detail', self, checkable=True)
         self.enable_queue_detail_action.setChecked(False)
         self.enable_queue_detail_action.toggled.connect(self.func_enable_queue_detail)
@@ -480,7 +499,7 @@ class LsfPanel(PanelBase):
         setup_menu.addAction(self.enable_queue_detail_action)
         setup_menu.addAction(self.enable_utilization_detail_action)
 
-        # ----- Function (LSF) -----
+        # ---- Function (LSF) ----
         check_pend_reason_action = QAction('Check LSF Pend reason', self)
         check_pend_reason_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/pend.png'))
         check_pend_reason_action.triggered.connect(self.check_pend_reason)
@@ -495,7 +514,7 @@ class LsfPanel(PanelBase):
         function_menu.addAction(check_slow_reason_action)
         function_menu.addAction(check_fail_reason_action)
 
-        # ----- Help (application-level, owned by LSF panel) -----
+        # ---- Help (application-level, owned by LSF panel) ----
         version_action = QAction('Version', self)
         version_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/version.png'))
         version_action.triggered.connect(self.show_version)
@@ -599,21 +618,26 @@ Made with ❤️  by liyanqing.1987
 
         QMessageBox.about(self, 'lsfMonitor', about_message)
 
-# Common sub-functions (begin) #
+# ============================================================================
+# Common sub-functions (begin)
+# ============================================================================
     def gui_warning(self, warning_message):
         """
         Show the specified warning message on both of command line and GUI window.
         """
         common.bprint(warning_message, date_format='%Y-%m-%d %H:%M:%S', level='Warning')
         QMessageBox.warning(self, 'lsfMonitor Warning', warning_message)
-# Common sub-functions (end) #
+# ============================================================================
+# Common sub-functions (end)
+# ============================================================================
 
-# For job TAB (begin) #
+# ============================================================================
+# For job TAB (begin)
+# ============================================================================
     def gen_job_tab(self):
         """
         Generate the job tab on lsfMonitor GUI, show job informations.
         """
-        # Init var
         self.job_tab_current_job = ''
         self.job_tab_current_job_dic = {}
 
@@ -622,38 +646,38 @@ Made with ❤️  by liyanqing.1987
         self.job_tab_frame1 = QFrame(self.job_tab)
         self.job_tab_frame2 = QFrame(self.job_tab)
         self.job_tab_frame3 = QFrame(self.job_tab)
+        self.job_tab_frame3.setObjectName('chartFrame')
 
-        self.job_tab_frame0.setFrameShadow(QFrame.Raised)
-        self.job_tab_frame0.setFrameShape(QFrame.Box)
-        self.job_tab_frame1.setFrameShadow(QFrame.Raised)
-        self.job_tab_frame1.setFrameShape(QFrame.Box)
-        self.job_tab_frame2.setFrameShadow(QFrame.Raised)
-        self.job_tab_frame2.setFrameShape(QFrame.Box)
-        self.job_tab_frame3.setFrameShadow(QFrame.Raised)
-        self.job_tab_frame3.setFrameShape(QFrame.Box)
+        for frame in (self.job_tab_frame0, self.job_tab_frame1, self.job_tab_frame2, self.job_tab_frame3):
+            frame.setFrameShadow(QFrame.Raised)
+            frame.setFrameShape(QFrame.Box)
 
         # self.job_tab - Grid
+        job_top_widget = QWidget()
+        job_top_grid = QGridLayout()
+        job_top_grid.setContentsMargins(0, 0, 0, 0)
+        job_top_grid.addWidget(self.job_tab_frame0, 0, 0)
+        job_top_grid.addWidget(self.job_tab_frame1, 1, 0)
+        job_top_grid.addWidget(self.job_tab_frame3, 0, 1, 2, 1)
+        job_top_grid.setRowStretch(0, 1)
+        job_top_grid.setRowStretch(1, 14)
+        job_top_grid.setColumnStretch(0, 1)
+        job_top_grid.setColumnStretch(1, 10)
+        job_top_grid.setColumnMinimumWidth(0, 360)
+        job_top_widget.setLayout(job_top_grid)
+
+        job_tab_splitter = QSplitter(Qt.Vertical)
+        job_tab_splitter.addWidget(job_top_widget)
+        job_tab_splitter.addWidget(self.job_tab_frame2)
+        job_tab_splitter.setChildrenCollapsible(False)
+        job_tab_splitter.setHandleWidth(6)
+        job_tab_splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self._apply_splitter_ratio(job_tab_splitter, 70)
+
         job_tab_grid = QGridLayout()
-
-        job_tab_grid.addWidget(self.job_tab_frame0, 0, 0)
-        job_tab_grid.addWidget(self.job_tab_frame1, 1, 0)
-        job_tab_grid.addWidget(self.job_tab_frame2, 2, 0, 1, 2)
-        job_tab_grid.addWidget(self.job_tab_frame3, 0, 1, 2, 1)
-
-        job_tab_grid.setRowStretch(0, 1)
-        job_tab_grid.setRowStretch(1, 14)
-        job_tab_grid.setRowStretch(2, 6)
-
-        job_tab_grid.setColumnStretch(0, 1)
-        job_tab_grid.setColumnStretch(1, 10)
-
-        # 360px gives the label+value columns in frame1 enough room to show
-        # full timestamps like "Thu Aug 27 11:43:26" (≈20 chars) without clipping.
-        job_tab_grid.setColumnMinimumWidth(0, 360)
-
+        job_tab_grid.addWidget(job_tab_splitter, 0, 0)
         self.job_tab.setLayout(job_tab_grid)
 
-        # Generate sub-frames
         self.gen_job_tab_frame0()
         self.gen_job_tab_frame1()
         self.gen_job_tab_frame2()
@@ -662,9 +686,9 @@ Made with ❤️  by liyanqing.1987
         # Empty-state hint: the JOB tab does not load anything until the user
         # enters a job id and clicks "Check". Shown over the chart frame (the
         # tab's graphics area) so the filter row stays interactive; hidden in
-        # check_job_on_job_tab().
+        # check_job_on_job_tab()
         self.job_tab_hint_label = self._make_empty_hint(
-            job_tab_grid, 0, 1, 2, 1, 'Enter a job id and click "Check" to load job information.'
+            self.job_tab_frame3.layout(), 0, 0, 1, 1, 'Enter a job id and click "Check" to load job information.'
         )
 
         if self.specified_job:
@@ -673,7 +697,7 @@ Made with ❤️  by liyanqing.1987
 
     def gen_job_tab_frame0(self):
         # self.job_tab_frame0
-        # "Job" item.
+        # "Job" item
         job_tab_job_label = QLabel(self.job_tab_frame0)
         job_tab_job_label.setStyleSheet("font-weight: bold;")
         job_tab_job_label.setText('Job')
@@ -681,26 +705,26 @@ Made with ❤️  by liyanqing.1987
         self.job_tab_job_line = QLineEdit()
         self.job_tab_job_line.returnPressed.connect(self.check_job_on_job_tab)
 
-        # "Check" button.
+        # "Check" button
         job_tab_check_button = QPushButton('Check', self.job_tab_frame0)
         job_tab_check_button.clicked.connect(self.check_job_on_job_tab)
 
-        # "Kill" button.
+        # "Kill" button
         job_tab_kill_button = QPushButton('Kill', self.job_tab_frame0)
         job_tab_kill_button.clicked.connect(self.kill_job_on_job_tab)
 
-        # "Trace" button.
+        # "Trace" button
         job_tab_trace_button = QPushButton('Trace', self.job_tab_frame0)
         job_tab_trace_button.clicked.connect(lambda: self.trace_job())
 
         # self.job_tab_frame0 - Grid
         job_tab_frame0_grid = QGridLayout()
 
-        # Row 0: "Job" label + input (input stretches to fill remaining width).
+        # Row 0: "Job" label + input (input stretches to fill remaining width)
         job_tab_frame0_grid.addWidget(job_tab_job_label, 0, 0)
         job_tab_frame0_grid.addWidget(self.job_tab_job_line, 0, 1)
         # Row 1: Check / Kill / Trace — three buttons equally share the width
-        # (no trailing spacer, so they stretch uniformly across the row).
+        # (no trailing spacer, so they stretch uniformly across the row)
         from PyQt5.QtWidgets import QHBoxLayout
         job_tab_btn_row = QHBoxLayout()
         job_tab_btn_row.setSpacing(10)
@@ -718,74 +742,74 @@ Made with ❤️  by liyanqing.1987
 
     def gen_job_tab_frame1(self):
         # self.job_tab_frame1
-        # "Status" item.
+        # "Status" item
         job_tab_status_label = QLabel('Status', self.job_tab_frame1)
         job_tab_status_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_status_line = QLineEdit()
 
-        # "User" item.
+        # "User" item
         job_tab_user_label = QLabel('User', self.job_tab_frame1)
         job_tab_user_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_user_line = QLineEdit()
 
-        # "Project" item.
+        # "Project" item
         job_tab_project_label = QLabel('Project', self.job_tab_frame1)
         job_tab_project_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_project_line = QLineEdit()
 
-        # "Queue" item.
+        # "Queue" item
         job_tab_queue_label = QLabel('Queue', self.job_tab_frame1)
         job_tab_queue_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_queue_line = QLineEdit()
 
-        # "Host" item.
+        # "Host" item
         job_tab_started_on_label = QLabel('Host', self.job_tab_frame1)
         job_tab_started_on_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_started_on_line = QLineEdit()
         self.job_tab_started_on_line.returnPressed.connect(self.job_tab_host_click)
 
-        # "Start Time" item.
+        # "Start Time" item
         job_tab_started_time_label = QLabel('Start Time', self.job_tab_frame1)
         job_tab_started_time_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_started_time_line = QLineEdit()
 
-        # "Finish Time" item.
+        # "Finish Time" item
         job_tab_finished_time_label = QLabel('Finish Time', self.job_tab_frame1)
         job_tab_finished_time_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_finished_time_line = QLineEdit()
 
-        # "Processors" item.
+        # "Processors" item
         job_tab_processors_requested_label = QLabel('Processors', self.job_tab_frame1)
         job_tab_processors_requested_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_processors_requested_line = QLineEdit()
 
-        # "IDLE_FACTOR" item.
+        # "IDLE_FACTOR" item
         job_tab_idle_factor_label = QLabel('IDLE_FACTOR', self.job_tab_frame1)
         job_tab_idle_factor_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_idle_factor_line = QLineEdit()
 
-        # "Rusage" item.
+        # "Rusage" item
         job_tab_rusage_mem_label = QLabel('Rusage', self.job_tab_frame1)
         job_tab_rusage_mem_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_rusage_mem_line = QLineEdit()
 
-        # "Mem (now)" item.
+        # "Mem (now)" item
         job_tab_mem_label = QLabel('Mem (now)', self.job_tab_frame1)
         job_tab_mem_label.setStyleSheet("font-weight: bold;")
 
         self.job_tab_mem_line = QLineEdit()
 
-        # "Mem (max)" item.
+        # "Mem (max)" item
         job_tab_max_mem_label = QLabel('Mem (max)', self.job_tab_frame1)
         job_tab_max_mem_label.setStyleSheet("font-weight: bold;")
 
@@ -819,8 +843,8 @@ Made with ❤️  by liyanqing.1987
         job_tab_frame1_grid.addWidget(job_tab_max_mem_label, 11, 0)
         job_tab_frame1_grid.addWidget(self.job_tab_max_mem_line, 11, 1)
 
-        # Column 0 (labels) hugs content; column 1 (value fields) takes the rest,
-        # so timestamps / long values are never clipped.
+        # Column 0 (labels) hugs content; column 1 (value fields) takes the
+        # rest, so timestamps / long values are never clipped
         job_tab_frame1_grid.setColumnStretch(0, 0)
         job_tab_frame1_grid.setColumnStretch(1, 1)
         job_tab_frame1_grid.setHorizontalSpacing(10)
@@ -836,25 +860,26 @@ Made with ❤️  by liyanqing.1987
 
         if job_started_on:
             # Multi-host job (e.g. "n019-028-054 n249-073-069"): LOAD tab is
-            # single-host, so keep only the first host to avoid empty result.
+            # single-host, so keep only the first host to avoid empty result
             exec_host_list = common_lsf.get_exec_host_list(job_started_on)
+
             if exec_host_list:
                 job_started_on = exec_host_list[0]
 
-            # Build the LOAD tab lazily before touching its widgets.
+            # Build the LOAD tab lazily before touching its widgets
             self._ensure_inner_tab_built(self.load_tab)
 
-            # Re-set self.load_tab_host_line.
+            # Re-set self.load_tab_host_line
             self.load_tab_host_line.setText(job_started_on)
 
-            # Re-set self.load_tab_begin_date_edit.
+            # Re-set self.load_tab_begin_date_edit
             job_start_time = self.job_tab_started_time_line.text().strip()
 
             if job_start_time:
                 job_start_time = common_lsf.switch_bjobs_uf_time(job_start_time, '%Y%m%d')
                 self.load_tab_begin_date_edit.setDate(QDate.fromString(job_start_time, 'yyyyMMdd'))
 
-            # Re-set self.load_tab_end_date_edit.
+            # Re-set self.load_tab_end_date_edit
             job_finish_time = self.job_tab_finished_time_line.text().strip()
 
             if job_finish_time:
@@ -863,7 +888,7 @@ Made with ❤️  by liyanqing.1987
             else:
                 self.load_tab_end_date_edit.setDate(QDate.currentDate())
 
-            # Switch to LOAD tab.
+            # Switch to LOAD tab
             self.update_load_tab_load_info()
             self.main_tab.setCurrentWidget(self.load_tab)
 
@@ -877,21 +902,17 @@ Made with ❤️  by liyanqing.1987
         self.job_tab_frame2.setLayout(job_tab_frame2_grid)
 
     def gen_job_tab_frame3(self):
-        # self.job_tab_frame3
-        # Name the wrapping card frame chartFrame so QSS can paint it
-        # PRIMARY_LIGHT: the QTabWidget does not paint the tab-bar strip to
-        # the right of the last tab, so that gap shows the frame behind it.
-        # The chartTab QSS (light-blue widget background + white ::pane) then
-        # gives a light-blue tab strip (matching the main JOB/JOBS bar) with a
-        # white content card below — same as every other panel tab.
-        self.job_tab_frame3.setObjectName('chartFrame')
+        # self.job_tab_frame3 (objectName set in gen_job_tab before polish)
+        # Do NOT set autoFillBackground / QPalette on chart_tab — that creates
+        # two overlapping paint layers (frame + widget) and causes a visible
+        # colour seam in the tab-bar gap to the right of the last sub-tab.
+        # The wrapping chartFrame fills the gap with CHART_FRAME_BG.
         self.job_tab_chart_tab = QTabWidget(self.job_tab_frame3)
         self.job_tab_chart_tab.setObjectName('chartTab')
         # BoldAwareTabBar: size tabs to their bold width so MEMORY/IDLE_FACTOR
-        # labels never clip when selected (QSS :selected had font-weight:600).
+        # labels never clip when selected (QSS :selected had font-weight:600)
         self.job_tab_chart_tab.setTabBar(common_pyqt5.BoldAwareTabBar())
 
-        # MEMORY tab
         job_tab_mem_widget = QWidget()
         self.job_tab_mem_canvas = common_pyqt5.FigureCanvasQTAgg()
         self.job_tab_mem_toolbar = common_pyqt5.NavigationToolbar2QT(self.job_tab_mem_canvas, self, x_is_date=False)
@@ -917,7 +938,6 @@ Made with ❤️  by liyanqing.1987
         job_tab_idle_factor_layout.addWidget(self.job_tab_idle_factor_canvas, 1)
         job_tab_idle_factor_widget.setLayout(job_tab_idle_factor_layout)
 
-        # Add tabs
         self.job_tab_chart_tab.addTab(job_tab_mem_widget, 'MEMORY')
         self.job_tab_chart_tab.addTab(job_tab_idle_factor_widget, 'IDLE_FACTOR')
 
@@ -928,8 +948,8 @@ Made with ❤️  by liyanqing.1987
         self.job_tab_frame3.setLayout(job_tab_frame3_grid)
 
     def _style_job_canvas(self, canvas):
-        """Apply figure background + size policy so MEMORY/IDLE_FACTOR charts
-        are on a white background and fill the tab area."""
+        """Apply figure background (light/dark per self.dark_mode) + size policy
+        so MEMORY/IDLE_FACTOR charts fill the tab area."""
         from PyQt5.QtWidgets import QSizePolicy
 
         canvas.figure.set_facecolor(theme.CHART_COLORS[bool(self.dark_mode)]['figure_face'])
@@ -939,19 +959,19 @@ Made with ❤️  by liyanqing.1987
 
     def check_job_on_job_tab(self):
         """
-        Get job information with "bjobs -UF <job_id>", save the infomation into dict self.job_tab_current_job_dic.
-        Update self.job_tab_frame1 and self.job_tab_frame3.
+        Get job information with "bjobs -UF <job_id>", save the information into dict self.job_tab_current_job_dic.
+        Update self.job_tab_frame1, self.job_tab_frame2 and self.job_tab_frame3.
         """
-        # Hide the empty-state hint once the user triggers a load.
+        # Hide the empty-state hint once the user triggers a load
         if getattr(self, 'job_tab_hint_label', None) is not None:
             self.job_tab_hint_label.hide()
 
-        # Initialization JOB tab.
+        # Initialization JOB tab
         self.update_job_tab_frame1(init=True)
         self.update_job_tab_frame2(init=True)
         self.update_job_tab_frame3(init=True)
 
-        # Get real jobid and check it.
+        # Get real jobid and check it
         self.job_tab_current_job = self.job_tab_job_line.text().strip()
         my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
 
@@ -964,7 +984,6 @@ Made with ❤️  by liyanqing.1987
 
         common.bprint(f'Checking job "{current_job}".', date_format='%Y-%m-%d %H:%M:%S')
 
-        # Get job info
         common.bprint(f'Getting LSF job information for "{current_job}" ...', date_format='%Y-%m-%d %H:%M:%S')
 
         my_show_message = ShowMessage('Info', f'Getting LSF job information for "{current_job}" ...', persistent=True)
@@ -1010,7 +1029,7 @@ Made with ❤️  by liyanqing.1987
             self.gui_warning(warning_message)
             return
 
-        # Update JOB tab with latest job info.
+        # Update JOB tab with latest job info
         my_show_message.terminate()
         my_show_message.wait(3000)
         my_show_message = ShowMessage('Info', 'Rendering job information ...', persistent=True)
@@ -1048,8 +1067,9 @@ Made with ❤️  by liyanqing.1987
                 my_show_message = ShowMessage('Info', f'Kill {jobid} successfully!', persistent=True)
                 my_show_message.start()
                 # Non-blocking auto-close: a singleShot timer terminates the
-                # prompt after a short delay so the UI stays responsive (the old
-                # time.sleep(5) blocked the main thread for the whole window).
+                # prompt after a short delay so the UI stays responsive (the
+                # old time.sleep(5) blocked the main thread for the whole
+                # window)
                 QTimer.singleShot(2500, my_show_message.terminate)
             else:
                 common.bprint(f'Failed on killing {jobid}.', date_format='%Y-%m-%d %H:%M:%S')
@@ -1057,7 +1077,7 @@ Made with ❤️  by liyanqing.1987
                 my_show_message = ShowMessage(f'Kill {jobid} fail', str(str(stderr, 'utf-8')).strip(), persistent=True)
                 my_show_message.start()
                 # Persistent prompts never auto-close on their own — schedule
-                # the terminate so a failure prompt can't become an orphan.
+                # the terminate so a failure prompt can't become an orphan
                 QTimer.singleShot(5000, my_show_message.terminate)
 
             return return_code
@@ -1151,7 +1171,7 @@ Made with ❤️  by liyanqing.1987
 
         # Try new format (job_data/ single-table schema) first. range_size
         # changed from 1M to 100K; resolve_job_data_db tries 100K-shard then
-        # falls back to legacy 1M-shard so old sampled data stays readable.
+        # falls back to legacy 1M-shard so old sampled data stays readable
         job_data_db_file = common.resolve_job_data_db(str(self.cluster_db_path) + '/job_data', self.job_tab_current_job)
 
         if job_data_db_file:
@@ -1183,7 +1203,7 @@ Made with ❤️  by liyanqing.1987
                 except Exception:
                     db_conn.close()
 
-        # Fall back to old format (job_mem/ per-job tables, 100K range).
+        # Fall back to old format (job_mem/ per-job tables, 100K range)
         job_range_dic_old = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_old = list(job_range_dic_old.keys())[0]
         job_mem_db_file = str(self.cluster_db_path) + '/job_mem/' + str(job_range_old) + '.db'
@@ -1233,7 +1253,7 @@ Made with ❤️  by liyanqing.1987
 
         # Try new format (job_data/ single-table schema) first. range_size
         # changed from 1M to 100K; resolve_job_data_db tries 100K-shard then
-        # falls back to legacy 1M-shard so old sampled data stays readable.
+        # falls back to legacy 1M-shard so old sampled data stays readable
         job_data_db_file = common.resolve_job_data_db(str(self.cluster_db_path) + '/job_data', self.job_tab_current_job)
 
         if job_data_db_file:
@@ -1263,7 +1283,7 @@ Made with ❤️  by liyanqing.1987
                 except Exception:
                     db_conn.close()
 
-        # Fall back to old format (job_idle_factor/ per-job tables, 100K range).
+        # Fall back to old format (job_idle_factor/ per-job tables, 100K range)
         job_range_dic_old = common.get_job_range_dic([self.job_tab_current_job, ])
         job_range_old = list(job_range_dic_old.keys())[0]
         job_idle_factor_db_file = str(self.cluster_db_path) + '/job_idle_factor/' + str(job_range_old) + '.db'
@@ -1351,9 +1371,13 @@ Made with ❤️  by liyanqing.1987
                                  xlabel='Runtime (Minutes)',
                                  ylabel='IDLE_FACTOR')
         self.job_tab_idle_factor_canvas.draw()
-# For job TAB (end) #
+# ============================================================================
+# For job TAB (end)
+# ============================================================================
 
-# For jobs TAB (start) #
+# ============================================================================
+# For jobs TAB (start)
+# ============================================================================
     def gen_jobs_tab(self):
         """
         Generate the jobs tab on lsfMonitor GUI, show jobs informations.
@@ -1364,6 +1388,7 @@ Made with ❤️  by liyanqing.1987
         self.jobs_tab_frame0.setFrameShape(QFrame.Box)
 
         self.jobs_tab_table = QTableWidget(self.jobs_tab)
+        self._jobs_tab_job_column_fitted = False
         common_pyqt5.make_table_readonly(self.jobs_tab_table)
         self.jobs_tab_table.itemClicked.connect(self.jobs_tab_check_click)
         self.jobs_tab_table.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -1380,7 +1405,6 @@ Made with ❤️  by liyanqing.1987
 
         self.jobs_tab.setLayout(jobs_tab_grid)
 
-        # Generate sub-frame
         self.gen_jobs_tab_frame0()
 
         if self.specified_user:
@@ -1390,7 +1414,7 @@ Made with ❤️  by liyanqing.1987
 
     def gen_jobs_tab_frame0(self):
         # self.jobs_tab_frame0
-        # "Status" item.
+        # "Status" item
         jobs_tab_status_label = QLabel('Status', self.jobs_tab_frame0)
         jobs_tab_status_label.setStyleSheet("font-weight: bold;")
         jobs_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1398,7 +1422,7 @@ Made with ❤️  by liyanqing.1987
         self.jobs_tab_status_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0)
         self.set_jobs_tab_status_combo()
 
-        # "Queue" item.
+        # "Queue" item
         jobs_tab_queue_label = QLabel('Queue', self.jobs_tab_frame0)
         jobs_tab_queue_label.setStyleSheet("font-weight: bold;")
         jobs_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1406,7 +1430,7 @@ Made with ❤️  by liyanqing.1987
         self.jobs_tab_queue_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0, enableFilter=True)
         self.set_jobs_tab_queue_combo()
 
-        # "Group" item (host group, same source as HOSTS tab).
+        # "Group" item (host group, same source as HOSTS tab)
         jobs_tab_group_label = QLabel('Group', self.jobs_tab_frame0)
         jobs_tab_group_label.setStyleSheet("font-weight: bold;")
         jobs_tab_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1414,7 +1438,7 @@ Made with ❤️  by liyanqing.1987
         self.jobs_tab_group_combo = common_pyqt5.QComboCheckBox(self.jobs_tab_frame0, enableFilter=True)
         self.set_jobs_tab_group_combo()
 
-        # "Host" item.
+        # "Host" item
         jobs_tab_started_on_label = QLabel('Host', self.jobs_tab_frame0)
         jobs_tab_started_on_label.setStyleSheet("font-weight: bold;")
         jobs_tab_started_on_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1423,7 +1447,7 @@ Made with ❤️  by liyanqing.1987
         self.jobs_tab_host_line.returnPressed.connect(self.gen_jobs_tab_table)
         self.set_jobs_tab_host_line_completer()
 
-        # "User" item.
+        # "User" item
         jobs_tab_user_label = QLabel('User', self.jobs_tab_frame0)
         jobs_tab_user_label.setStyleSheet("font-weight: bold;")
         jobs_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -1440,7 +1464,7 @@ Made with ❤️  by liyanqing.1987
 
         self.jobs_tab_user_line.setCompleter(jobs_tab_user_line_completer)
 
-        # "Check" button.
+        # "Check" button
         jobs_tab_check_button = QPushButton('Check', self.jobs_tab_frame0)
         jobs_tab_check_button.clicked.connect(self.gen_jobs_tab_table)
 
@@ -1477,39 +1501,35 @@ Made with ❤️  by liyanqing.1987
         # self.jobs_tab_table
         self.jobs_tab_table.setShowGrid(True)
         self.jobs_tab_table.setSortingEnabled(False)
-        self.jobs_tab_table.setColumnCount(0)
-        self.jobs_tab_table.setColumnCount(12)
         self.jobs_tab_table_title_list = ['Job', 'User', 'Status', 'Queue', 'Host', 'Started', 'Slot', 'IDLE', 'Rusage (G)', 'Mem (G)', 'MaxMem (G)', 'Command']
+
+        first_build = self.jobs_tab_table.columnCount() != len(self.jobs_tab_table_title_list)
+
+        if first_build:
+            self.jobs_tab_table.setColumnCount(len(self.jobs_tab_table_title_list))
+
         self.jobs_tab_table.setHorizontalHeaderLabels(self.jobs_tab_table_title_list)
 
-        # Column widths (px). Sized to show typical content without clipping:
-        #   Job      — 8 digits max ≈ 85px; kept Interactive so users can resize.
-        #   User     — account names like "liyanqing.1987" (up to ~15 chars) ≈ 125px.
-        #   Started  — "YYYY-MM-DD HH:MM:SS" (19 chars) ≈ 185px.
-        #   Command  — stretch, takes remaining width.
-        self.jobs_tab_table.setColumnWidth(0, 100)
-        self.jobs_tab_table.setColumnWidth(1, 125)
-        self.jobs_tab_table.setColumnWidth(2, 65)
-        self.jobs_tab_table.setColumnWidth(3, 110)
-        self.jobs_tab_table.setColumnWidth(4, 130)
-        self.jobs_tab_table.setColumnWidth(5, 165)
-        self.jobs_tab_table.setColumnWidth(6, 30)    # Slot
-        self.jobs_tab_table.setColumnWidth(7, 30)    # IDLE
-        self.jobs_tab_table.setColumnWidth(8, 30)    # Rusage (G)
-        self.jobs_tab_table.setColumnWidth(9, 30)    # Mem (G)
-        self.jobs_tab_table.setColumnWidth(10, 30)   # MaxMem (G)
-        # Default Interactive so setColumnWidth() is honoured (ResizeToContents
-        # would re-grow Job to fit the widest JOBID and ignore our 85px cap).
-        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
-        self.jobs_tab_table.horizontalHeader().setSectionResizeMode(11, QHeaderView.Stretch)
-        # auto_size: ensure every column is at least wide enough for its header label.
-        common_pyqt5.auto_size_table_columns(self.jobs_tab_table)
+        if first_build:
+            self.jobs_tab_table.setColumnWidth(0, 100)     # min 63
+            self.jobs_tab_table.setColumnWidth(1, 130)     # min 74
+            self.jobs_tab_table.setColumnWidth(2, 88)      # min 88
+            self.jobs_tab_table.setColumnWidth(3, 120)     # min 87
+            self.jobs_tab_table.setColumnWidth(4, 140)     # min 74
+            self.jobs_tab_table.setColumnWidth(5, 165)     # min 95
+            self.jobs_tab_table.setColumnWidth(6, 69)      # min 69
+            self.jobs_tab_table.setColumnWidth(7, 73)      # min 73
+            self.jobs_tab_table.setColumnWidth(8, 121)     # min 121
+            self.jobs_tab_table.setColumnWidth(9, 102)     # min 102
+            self.jobs_tab_table.setColumnWidth(10, 132)    # min 132
+            self.jobs_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Interactive)
+            common_pyqt5.auto_size_table_columns(self.jobs_tab_table, flex_cols=[11])
 
-        # Get specified user related jobs.
-        # bjobs -u does not support multiple users, so resolve keywords against
-        # the known user list (busers): exact usernames query bjobs -u <user>
-        # directly (fast); a fuzzy keyword that matches too many users falls back
-        # to bjobs -u all + Python filter (slow but correct).
+        # Get specified user related jobs bjobs -u does not support multiple
+        # users, so resolve keywords against the known user list (busers):
+        # exact usernames query bjobs -u <user> directly (fast); a fuzzy
+        # keyword that matches too many users falls back to bjobs -u all +
+        # Python filter (slow but correct)
         specified_user_list = self.jobs_tab_user_line.text().strip().split()
         self.fresh_lsf_info('busers')
 
@@ -1519,15 +1539,16 @@ Made with ❤️  by liyanqing.1987
 
         for specified_user in specified_user_list:
             if specified_user in all_user_list:
-                # Exact username — query it directly.
+                # Exact username — query it directly
                 if specified_user not in resolved_user_list:
                     resolved_user_list.append(specified_user)
             else:
-                # Fuzzy keyword — expand to matching usernames.
+                # Fuzzy keyword — expand to matching usernames
                 matched_user_list = [user for user in all_user_list if specified_user.lower() in user.lower()]
 
                 if len(matched_user_list) > 50:
-                    # Too broad (e.g. "li" matches hundreds) — fall back to -u all.
+                    # Too broad (e.g. "li" matches hundreds) — fall back to -u
+                    # all
                     use_fallback_user_filter = True
                     break
 
@@ -1535,34 +1556,35 @@ Made with ❤️  by liyanqing.1987
                     if user not in resolved_user_list:
                         resolved_user_list.append(user)
 
-        # Build the base command (without -u; added per-path below).
+        # Build the base command (without -u; added per-path below)
         # need_python_filter covers BOTH slow cases: a fuzzy keyword that
         # matched too many users (>50, -u all + filter), AND a keyword that
         # matched nobody (resolved_user_list empty but specified_user_list
         # non-empty — must filter so the empty match yields an empty result
-        # instead of -u all returning every job in the cluster).
+        # instead of -u all returning every job in the cluster)
         need_python_filter = use_fallback_user_filter or (bool(specified_user_list) and not resolved_user_list)
 
         if need_python_filter:
-            # Slow path: fetch all users, filter in Python below.
+            # Slow path: fetch all users, filter in Python below
             command = 'bjobs -UF -u all'
         elif resolved_user_list:
-            # Fast path: fetch each resolved user (no -u in base command; queried per user).
+            # Fast path: fetch each resolved user (no -u in base command;
+            # queried per user)
             command = 'bjobs -UF'
         else:
-            # No user filter.
+            # No user filter
             command = 'bjobs -UF -u all'
 
-        # Get specified queue related jobs.
+        # Get specified queue related jobs
         specified_queue_list = self.jobs_tab_queue_combo.currentText().strip().split()
 
         if (len(specified_queue_list) == 1) and (specified_queue_list[0] != 'ALL'):
             command = str(command) + ' -q ' + str(specified_queue_list[0])
 
-        # Get specified host group related jobs (filtered client-side below).
+        # Get specified host group related jobs (filtered client-side below)
         specified_group_list = self.jobs_tab_group_combo.currentText().strip().split()
 
-        # Get specified status (RUN/PEND/ALL) related jobs.
+        # Get specified status (RUN/PEND/ALL) related jobs
         specified_status_list = self.jobs_tab_status_combo.currentText().strip().split()
 
         if (len(specified_status_list) == 1) and (specified_status_list[0] == 'RUN'):
@@ -1580,7 +1602,7 @@ Made with ❤️  by liyanqing.1987
         else:
             command = str(command) + ' -a'
 
-        # Get specified host related jobs.
+        # Get specified host related jobs
         specified_host_list = self.jobs_tab_host_line.text().strip().split()
 
         if (len(specified_host_list) == 1) and (specified_host_list[0] != 'ALL'):
@@ -1590,19 +1612,19 @@ Made with ❤️  by liyanqing.1987
             if specified_host_list[0] in all_host_list:
                 command = str(command) + ' -m ' + str(specified_host_list[0])
 
-        # Run command to get expected jobs information.
+        # Run command to get expected jobs information
         common.bprint('Loading LSF jobs information ...', date_format='%Y-%m-%d %H:%M:%S')
 
         # persistent=True (--no-autoclose): the message window must stay up
-        # until terminate() at the end of this method, not auto-close after 5s.
+        # until terminate() at the end of this method, not auto-close after 5s
         # The full pipeline (bjobs fetch + filter + fill table + resize) often
         # exceeds the default 5s autoclose — without this the prompt disappears
-        # mid-work and the UI looks frozen while still busy.
+        # mid-work and the UI looks frozen while still busy
         my_show_message = ShowMessage('Info', 'Loading LSF jobs information ...', persistent=True)
         my_show_message.start()
 
         if resolved_user_list and not use_fallback_user_filter:
-            # Fast path: query each resolved user, merge into one job_dic.
+            # Fast path: query each resolved user, merge into one job_dic
             job_dic = {}
 
             for resolved_user in resolved_user_list:
@@ -1616,17 +1638,17 @@ Made with ❤️  by liyanqing.1987
         my_show_message.terminate()
         my_show_message.wait(3000)
         # Same persistent flag: rendering a large jobs table can take a while,
-        # keep the prompt visible until the final terminate() at method end.
+        # keep the prompt visible until the final terminate() at method end
         my_show_message = ShowMessage('Info', 'Rendering jobs table ...', persistent=True)
         my_show_message.start()
 
-        # Filter job_dic.
+        # Filter job_dic
         job_list = list(job_dic.keys())
 
         # On the slow -u all path, resolve specified_user_list once:
-        # exact-preferred (exact match wins; fuzzy only when no exact match).
+        # exact-preferred (exact match wins; fuzzy only when no exact match)
         # matched_user_list is [] when no keyword matched any job user, which
-        # (combined with the filter below) correctly yields an empty result.
+        # (combined with the filter below) correctly yields an empty result
         matched_user_list = []
 
         if need_python_filter and specified_user_list:
@@ -1640,13 +1662,14 @@ Made with ❤️  by liyanqing.1987
             all_host_list = self.bhosts_dic.get('HOST_NAME', []) if 'HOST_NAME' in self.bhosts_dic else []
             matched_host_list = common.match_exact_or_fuzzy(specified_host_list, all_host_list)
 
-        # Ensure host_group info is fresh for the Group filter below.
+        # Ensure host_group info is fresh for the Group filter below
         self.fresh_lsf_info('host_group')
 
         for job in job_list:
             # Filter with specified_user_list on the slow -u all path (the fast
-            # path already queried each user's jobs directly). matched_user_list
-            # is empty when nothing matched → every job is dropped → empty result.
+            # path already queried each user's jobs directly).
+            # matched_user_list is empty when nothing matched → every job is
+            # dropped → empty result
             if need_python_filter and specified_user_list and (job_dic[job]['user'] not in matched_user_list):
                 del job_dic[job]
                 continue
@@ -1668,10 +1691,12 @@ Made with ❤️  by liyanqing.1987
                     continue
 
             # Filter with specified_group_list: keep the job if any of its
-            # execution hosts belongs to a selected host group.
+            # execution hosts belongs to a selected host group
             if ('ALL' not in specified_group_list) and (len(specified_group_list) >= 1):
                 find_group = False
-                started_on_list = job_dic[job]['started_on'].strip().split()
+                # get_exec_host_list strips the "N*" slot prefix and splits the
+                # comma-joined multi-host string ('cmp01,cmp02') into host names
+                started_on_list = common_lsf.get_exec_host_list(job_dic[job]['started_on'])
 
                 for started_host in started_on_list:
                     if started_host in self.host_group_dic:
@@ -1687,27 +1712,28 @@ Made with ❤️  by liyanqing.1987
                     del job_dic[job]
                     continue
 
-        # Fill self.jobs_tab_table items.
+        # Fill self.jobs_tab_table items
         self.jobs_tab_table.setRowCount(0)
         self.jobs_tab_table.setRowCount(len(job_dic.keys()))
 
-        # Don't remove below setting!!!
+        # Snapshot the job ids: the table below is filled by index, so the
+        # iteration order must stay fixed while the loop runs
         job_list = list(job_dic.keys())
 
         for i in range(len(job_list)):
-            # Fill "Job" item.
+            # Fill "Job" item
             job = job_list[i]
             j = 0
             item = QTableWidgetItem(job)
             item.setFont(QFont('song', 9, QFont.Bold))
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "User" item.
+            # Fill "User" item
             j = j + 1
             item = QTableWidgetItem(job_dic[job]['user'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Status" item.
+            # Fill "Status" item
             j = j + 1
             item = QTableWidgetItem(job_dic[job]['status'])
             item.setFont(QFont('song', 9, QFont.Bold))
@@ -1725,23 +1751,23 @@ Made with ❤️  by liyanqing.1987
 
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Queue" item.
+            # Fill "Queue" item
             j = j + 1
             item = QTableWidgetItem(job_dic[job]['queue'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Host" item.
+            # Fill "Host" item
             j = j + 1
             item = QTableWidgetItem(job_dic[job]['started_on'])
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Started" item.
+            # Fill "Started" item
             j = j + 1
             start_time = common_lsf.switch_bjobs_uf_time(job_dic[job]['started_time'], '%Y-%m-%d %H:%M:%S')
             item = QTableWidgetItem(start_time)
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Slot" item.
+            # Fill "Slot" item
             j = j + 1
 
             if str(job_dic[job]['processors_requested']) != '':
@@ -1749,7 +1775,7 @@ Made with ❤️  by liyanqing.1987
                 item.setData(Qt.DisplayRole, int(job_dic[job]['processors_requested']))
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "IDLE" item.
+            # Fill "IDLE" item
             j = j + 1
             idle_value = ''
 
@@ -1760,7 +1786,7 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, idle_value)
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Rusage" item.
+            # Fill "Rusage" item
             j = j + 1
             rusage_mem_value = 0
 
@@ -1770,7 +1796,7 @@ Made with ❤️  by liyanqing.1987
                 item.setData(Qt.DisplayRole, rusage_mem_value)
                 self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Mem" item.
+            # Fill "Mem" item
             j = j + 1
             mem_value = ''
 
@@ -1785,7 +1811,7 @@ Made with ❤️  by liyanqing.1987
             if mem_value and (((not job_dic[job]['rusage_mem']) and (mem_value > 0)) or (job_dic[job]['rusage_mem'] and (mem_value > rusage_mem_value))):
                 item.setBackground(QBrush(QColor(STATUS_EXIT)))
 
-            # Fill "MaxMem" item.
+            # Fill "MaxMem" item
             j = j + 1
             max_mem_value = ''
 
@@ -1796,19 +1822,25 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, max_mem_value)
             self.jobs_tab_table.setItem(i, j, item)
 
-            # Fill "Command" item.
+            # Fill "Command" item
             j = j + 1
             item = QTableWidgetItem(job_dic[job]['command'])
             self.jobs_tab_table.setItem(i, j, item)
 
         self.jobs_tab_table.setSortingEnabled(True)
-        # Job 列按内容自适应(resizeColumnToContents 保证最长 jobid 完整显示、
-        # 不出现省略号),但短 jobid(如 6 位)算出的内容宽度会小于构造时设的
-        # 100px,把列缩得过窄;取内容宽度与 100px 的较大值作为下限兜底。
-        self.jobs_tab_table.resizeColumnToContents(0)
 
-        if self.jobs_tab_table.columnWidth(0) < 100:
-            self.jobs_tab_table.setColumnWidth(0, 100)
+        # Size the Job column to its content (resizeColumnToContents keeps the
+        # longest jobid fully visible with no ellipsis), but a short jobid (6
+        # digits) yields a content width below the 100px set at construction
+        # and shrinks the column too far; use max(content width, 100px) as the
+        # floor
+        if not self._jobs_tab_job_column_fitted:
+            self.jobs_tab_table.resizeColumnToContents(0)
+
+            if self.jobs_tab_table.columnWidth(0) < 100:
+                self.jobs_tab_table.setColumnWidth(0, 100)
+
+            self._jobs_tab_job_column_fitted = True
 
         my_show_message.terminate()
         my_show_message.wait(3000)
@@ -1816,8 +1848,8 @@ Made with ❤️  by liyanqing.1987
     def jobs_tab_check_click(self, item=None):
         """
         If click the Job id, jump to the JOB tab and show the job information.
-        If click the "PEND" Status, show the job pend reasons on a QMessageBox.information().
-        If click the Host, jump to the HOSTS tab and filter by the first host.
+        If click the Status, run the matching pend/slow/fail reason check for the job.
+        If click the Host, jump to the HOSTS tab and filter by all exec hosts.
         """
         if item is not None:
             current_row = self.jobs_tab_table.currentRow()
@@ -1843,8 +1875,10 @@ Made with ❤️  by liyanqing.1987
 
                 if started_on:
                     exec_host_list = common_lsf.get_exec_host_list(started_on)
+
                     if exec_host_list:
-                        # Pass all exec hosts (space-separated) so HOSTS filters to all of them.
+                        # Pass all exec hosts (space-separated) so HOSTS
+                        # filters to all of them
                         self._ensure_inner_tab_built(self.hosts_tab)
                         self.hosts_tab_host_line.setText(' '.join(exec_host_list))
                         self.gen_hosts_tab_table()
@@ -1856,8 +1890,11 @@ Made with ❤️  by liyanqing.1987
         """
         item = self.jobs_tab_table.itemAt(pos)
 
-        # Rusage (G) 列号按标题名取,避免列顺序调整后索引漂移导致菜单错位。
+        # Resolve the Rusage (G) column index by title, so reordering columns
+        # cannot drift the index and misalign the context menu
         rusage_column = self.jobs_tab_table_title_list.index('Rusage (G)')
+
+        menu = QMenu(self.jobs_tab_table)
 
         if item and (item.column() == rusage_column):
             current_row = self.jobs_tab_table.currentRow()
@@ -1866,19 +1903,28 @@ Made with ❤️  by liyanqing.1987
 
             # Only show menu for current user's jobs
             if job_user == USER:
-                menu = QMenu(self.jobs_tab_table)
-
                 modify_rusage_action = QAction('Modify Rusage Mem', self)
                 modify_rusage_action.triggered.connect(lambda: self.modify_job_rusage(job))
                 menu.addAction(modify_rusage_action)
 
-                menu.exec_(self.jobs_tab_table.mapToGlobal(pos))
+                menu.addSeparator()
+
+        reset_width_action = QAction('Reset column widths', self)
+        reset_width_action.triggered.connect(self.reset_jobs_tab_column_widths)
+        menu.addAction(reset_width_action)
+
+        menu.exec_(self.jobs_tab_table.mapToGlobal(pos))
+
+    def reset_jobs_tab_column_widths(self):
+        """
+        Restore every column of self.jobs_tab_table to its default width.
+        """
+        common_pyqt5.reset_table_column_widths(self.jobs_tab_table)
 
     def modify_job_rusage(self, job):
         """
         Open dialog to modify job's rusage memory.
         """
-        # Get current Rusage value from table
         current_row = -1
 
         for row in range(self.jobs_tab_table.rowCount()):
@@ -1902,7 +1948,8 @@ Made with ❤️  by liyanqing.1987
         host_item = self.jobs_tab_table.item(current_row, host_column)
         host = host_item.text().strip() if host_item else ''
 
-        # Multi-host jobs: take the first exec host for the memory ceiling check.
+        # Multi-host jobs: take the first exec host for the memory ceiling
+        # check
         if host:
             exec_host_list = common_lsf.get_exec_host_list(host)
 
@@ -1918,7 +1965,7 @@ Made with ❤️  by liyanqing.1987
             self.fresh_lsf_info('lshosts')
             self.fresh_lsf_info('bhosts_load')
 
-            # Max Mem (physical) from lshosts — hard ceiling.
+            # Max Mem (physical) from lshosts — hard ceiling
             if ('HOST_NAME' in self.lshosts_dic) and (host in self.lshosts_dic['HOST_NAME']):
                 host_index = self.lshosts_dic['HOST_NAME'].index(host)
                 maxmem = self.lshosts_dic['maxmem'][host_index]
@@ -1926,8 +1973,9 @@ Made with ❤️  by liyanqing.1987
                 if maxmem not in ('', '-'):
                     max_mem_mb = int(self.mem_unit_switch(maxmem) * 1024)
 
-            # saMem (available) from bhosts_load — for the over-reservation warning.
-            # sa_mem_available marks "data fetched" so a real 0 still triggers the warning.
+            # saMem (available) from bhosts_load — for the over-reservation
+            # warning sa_mem_available marks "data fetched" so a real 0 still
+            # triggers the warning
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
                 sa_mem_mb = int(self.mem_unit_switch(self.bhosts_load_dic[host]['Total']['mem']) * 1024)
                 sa_mem_available = True
@@ -1950,7 +1998,7 @@ Made with ❤️  by liyanqing.1987
         if not ok:
             return
 
-        # Hard limit: reject values above the host's physical Max Mem.
+        # Hard limit: reject values above the host's physical Max Mem
         if max_mem_mb and (new_rusage_mb > max_mem_mb):
             QMessageBox.warning(
                 self,
@@ -1960,7 +2008,8 @@ Made with ❤️  by liyanqing.1987
 
             return
 
-        # Warn if over-reserving: accepted, but takes full effect after host frees memory.
+        # Warn if over-reserving: accepted, but takes full effect after host
+        # frees memory
         if sa_mem_available and (new_rusage_mb > current_rusage_mb + sa_mem_mb):
             reply = QMessageBox.warning(
                 self,
@@ -2018,10 +2067,10 @@ Made with ❤️  by liyanqing.1987
                 # Add rusage[mem=...] to the end
                 new_requested_resource = f'{requested_resource} rusage[mem={new_rusage_mb}]'
 
-        # Apply modification with bmod.
+        # Apply modification with bmod
         # shlex.quote the resource string and job id so a resource string
         # containing shell metacharacters (sourced from LSF bjobs -UF output)
-        # cannot inject shell commands under run_command's shell=True.
+        # cannot inject shell commands under run_command's shell=True
         bmod_command = f'bmod -R {shlex.quote(new_requested_resource)} {shlex.quote(str(job))}'
         common.bprint(f'Executing: {bmod_command}', date_format='%Y-%m-%d %H:%M:%S')
 
@@ -2037,8 +2086,8 @@ Made with ❤️  by liyanqing.1987
             # Refresh the jobs table
             self.gen_jobs_tab_table()
 
-            # Also try to update the specific cell directly for immediate feedback
-            # Find the job row and update the Rusage value
+            # Also try to update the specific cell directly for immediate
+            # feedback Find the job row and update the Rusage value
             for row in range(self.jobs_tab_table.rowCount()):
                 if self.jobs_tab_table.item(row, 0).text().strip() == job:
                     rusage_gb = round(new_rusage_mb / 1024, 1)
@@ -2065,7 +2114,7 @@ Made with ❤️  by liyanqing.1987
         for status in status_list:
             self.jobs_tab_status_combo.addCheckBoxItem(status)
 
-        # Set to checked status for checked_status_list.
+        # Set to checked status for checked_status_list
         for (i, qBox) in enumerate(self.jobs_tab_status_combo.checkBoxList):
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.jobs_tab_status_combo.checkBoxList[i].setChecked(True)
@@ -2076,6 +2125,7 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_queue_list is None:
             checked_queue_list = ['ALL']
+
         self.jobs_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
@@ -2090,7 +2140,7 @@ Made with ❤️  by liyanqing.1987
         for queue in queue_list:
             self.jobs_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set to checked status for checked_queue_list.
+        # Set to checked status for checked_queue_list
         for (i, qBox) in enumerate(self.jobs_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.jobs_tab_queue_combo.checkBoxList[i].setChecked(True)
@@ -2103,6 +2153,7 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_group_list is None:
             checked_group_list = ['ALL']
+
         self.jobs_tab_group_combo.clear()
         self.fresh_lsf_info('host_group')
 
@@ -2118,7 +2169,7 @@ Made with ❤️  by liyanqing.1987
         for group in group_list:
             self.jobs_tab_group_combo.addCheckBoxItem(group)
 
-        # Set to checked status for checked_group_list.
+        # Set to checked status for checked_group_list
         for (i, qBox) in enumerate(self.jobs_tab_group_combo.checkBoxList):
             if (qBox.text() in checked_group_list) and (qBox.isChecked() is False):
                 self.jobs_tab_group_combo.checkBoxList[i].setChecked(True)
@@ -2141,9 +2192,13 @@ Made with ❤️  by liyanqing.1987
         else:
             self.jobs_tab_host_line.setText('')
 
-# For jobs TAB (end) #
+# ============================================================================
+# For jobs TAB (end)
+# ============================================================================
 
-# For hosts TAB (start) #
+# ============================================================================
+# For hosts TAB (start)
+# ============================================================================
     def gen_hosts_tab(self):
         """
         Generate the hosts tab on lsfMonitor GUI, show hosts informations.
@@ -2170,13 +2225,12 @@ Made with ❤️  by liyanqing.1987
 
         self.hosts_tab.setLayout(hosts_tab_grid)
 
-        # Generate sub-fram
         self.gen_hosts_tab_frame0()
         self.gen_hosts_tab_table()
 
     def gen_hosts_tab_frame0(self):
         # self.hosts_tab_frame0
-        # "Status" item.
+        # "Status" item
         hosts_tab_status_label = QLabel('Status', self.hosts_tab_frame0)
         hosts_tab_status_label.setStyleSheet("font-weight: bold;")
         hosts_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2184,7 +2238,7 @@ Made with ❤️  by liyanqing.1987
         self.hosts_tab_status_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0)
         self.set_hosts_tab_status_combo()
 
-        # "Queue" item.
+        # "Queue" item
         hosts_tab_queue_label = QLabel('Queue', self.hosts_tab_frame0)
         hosts_tab_queue_label.setStyleSheet("font-weight: bold;")
         hosts_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2192,7 +2246,7 @@ Made with ❤️  by liyanqing.1987
         self.hosts_tab_queue_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0, enableFilter=True)
         self.set_hosts_tab_queue_combo()
 
-        # "Group" item.
+        # "Group" item
         hosts_tab_group_label = QLabel('Group', self.hosts_tab_frame0)
         hosts_tab_group_label.setStyleSheet("font-weight: bold;")
         hosts_tab_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2200,7 +2254,7 @@ Made with ❤️  by liyanqing.1987
         self.hosts_tab_group_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0, enableFilter=True)
         self.set_hosts_tab_group_combo()
 
-        # "MAX" item.
+        # "MAX" item
         hosts_tab_max_label = QLabel('MAX', self.hosts_tab_frame0)
         hosts_tab_max_label.setStyleSheet("font-weight: bold;")
         hosts_tab_max_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2208,7 +2262,7 @@ Made with ❤️  by liyanqing.1987
         self.hosts_tab_max_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0)
         self.set_hosts_tab_max_combo()
 
-        # "MaxMem" item.
+        # "MaxMem" item
         hosts_tab_maxmem_label = QLabel('MaxMem', self.hosts_tab_frame0)
         hosts_tab_maxmem_label.setStyleSheet("font-weight: bold;")
         hosts_tab_maxmem_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2216,7 +2270,7 @@ Made with ❤️  by liyanqing.1987
         self.hosts_tab_maxmem_combo = common_pyqt5.QComboCheckBox(self.hosts_tab_frame0)
         self.set_hosts_tab_maxmem_combo()
 
-        # "Host" item.
+        # "Host" item
         hosts_tab_host_label = QLabel('Host', self.hosts_tab_frame0)
         hosts_tab_host_label.setStyleSheet("font-weight: bold;")
         hosts_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2231,7 +2285,7 @@ Made with ❤️  by liyanqing.1987
 
         self.hosts_tab_host_line.setCompleter(hosts_tab_host_line_completer)
 
-        # "Check" button.
+        # "Check" button
         hosts_tab_check_button = QPushButton('Check', self.hosts_tab_frame0)
         hosts_tab_check_button.clicked.connect(self.gen_hosts_tab_table)
 
@@ -2272,34 +2326,37 @@ Made with ❤️  by liyanqing.1987
         # self.hosts_tab_table
         self.hosts_tab_table.setShowGrid(True)
         self.hosts_tab_table.setSortingEnabled(False)
-        self.hosts_tab_table.setColumnCount(0)
-        self.hosts_tab_table.setColumnCount(13)
         self.hosts_tab_table_title_list = ['Host', 'Status', 'Queue', 'Group', 'MAX', 'Njobs', 'Ut (%)', 'MaxMem (G)', 'aMem (G)', 'saMem (G)', 'MaxSwp (G)', 'Swp (G)', 'Tmp (G)']
+
+        first_build = self.hosts_tab_table.columnCount() != len(self.hosts_tab_table_title_list)
+
+        if first_build:
+            self.hosts_tab_table.setColumnCount(len(self.hosts_tab_table_title_list))
+
         self.hosts_tab_table.setHorizontalHeaderLabels(self.hosts_tab_table_title_list)
 
-        self.hosts_tab_table.setColumnWidth(0, 150)
-        # "closed_Busy" (11 chars) + bold header "Status" + padding ≈ 110px.
-        self.hosts_tab_table.setColumnWidth(1, 110)
-        # Queue 与 Group 均分剩余空间(Queue 内容通常更多,但 Group 列也需自适应)。
-        self.hosts_tab_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.hosts_tab_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.hosts_tab_table.setColumnWidth(4, 60)
-        self.hosts_tab_table.setColumnWidth(5, 60)
-        self.hosts_tab_table.setColumnWidth(6, 60)
-        self.hosts_tab_table.setColumnWidth(7, 100)
-        self.hosts_tab_table.setColumnWidth(8, 85)
-        self.hosts_tab_table.setColumnWidth(9, 90)
-        self.hosts_tab_table.setColumnWidth(10, 100)
-        self.hosts_tab_table.setColumnWidth(11, 75)
-        self.hosts_tab_table.setColumnWidth(12, 75)
-        common_pyqt5.auto_size_table_columns(self.hosts_tab_table)
+        if first_build:
+            self.hosts_tab_table.setColumnWidth(0, 140)     # min 74
+            self.hosts_tab_table.setColumnWidth(1, 110)     # min 88
+            self.hosts_tab_table.setColumnWidth(3, 150)     # min 85
+            self.hosts_tab_table.setColumnWidth(4, 73)      # min 73
+            self.hosts_tab_table.setColumnWidth(5, 81)      # min 81
+            self.hosts_tab_table.setColumnWidth(6, 86)      # min 86
+            self.hosts_tab_table.setColumnWidth(7, 132)     # min 132
+            self.hosts_tab_table.setColumnWidth(8, 111)     # min 111
+            self.hosts_tab_table.setColumnWidth(9, 119)     # min 119
+            self.hosts_tab_table.setColumnWidth(10, 128)    # min 128
+            self.hosts_tab_table.setColumnWidth(11, 98)     # min 98
+            self.hosts_tab_table.setColumnWidth(12, 99)     # min 99
+            common_pyqt5.auto_size_table_columns(self.hosts_tab_table, flex_cols=[2])
 
-        # Fill self.hosts_tab_table items.
+        # Fill self.hosts_tab_table items
         hosts_tab_specified_host_list = self.get_hosts_tab_specified_host_list()
         self.hosts_tab_table.setRowCount(0)
         self.hosts_tab_table.setRowCount(len(hosts_tab_specified_host_list))
 
-        # Fresh LSF bhosts/lsload/lshosts/host_queue/host_group/bhosts_load information.
+        # Fresh LSF bhosts/lsload/lshosts/host_queue/host_group/bhosts_load
+        # information
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('lsload')
         self.fresh_lsf_info('lshosts')
@@ -2307,10 +2364,16 @@ Made with ❤️  by liyanqing.1987
         self.fresh_lsf_info('host_group')
         self.fresh_lsf_info('bhosts_load')
 
+        # Host -> row-index lookups (O(1)); .index() inside the per-host loop
+        # below is O(N) per lookup and returns the wrong row for duplicate names
+        bhosts_index_dic = {host: i for (i, host) in enumerate(self.bhosts_dic.get('HOST_NAME', []))}
+        lshosts_index_dic = {host: i for (i, host) in enumerate(self.lshosts_dic.get('HOST_NAME', []))}
+        lsload_index_dic = {host: i for (i, host) in enumerate(self.lsload_dic.get('HOST_NAME', []))}
+
         for (i, host) in enumerate(hosts_tab_specified_host_list):
             fatal_error = False
 
-            # Fill "Host" item.
+            # Fill "Host" item
             j = 0
             item = QTableWidgetItem(host)
             item.setFont(QFont('song', 9, QFont.Bold))
@@ -2323,9 +2386,9 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Status" item.
+            # Fill "Status" item
             j = j + 1
-            index = self.bhosts_dic['HOST_NAME'].index(host)
+            index = bhosts_index_dic[host]
             status = self.bhosts_dic['STATUS'][index]
             item = QTableWidgetItem(status)
 
@@ -2340,7 +2403,7 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Queue" item.
+            # Fill "Queue" item
             j = j + 1
             queues = ''
 
@@ -2354,7 +2417,7 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Group" item.
+            # Fill "Group" item
             j = j + 1
             groups = ''
 
@@ -2368,9 +2431,9 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "MAX" item.
+            # Fill "MAX" item
             j = j + 1
-            index = self.bhosts_dic['HOST_NAME'].index(host)
+            index = bhosts_index_dic[host]
             max = self.bhosts_dic['MAX'][index]
 
             if not re.match(r'^[0-9]+$', max):
@@ -2385,9 +2448,9 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Njobs" item.
+            # Fill "Njobs" item
             j = j + 1
-            index = self.bhosts_dic['HOST_NAME'].index(host)
+            index = bhosts_index_dic[host]
             njobs = self.bhosts_dic['NJOBS'][index]
 
             if not re.match(r'^[0-9]+$', njobs):
@@ -2403,15 +2466,14 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Ut" item.
+            # Fill "Ut" item
             j = j + 1
             ut = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('ut' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['ut'] != '-'):
                 ut = self.bhosts_load_dic[host]['Total']['ut']
-            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
-                index = self.lsload_dic['HOST_NAME'].index(host)
-                ut = self.lsload_dic['ut'][index]
+            elif host in lsload_index_dic:
+                ut = self.lsload_dic['ut'][lsload_index_dic[host]]
 
             ut = re.sub(r'%', '', ut)
 
@@ -2427,13 +2489,12 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "MaxMem" item with unit "GB".
+            # Fill "MaxMem" item with unit "GB"
             j = j + 1
             maxmem = '0'
 
-            if host in self.lshosts_dic['HOST_NAME']:
-                index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxmem = self.lshosts_dic['maxmem'][index]
+            if host in lshosts_index_dic:
+                maxmem = self.lshosts_dic['maxmem'][lshosts_index_dic[host]]
 
             maxmem = int(self.mem_unit_switch(maxmem))
             item = QTableWidgetItem()
@@ -2444,13 +2505,12 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "aMem" item with unit "GB".
-            # "aMem" means avaliable mem, it is from "lsload -l" command, same with "free -g" result.
+            # Fill "aMem" item with unit "GB" "aMem" means avaliable mem, it is
+            # from "lsload -l" command, same with "free -g" result
             j = j + 1
 
-            if ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
-                index = self.lsload_dic['HOST_NAME'].index(host)
-                mem = self.lsload_dic['mem'][index]
+            if host in lsload_index_dic:
+                mem = self.lsload_dic['mem'][lsload_index_dic[host]]
                 mem = int(self.mem_unit_switch(mem))
             else:
                 mem = 0
@@ -2463,8 +2523,8 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "saMem" item with unit "GB".
-            # "saMem" means scheduling avaliable mem, it is from "bhosts -l" command.
+            # Fill "saMem" item with unit "GB" "saMem" means scheduling
+            # avaliable mem, it is from "bhosts -l" command
             j = j + 1
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('mem' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['mem'] != '-'):
@@ -2481,13 +2541,12 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "MaxSwp" item with unit "GB".
+            # Fill "MaxSwp" item with unit "GB"
             j = j + 1
             maxswp = '0'
 
-            if host in self.lshosts_dic['HOST_NAME']:
-                index = self.lshosts_dic['HOST_NAME'].index(host)
-                maxswp = self.lshosts_dic['maxswp'][index]
+            if host in lshosts_index_dic:
+                maxswp = self.lshosts_dic['maxswp'][lshosts_index_dic[host]]
 
             maxswp = int(self.mem_unit_switch(maxswp))
             item = QTableWidgetItem()
@@ -2498,15 +2557,14 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Swp" item with unit "GB".
+            # Fill "Swp" item with unit "GB"
             j = j + 1
             swp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('swp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['swp'] != '-'):
                 swp = self.bhosts_load_dic[host]['Total']['swp']
-            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
-                index = self.lsload_dic['HOST_NAME'].index(host)
-                swp = self.lsload_dic['swp'][index]
+            elif host in lsload_index_dic:
+                swp = self.lsload_dic['swp'][lsload_index_dic[host]]
 
             swp = int(self.mem_unit_switch(swp))
             item = QTableWidgetItem()
@@ -2517,15 +2575,14 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
-            # Fill "Tmp" item with unit "GB".
+            # Fill "Tmp" item with unit "GB"
             j = j + 1
             tmp = '0'
 
             if (host in self.bhosts_load_dic) and ('Total' in self.bhosts_load_dic[host]) and ('tmp' in self.bhosts_load_dic[host]['Total']) and (self.bhosts_load_dic[host]['Total']['tmp'] != '-'):
                 tmp = self.bhosts_load_dic[host]['Total']['tmp']
-            elif ('HOST_NAME' in self.lsload_dic) and (host in self.lsload_dic['HOST_NAME']):
-                index = self.lsload_dic['HOST_NAME'].index(host)
-                tmp = self.lsload_dic['tmp'][index]
+            elif host in lsload_index_dic:
+                tmp = self.lsload_dic['tmp'][lsload_index_dic[host]]
 
             tmp = int(self.mem_unit_switch(tmp))
             item = QTableWidgetItem()
@@ -2562,10 +2619,9 @@ Made with ❤️  by liyanqing.1987
         Generate right click menu on self.hosts_tab_table.
         """
         item = self.hosts_tab_table.itemAt(pos)
+        menu = QMenu(self.hosts_tab_table)
 
         if item and (item.column() == 0):
-            menu = QMenu(self.hosts_tab_table)
-
             open_host_action = QAction('Open', self)
             open_host_action.setIcon(QIcon(str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/data/pictures/open.png'))
             open_host_action.triggered.connect(lambda: self.manage_host_on_hosts_tab(item.text(), 'open'))
@@ -2576,7 +2632,19 @@ Made with ❤️  by liyanqing.1987
             close_host_action.triggered.connect(lambda: self.manage_host_on_hosts_tab(item.text(), 'close'))
             menu.addAction(close_host_action)
 
-            menu.exec_(self.hosts_tab_table.mapToGlobal(pos))
+            menu.addSeparator()
+
+        reset_width_action = QAction('Reset column widths', self)
+        reset_width_action.triggered.connect(self.reset_hosts_tab_column_widths)
+        menu.addAction(reset_width_action)
+
+        menu.exec_(self.hosts_tab_table.mapToGlobal(pos))
+
+    def reset_hosts_tab_column_widths(self):
+        """
+        Restore every column of self.hosts_tab_table to its default width.
+        """
+        common_pyqt5.reset_table_column_widths(self.hosts_tab_table)
 
     def manage_host_on_hosts_tab(self, host_name, behavior):
         """
@@ -2598,9 +2666,10 @@ Made with ❤️  by liyanqing.1987
                     common.bprint(f'{behavior} {host_name} successfully!', date_format='%Y-%m-%d %H:%M:%S')
                     my_show_message = ShowMessage('Info', f'{behavior} {host_name} successfully!', persistent=True)
                     my_show_message.start()
-                    # Refresh the hosts table while the success prompt stays up;
-                    # the persistent prompt is closed by a timer afterward so the
-                    # UI never blocks (the old time.sleep(5) froze the window).
+                    # Refresh the hosts table while the success prompt stays
+                    # up; the persistent prompt is closed by a timer afterward
+                    # so the UI never blocks (the old time.sleep(5) froze the
+                    # window)
                     self.gen_hosts_tab_table()
                     QTimer.singleShot(2500, my_show_message.terminate)
                 else:
@@ -2608,13 +2677,14 @@ Made with ❤️  by liyanqing.1987
                     common.bprint(str(stderr, 'utf-8').strip(), date_format='%Y-%m-%d %H:%M:%S')
                     my_show_message = ShowMessage(f'{behavior} {host_name} fail', str(str(stderr, 'utf-8')).strip(), persistent=True)
                     my_show_message.start()
-                    # Persistent prompts never auto-close on their own — schedule
-                    # the terminate so a failure prompt can't become an orphan.
+                    # Persistent prompts never auto-close on their own —
+                    # schedule the terminate so a failure prompt can't become
+                    # an orphan
                     QTimer.singleShot(5000, my_show_message.terminate)
 
     def get_hosts_tab_specified_host_list(self):
         """
-        Filter host list with specified queue/status/max/maxmem/host.
+        Filter host list with specified queue/status/group/max/maxmem/host.
         """
         specified_status_list = self.hosts_tab_status_combo.currentText().strip().split()
         specified_queue_list = self.hosts_tab_queue_combo.currentText().strip().split()
@@ -2624,18 +2694,21 @@ Made with ❤️  by liyanqing.1987
         specified_host_list = self.hosts_tab_host_line.text().strip().split()
         hosts_tab_specified_host_list = []
 
-        # Fresh LSF bhosts/lshosts/host_queue/host_group information.
+        # Fresh LSF bhosts/lshosts/host_queue/host_group information
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('lshosts')
         self.fresh_lsf_info('host_queue')
         self.fresh_lsf_info('host_group')
 
+        lshosts_index_dic = {host: i for (i, host) in enumerate(self.lshosts_dic.get('HOST_NAME', []))}
+
         if 'HOST_NAME' in self.bhosts_dic:
-            # Resolve specified_host_list once: exact-preferred (exact match wins; fuzzy only when no exact match).
+            # Resolve specified_host_list once: exact-preferred (exact match
+            # wins; fuzzy only when no exact match)
             matched_host_list = common.match_exact_or_fuzzy(specified_host_list, self.bhosts_dic['HOST_NAME']) if specified_host_list else []
 
             for index, host in enumerate(self.bhosts_dic['HOST_NAME']):
-                # Filter with specified_status_list.
+                # Filter with specified_status_list
                 status = self.bhosts_dic['STATUS'][index]
 
                 if 'ALL' not in specified_status_list:
@@ -2649,7 +2722,7 @@ Made with ❤️  by liyanqing.1987
                     if continue_mark:
                         continue
 
-                # Filter with specified_queue_list.
+                # Filter with specified_queue_list
                 if 'ALL' not in specified_queue_list:
                     continue_mark = True
 
@@ -2661,7 +2734,7 @@ Made with ❤️  by liyanqing.1987
                     if continue_mark:
                         continue
 
-                # Filter with specified_group_list(与 Queue 取交集)。
+                # Filter with specified_group_list (intersected with Queue)
                 if 'ALL' not in specified_group_list:
                     continue_mark = True
 
@@ -2673,7 +2746,7 @@ Made with ❤️  by liyanqing.1987
                     if continue_mark:
                         continue
 
-                # Filter with specified_max_list.
+                # Filter with specified_max_list
                 max = self.bhosts_dic['MAX'][index]
 
                 if not re.match(r'^[0-9]+$', max):
@@ -2690,12 +2763,11 @@ Made with ❤️  by liyanqing.1987
                     if continue_mark:
                         continue
 
-                # Filter with specified_maxmem_list.
-                if host not in self.lshosts_dic['HOST_NAME']:
+                # Filter with specified_maxmem_list
+                if host not in lshosts_index_dic:
                     maxmem = 0
                 else:
-                    index = self.lshosts_dic['HOST_NAME'].index(host)
-                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
+                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][lshosts_index_dic[host]]))
 
                 if 'ALL' not in specified_maxmem_list:
                     continue_mark = True
@@ -2710,7 +2782,8 @@ Made with ❤️  by liyanqing.1987
                     if continue_mark:
                         continue
 
-                # Filter with specified_host (exact-preferred: exact match wins; fuzzy only when no exact match).
+                # Filter with specified_host (exact-preferred: exact match
+                # wins; fuzzy only when no exact match)
                 if specified_host_list and host not in matched_host_list:
                     continue
 
@@ -2749,23 +2822,21 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_status_list is None:
             checked_status_list = ['ALL']
+
         self.hosts_tab_status_combo.clear()
         self.fresh_lsf_info('bhosts')
 
         status_list = ['ALL', ]
 
         if 'HOST_NAME' in self.bhosts_dic:
-            for host in self.bhosts_dic['HOST_NAME']:
-                index = self.bhosts_dic['HOST_NAME'].index(host)
-                status = self.bhosts_dic['STATUS'][index]
-
+            for status in self.bhosts_dic['STATUS']:
                 if status not in status_list:
                     status_list.append(status)
 
         for status in status_list:
             self.hosts_tab_status_combo.addCheckBoxItem(status)
 
-        # Set to checked status for checked_status_list.
+        # Set to checked status for checked_status_list
         for (i, qBox) in enumerate(self.hosts_tab_status_combo.checkBoxList):
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.hosts_tab_status_combo.checkBoxList[i].setChecked(True)
@@ -2776,6 +2847,7 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_queue_list is None:
             checked_queue_list = ['ALL']
+
         self.hosts_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
@@ -2790,7 +2862,7 @@ Made with ❤️  by liyanqing.1987
         for queue in queue_list:
             self.hosts_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set to checked status for checked_queue_list.
+        # Set to checked status for checked_queue_list
         for (i, qBox) in enumerate(self.hosts_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.hosts_tab_queue_combo.checkBoxList[i].setChecked(True)
@@ -2799,10 +2871,11 @@ Made with ❤️  by liyanqing.1987
         """Set (initialize) self.hosts_tab_group_combo."""
         if checked_group_list is None:
             checked_group_list = ['ALL']
+
         self.hosts_tab_group_combo.clear()
         self.fresh_lsf_info('host_group')
 
-        # 从 host_group_dic(host->[groups])收集所有 group 名。
+        # Collect all group names from host_group_dic (host -> [groups])
         group_set = set()
 
         for groups in self.host_group_dic.values():
@@ -2815,7 +2888,7 @@ Made with ❤️  by liyanqing.1987
         for group in group_list:
             self.hosts_tab_group_combo.addCheckBoxItem(group)
 
-        # Set to checked status for checked_group_list.
+        # Set to checked status for checked_group_list
         for (i, qBox) in enumerate(self.hosts_tab_group_combo.checkBoxList):
             if (qBox.text() in checked_group_list) and (qBox.isChecked() is False):
                 self.hosts_tab_group_combo.checkBoxList[i].setChecked(True)
@@ -2826,16 +2899,14 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_max_list is None:
             checked_max_list = ['ALL']
+
         self.hosts_tab_max_combo.clear()
         self.fresh_lsf_info('bhosts')
 
         max_list = []
 
         if 'HOST_NAME' in self.bhosts_dic:
-            for host in self.bhosts_dic['HOST_NAME']:
-                index = self.bhosts_dic['HOST_NAME'].index(host)
-                max = self.bhosts_dic['MAX'][index]
-
+            for max in self.bhosts_dic['MAX']:
                 if not re.match(r'^[0-9]+$', max):
                     max = 0
 
@@ -2848,7 +2919,7 @@ Made with ❤️  by liyanqing.1987
         for max in max_list:
             self.hosts_tab_max_combo.addCheckBoxItem(str(max))
 
-        # Set to checked status for checked_max_list.
+        # Set to checked status for checked_max_list
         for (i, qBox) in enumerate(self.hosts_tab_max_combo.checkBoxList):
             if (qBox.text() in checked_max_list) and (qBox.isChecked() is False):
                 self.hosts_tab_max_combo.checkBoxList[i].setChecked(True)
@@ -2859,19 +2930,20 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_maxmem_list is None:
             checked_maxmem_list = ['ALL']
+
         self.hosts_tab_maxmem_combo.clear()
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('lshosts')
 
         maxmem_list = []
+        lshosts_index_dic = {host: i for (i, host) in enumerate(self.lshosts_dic.get('HOST_NAME', []))}
 
         if 'HOST_NAME' in self.bhosts_dic:
             for host in self.bhosts_dic['HOST_NAME']:
-                if host not in self.lshosts_dic['HOST_NAME']:
+                if host not in lshosts_index_dic:
                     maxmem = 0
                 else:
-                    index = self.lshosts_dic['HOST_NAME'].index(host)
-                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][index]))
+                    maxmem = int(self.mem_unit_switch(self.lshosts_dic['maxmem'][lshosts_index_dic[host]]))
 
                 if maxmem not in maxmem_list:
                     maxmem_list.append(maxmem)
@@ -2889,13 +2961,17 @@ Made with ❤️  by liyanqing.1987
         for maxmem in maxmem_list:
             self.hosts_tab_maxmem_combo.addCheckBoxItem(maxmem)
 
-        # Set to checked status for checked_maxmem_list.
+        # Set to checked status for checked_maxmem_list
         for (i, qBox) in enumerate(self.hosts_tab_maxmem_combo.checkBoxList):
             if (qBox.text() in checked_maxmem_list) and (qBox.isChecked() is False):
                 self.hosts_tab_maxmem_combo.checkBoxList[i].setChecked(True)
-# For hosts TAB (end) #
+# ============================================================================
+# For hosts TAB (end)
+# ============================================================================
 
-# For load TAB (start) #
+# ============================================================================
+# For load TAB (start)
+# ============================================================================
     def gen_load_tab(self):
         """
         Generate the load tab on lsfMonitor GUI, show host load (ut/mem) information.
@@ -2925,21 +3001,20 @@ Made with ❤️  by liyanqing.1987
 
         self.load_tab.setLayout(load_tab_grid)
 
-        # Generate sub-frame
         self.gen_load_tab_frame0()
         self.gen_load_tab_frame1()
         self.gen_load_tab_frame2()
 
-        # Empty-state hint: the LOAD tab needs a host + "Check" before drawing.
-        # Shown over the ut canvas frame (the tab's graphics area) so the filter
-        # row stays interactive; hidden once a load is triggered.
+        # Empty-state hint: the LOAD tab needs a host + "Check" before drawing
+        # Shown over the ut canvas frame (the tab's graphics area) so the
+        # filter row stays interactive; hidden once a load is triggered
         self.load_tab_hint_label = self._make_empty_hint(
             load_tab_grid, 1, 0, 1, 1, 'Enter a host and click "Check" to load ut/mem load charts.'
         )
 
     def gen_load_tab_frame0(self):
         # self.load_tab_frame0
-        # "Host" item.
+        # "Host" item
         load_tab_host_label = QLabel('Host', self.load_tab_frame0)
         load_tab_host_label.setStyleSheet("font-weight: bold;")
         load_tab_host_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2954,7 +3029,7 @@ Made with ❤️  by liyanqing.1987
 
         self.load_tab_host_line.setCompleter(load_tab_host_line_completer)
 
-        # "Begin_Date" item.
+        # "Begin_Date" item
         load_tab_begin_date_label = QLabel('Begin_Date', self.load_tab_frame0)
         load_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         load_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2965,7 +3040,7 @@ Made with ❤️  by liyanqing.1987
         self.load_tab_begin_date_edit.setCalendarPopup(True)
         self.load_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-7))
 
-        # "End_Date" item.
+        # "End_Date" item
         load_tab_end_date_label = QLabel('End_Date', self.load_tab_frame0)
         load_tab_end_date_label.setStyleSheet("font-weight: bold;")
         load_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -2976,7 +3051,7 @@ Made with ❤️  by liyanqing.1987
         self.load_tab_end_date_edit.setCalendarPopup(True)
         self.load_tab_end_date_edit.setDate(QDate.currentDate())
 
-        # "Check" button.
+        # "Check" button
         load_tab_check_button = QPushButton('Check', self.load_tab_frame0)
         load_tab_check_button.clicked.connect(self.update_load_tab_load_info)
 
@@ -3042,7 +3117,7 @@ Made with ❤️  by liyanqing.1987
             self.gui_warning(warning_message)
             return
 
-        # Hide the empty-state hint once a real load is triggered.
+        # Hide the empty-state hint once a real load is triggered
         self.hide_empty_hint(getattr(self, 'load_tab_hint_label', None))
 
         self.update_load_tab_frame1(specified_host, [], [])
@@ -3100,7 +3175,6 @@ Made with ❤️  by liyanqing.1987
                             sample_time = datetime.datetime.strptime(data_dic['sample_time'][i], '%Y%m%d_%H%M%S')
                             sample_time_list.append(sample_time)
 
-                            # For ut
                             ut = data_dic['ut'][i]
 
                             if ut:
@@ -3110,7 +3184,6 @@ Made with ❤️  by liyanqing.1987
 
                             ut_list.append(ut)
 
-                            # For mem
                             mem = round(self.mem_unit_switch(data_dic['mem'][i]), 1)
                             mem_list.append(mem)
 
@@ -3171,9 +3244,13 @@ Made with ❤️  by liyanqing.1987
                                  xlabel='Sample Time',
                                  ylabel='Available Mem (G)')
         self.load_tab_mem_canvas.draw()
-# For load TAB (end) #
+# ============================================================================
+# For load TAB (end)
+# ============================================================================
 
-# For users TAB (start) #
+# ============================================================================
+# For users TAB (start)
+# ============================================================================
     def gen_users_tab(self):
         """
         Generate the users tab on lsfMonitor GUI, show users informations.
@@ -3194,7 +3271,7 @@ Made with ❤️  by liyanqing.1987
 
         # Placeholder overlay prompting the user to click "Check"; hidden once
         # gen_users_tab_table() populates the table. Mouse-transparent so it
-        # never blocks interaction with the empty table underneath.
+        # never blocks interaction with the empty table underneath
         self.users_tab_placeholder_label = QLabel('Click "Check" button to load user statistics.', self.users_tab)
         self.users_tab_placeholder_label.setAlignment(Qt.AlignCenter)
         self.users_tab_placeholder_label.setWordWrap(True)
@@ -3214,13 +3291,13 @@ Made with ❤️  by liyanqing.1987
         self.users_tab.setLayout(users_tab_grid)
 
         # Generate sub-frame and an empty header-only table; defer data loading
-        # until the user clicks "Check".
+        # until the user clicks "Check"
         self.gen_users_tab_frame0()
         self.gen_users_tab_table_header()
 
     def gen_users_tab_frame0(self):
         # self.users_tab_frame0
-        # "Status" item.
+        # "Status" item
         users_tab_status_label = QLabel('Status', self.users_tab_frame0)
         users_tab_status_label.setStyleSheet("font-weight: bold;")
         users_tab_status_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3228,20 +3305,20 @@ Made with ❤️  by liyanqing.1987
         self.users_tab_status_combo = common_pyqt5.QComboCheckBox(self.users_tab_frame0)
         self.set_users_tab_status_combo()
 
-        # "Queue" item.
+        # "Queue" item
         users_tab_queue_label = QLabel('Queue', self.users_tab_frame0)
         users_tab_queue_label.setStyleSheet("font-weight: bold;")
         users_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.users_tab_queue_combo = common_pyqt5.QComboCheckBox(self.users_tab_frame0, enableFilter=True)
         self.set_users_tab_queue_combo()
-        # NOTE: do NOT connect currentTextChanged -> gen_users_tab_table here.
+        # NOTE: do NOT connect currentTextChanged -> gen_users_tab_table here
         # USERS queries historical user/<date>.db across the date range, which
         # is slow; auto-refreshing on every queue check toggle would also pop
         # loading dialogs repeatedly. Click the "Check" button to run it,
-        # matching how the JOBS tab queue combo behaves.
+        # matching how the JOBS tab queue combo behaves
 
-        # "User" item.
+        # "User" item
         users_tab_user_label = QLabel('User', self.users_tab_frame0)
         users_tab_user_label.setStyleSheet("font-weight: bold;")
         users_tab_user_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3256,7 +3333,7 @@ Made with ❤️  by liyanqing.1987
 
         self.users_tab_user_line.setCompleter(users_tab_user_line_completer)
 
-        # "Begin_Date" item.
+        # "Begin_Date" item
         users_tab_begin_date_label = QLabel('Begin_Date', self.users_tab_frame0)
         users_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         users_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3267,7 +3344,7 @@ Made with ❤️  by liyanqing.1987
         self.users_tab_begin_date_edit.setCalendarPopup(True)
         self.users_tab_begin_date_edit.setDate(QDate.currentDate().addDays(-1))
 
-        # "End_Date" item.
+        # "End_Date" item
         users_tab_end_date_label = QLabel('End_Date', self.users_tab_frame0)
         users_tab_end_date_label.setStyleSheet("font-weight: bold;")
         users_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3278,7 +3355,7 @@ Made with ❤️  by liyanqing.1987
         self.users_tab_end_date_edit.setCalendarPopup(True)
         self.users_tab_end_date_edit.setDate(QDate.currentDate())
 
-        # "Check" button.
+        # "Check" button
         users_tab_check_button = QPushButton('Check', self.users_tab_frame0)
         users_tab_check_button.clicked.connect(self.gen_users_tab_table)
 
@@ -3310,13 +3387,14 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_status_list is None:
             checked_status_list = ['ALL']
+
         self.users_tab_status_combo.clear()
         status_list = ['ALL', 'DONE', 'EXIT']
 
         for status in status_list:
             self.users_tab_status_combo.addCheckBoxItem(status)
 
-        # Set to checked status for checked_status_list.
+        # Set to checked status for checked_status_list
         for (i, qBox) in enumerate(self.users_tab_status_combo.checkBoxList):
             if (qBox.text() in checked_status_list) and (qBox.isChecked() is False):
                 self.users_tab_status_combo.checkBoxList[i].setChecked(True)
@@ -3327,6 +3405,7 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_queue_list is None:
             checked_queue_list = ['ALL']
+
         self.users_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
@@ -3341,7 +3420,7 @@ Made with ❤️  by liyanqing.1987
         for queue in queue_list:
             self.users_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set to checked status for checked_queue_list.
+        # Set to checked status for checked_queue_list
         for (i, qBox) in enumerate(self.users_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.users_tab_queue_combo.checkBoxList[i].setChecked(True)
@@ -3355,37 +3434,37 @@ Made with ❤️  by liyanqing.1987
         """
         self.users_tab_table.setShowGrid(True)
         self.users_tab_table.setSortingEnabled(False)
-        self.users_tab_table.setColumnCount(0)
-        self.users_tab_table.setColumnCount(9)
         self.users_tab_table_title_list = ['User', 'Job_Num', 'Pass_Rate (%)', 'Total_Rusage_Mem (G)', 'Avg_Rusage_Mem (G)', 'Total_Max_Mem (G)', 'Avg_Max_Mem (G)', 'Total_Mem_Waste (G)', 'Avg_Mem_Waste (G)']
+
+        first_build = self.users_tab_table.columnCount() != len(self.users_tab_table_title_list)
+
+        if first_build:
+            self.users_tab_table.setColumnCount(len(self.users_tab_table_title_list))
+
         self.users_tab_table.setHorizontalHeaderLabels(self.users_tab_table_title_list)
 
-        # User column stretches to fill remaining space (handles long account
-        # names like "liyanqing.1987"). Numeric columns are fixed-width and sized
-        # to their header + 1–2 digit values; tightened from the old generous
-        # widths which left the Stretch User column with zero room.
-        self.users_tab_table.setColumnWidth(0, 160)
-        self.users_tab_table.setColumnWidth(1, 75)
-        self.users_tab_table.setColumnWidth(2, 100)
-        self.users_tab_table.setColumnWidth(3, 155)
-        self.users_tab_table.setColumnWidth(4, 150)
-        self.users_tab_table.setColumnWidth(5, 135)
-        self.users_tab_table.setColumnWidth(6, 130)
-        self.users_tab_table.setColumnWidth(7, 155)
-        self.users_tab_table.setColumnWidth(8, 150)
-        self.users_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        common_pyqt5.auto_size_table_columns(self.users_tab_table)
+        if first_build:
+            self.users_tab_table.setColumnWidth(1, 103)  # min 103
+            self.users_tab_table.setColumnWidth(2, 143)  # min 143
+            self.users_tab_table.setColumnWidth(3, 205)  # min 205
+            self.users_tab_table.setColumnWidth(4, 197)  # min 197
+            self.users_tab_table.setColumnWidth(5, 181)  # min 181
+            self.users_tab_table.setColumnWidth(6, 173)  # min 173
+            self.users_tab_table.setColumnWidth(7, 196)  # min 196
+            self.users_tab_table.setColumnWidth(8, 188)  # min 188
+            common_pyqt5.auto_size_table_columns(self.users_tab_table, flex_cols=[0])
+
         self.users_tab_table.setRowCount(0)
 
     def gen_users_tab_table(self):
         """Fetch user history info and populate the users table."""
-        # Hide the first-visit placeholder once data is loaded.
+        # Hide the first-visit placeholder once data is loaded
         if getattr(self, 'users_tab_placeholder_label', None) is not None:
             self.users_tab_placeholder_label.hide()
 
         self.gen_users_tab_table_header()
 
-        # Fill self.users_tab_table items.
+        # Fill self.users_tab_table items
         user_dic = self.get_user_info()
         my_show_message = ShowMessage('Info', 'Rendering users table ...', persistent=True)
         my_show_message.start()
@@ -3397,18 +3476,18 @@ Made with ❤️  by liyanqing.1987
         for user in user_dic.keys():
             i += 1
 
-            # Fill "User" item.
+            # Fill "User" item
             j = 0
             item = QTableWidgetItem(user)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Job_Num" item.
+            # Fill "Job_Num" item
             j = j + 1
             item = QTableWidgetItem()
             item.setData(Qt.DisplayRole, int(user_dic[user]['job_num']))
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Pass_Rate" item.
+            # Fill "Pass_Rate" item
             j = j + 1
             pass_rate = 0
 
@@ -3419,14 +3498,14 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, pass_rate)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Total_Rusage_Mem" item.
+            # Fill "Total_Rusage_Mem" item
             j = j + 1
             item = QTableWidgetItem()
             total_rusage_mem = round(float(user_dic[user]['rusage_mem']) / 1024, 1)
             item.setData(Qt.DisplayRole, total_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Avg_Rusage_Mem" item.
+            # Fill "Avg_Rusage_Mem" item
             j = j + 1
             item = QTableWidgetItem()
             avg_rusage_mem = 0
@@ -3437,14 +3516,14 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, avg_rusage_mem)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Total_Max_Mem" item.
+            # Fill "Total_Max_Mem" item
             j = j + 1
             item = QTableWidgetItem()
             total_max_mem = round(float(user_dic[user]['max_mem']) / 1024, 1)
             item.setData(Qt.DisplayRole, total_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Avg_Max_Mem" item.
+            # Fill "Avg_Max_Mem" item
             j = j + 1
             item = QTableWidgetItem()
             avg_max_mem = 0
@@ -3455,14 +3534,14 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, avg_max_mem)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Total_Mem_Waste" item.
+            # Fill "Total_Mem_Waste" item
             j = j + 1
             item = QTableWidgetItem()
             total_mem_waste = round((float(user_dic[user]['rusage_mem']) - float(user_dic[user]['max_mem'])) / 1024, 1)
             item.setData(Qt.DisplayRole, total_mem_waste)
             self.users_tab_table.setItem(i, j, item)
 
-            # Fill "Avg_Mem_Waste" item.
+            # Fill "Avg_Mem_Waste" item
             j = j + 1
             item = QTableWidgetItem()
             avg_mem_waste = 0
@@ -3494,29 +3573,29 @@ Made with ❤️  by liyanqing.1987
         end_date = self.users_tab_end_date_edit.date()
         current_date = begin_date
 
-        # Get select WHERE condition.
+        # Get select WHERE condition
         select_condition = ''
 
         if specified_status_list and ('ALL' not in specified_status_list):
             if len(specified_status_list) == 1:
-                select_condition = 'WHERE status = "' + str(specified_status_list[0]) + '"'
+                select_condition = "WHERE status = '" + str(specified_status_list[0]) + "'"
             else:
                 select_condition = 'WHERE status IN ' + str(tuple(specified_status_list))
 
         if specified_queue_list and ('ALL' not in specified_queue_list):
             if select_condition:
                 if len(specified_queue_list) == 1:
-                    select_condition = str(select_condition) + ' AND queue = "' + str(specified_queue_list[0]) + '"'
+                    select_condition = str(select_condition) + " AND queue = '" + str(specified_queue_list[0]) + "'"
                 else:
                     select_condition = str(select_condition) + ' AND queue IN ' + str(tuple(specified_queue_list))
             else:
                 if len(specified_queue_list) == 1:
-                    select_condition = 'WHERE queue = "' + str(specified_queue_list[0]) + '"'
+                    select_condition = "WHERE queue = '" + str(specified_queue_list[0]) + "'"
                 else:
                     select_condition = 'WHERE queue IN ' + str(tuple(specified_queue_list))
 
         while current_date <= end_date:
-            # Get all user/date history data.
+            # Get all user/date history data
             current_date_string = current_date.toString('yyyyMMdd')
             current_date = current_date.addDays(1)
             user_db_file = str(self.cluster_db_path) + '/user/' + str(current_date_string) + '.db'
@@ -3528,7 +3607,8 @@ Made with ❤️  by liyanqing.1987
                     common.bprint(f'Failed on connecting user database file "{user_db_file}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 else:
                     user_table_list = common_sqlite3.get_sql_table_list(user_db_file, user_db_conn)
-                    # Resolve specified_user_list once per db: exact-preferred (exact match wins; fuzzy only when no exact match).
+                    # Resolve specified_user_list once per db: exact-preferred
+                    # (exact match wins; fuzzy only when no exact match)
                     all_user_list = [re.sub(r'^user_', '', t) for t in user_table_list if t.startswith('user_')]
                     matched_user_list = common.match_exact_or_fuzzy(specified_user_list, all_user_list) if specified_user_list else []
 
@@ -3573,9 +3653,13 @@ Made with ❤️  by liyanqing.1987
         my_show_message.wait(3000)
 
         return user_dic
-# For users TAB (end) #
+# ============================================================================
+# For users TAB (end)
+# ============================================================================
 
-# For queues TAB (start) #
+# ============================================================================
+# For queues TAB (start)
+# ============================================================================
     def gen_queues_tab(self):
         """
         Generate the queues tab on lsfMonitor GUI, show queues informations.
@@ -3602,56 +3686,75 @@ Made with ❤️  by liyanqing.1987
         # self.queues_tab - Grid
         queues_tab_grid = QGridLayout()
 
-        queues_tab_grid.addWidget(self.queues_tab_table, 0, 0, 2, 1)
-        queues_tab_grid.addWidget(self.queues_tab_frame0, 0, 1)
-        queues_tab_grid.addWidget(self.queues_tab_frame1, 1, 1)
-        queues_tab_grid.addWidget(self.queues_tab_frame2, 2, 0, 1, 2)
+        right_container = QWidget()
+        right_layout = QVBoxLayout(right_container)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.addWidget(self.queues_tab_frame0)
+        right_layout.addWidget(self.queues_tab_frame1, 1)
 
-        queues_tab_grid.setRowStretch(0, 1)
-        queues_tab_grid.setRowStretch(1, 14)
-        queues_tab_grid.setRowStretch(2, 6)
+        queues_tab_splitter = QSplitter()
+        queues_tab_splitter.addWidget(self.queues_tab_table)
+        queues_tab_splitter.addWidget(right_container)
+        queues_tab_splitter.setChildrenCollapsible(False)
+        queues_tab_splitter.setHandleWidth(6)
+        queues_tab_splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self.queues_tab_splitter = queues_tab_splitter
+        queues_tab_splitter.widget(0).setMinimumWidth(330)
 
-        queues_tab_grid.setColumnStretch(0, 37)
-        queues_tab_grid.setColumnStretch(1, 63)
+        queues_tab_vsplitter = QSplitter(Qt.Vertical)
+        queues_tab_vsplitter.addWidget(queues_tab_splitter)
+        queues_tab_vsplitter.addWidget(self.queues_tab_frame2)
+        queues_tab_vsplitter.setChildrenCollapsible(False)
+        queues_tab_vsplitter.setHandleWidth(6)
+        queues_tab_vsplitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self._apply_splitter_ratio(queues_tab_vsplitter, 72)
 
-        queues_tab_grid.setColumnMinimumWidth(0, 330)
+        queues_tab_grid.addWidget(queues_tab_vsplitter, 0, 0)
 
         self.queues_tab.setLayout(queues_tab_grid)
 
-        # Generate sub-frame
         self.gen_queues_tab_table()
         self.gen_queues_tab_frame0()
         self.gen_queues_tab_frame1()
         self.gen_queues_tab_frame2()
 
         # Empty-state hint: the PEND/RUN curve (frame1) stays empty until the
-        # user clicks "Check". Shown over the chart frame (graphics area) so the
-        # queue table and filter row stay interactive; hidden once a load is
-        # triggered.
+        # user clicks "Check". Shown over the chart frame (graphics area) so
+        # the queue table and filter row stay interactive; hidden once a load
+        # is triggered
         self.queues_tab_hint_label = self._make_empty_hint(
-            queues_tab_grid, 1, 1, 1, 1, 'Click "Check" button to load queue PEND/RUN curve information.'
+            self.queues_tab_frame1.layout(), 0, 0, 2, 1, 'Click "Check" button to load queue PEND/RUN curve information.'
         )
+
+        # Splitter ratio: left_pct = table width %. Adjust to taste (0-100)
+        self._apply_splitter_ratio(queues_tab_splitter, 37)
 
     def gen_queues_tab_table(self):
         self.queues_tab_table.setShowGrid(True)
         self.queues_tab_table.setSortingEnabled(False)
-        self.queues_tab_table.setColumnCount(0)
-        self.queues_tab_table.setColumnCount(4)
         self.queues_tab_table_title_list = ['QUEUE', 'SLOTS', 'PEND', 'RUN']
+
+        first_build = self.queues_tab_table.columnCount() != len(self.queues_tab_table_title_list)
+
+        if first_build:
+            self.queues_tab_table.setColumnCount(len(self.queues_tab_table_title_list))
+
         self.queues_tab_table.setHorizontalHeaderLabels(self.queues_tab_table_title_list)
 
-        self.queues_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.queues_tab_table.setColumnWidth(1, 70)
-        self.queues_tab_table.setColumnWidth(2, 80)
-        self.queues_tab_table.setColumnWidth(3, 80)
-        common_pyqt5.auto_size_table_columns(self.queues_tab_table)
+        if first_build:
+            self.queues_tab_table.setColumnWidth(1, 86)  # min 86
+            self.queues_tab_table.setColumnWidth(2, 86)  # min 80
+            self.queues_tab_table.setColumnWidth(3, 86)  # min 71
+            common_pyqt5.auto_size_table_columns(self.queues_tab_table, flex_cols=[0])
 
-        # Fresh LSF bhosts/queues/queue_host information.
+        # Fresh LSF bhosts/queues/queue_host information
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('bqueues')
         self.fresh_lsf_info('queue_host')
 
-        # Fill self.queues_tab_table items.
+        bhosts_index_dic = {host: i for (i, host) in enumerate(self.bhosts_dic.get('HOST_NAME', []))}
+
+        # Fill self.queues_tab_table items
         self.queues_tab_table.setRowCount(0)
 
         if 'QUEUE_NAME' in self.bqueues_dic:
@@ -3674,13 +3777,13 @@ Made with ❤️  by liyanqing.1987
             if i < len(queue_list) - 1:
                 index = self.bqueues_dic['QUEUE_NAME'].index(queue)
 
-            # Fill "QUEUE" item.
+            # Fill "QUEUE" item
             j = 0
             item = QTableWidgetItem(queue)
             item.setFont(QFont('song', 9, QFont.Bold))
             self.queues_tab_table.setItem(i, j, item)
 
-            # Fill "SLOTS" item.
+            # Fill "SLOTS" item
             j = j + 1
             total = 0
 
@@ -3693,8 +3796,8 @@ Made with ❤️  by liyanqing.1987
                 total = 'N/A'
             else:
                 for queue_host in self.queue_host_dic.get(queue, []):
-                    if queue_host in self.bhosts_dic['HOST_NAME']:
-                        host_index = self.bhosts_dic['HOST_NAME'].index(queue_host)
+                    if queue_host in bhosts_index_dic:
+                        host_index = bhosts_index_dic[queue_host]
                         host_max = self.bhosts_dic['MAX'][host_index]
 
                         if re.match(r'^\d+$', host_max):
@@ -3712,7 +3815,7 @@ Made with ❤️  by liyanqing.1987
 
             self.queues_tab_table.setItem(i, j, item)
 
-            # Fill "PEND" item.
+            # Fill "PEND" item
             j = j + 1
 
             if i == len(queue_list) - 1:
@@ -3730,7 +3833,7 @@ Made with ❤️  by liyanqing.1987
             item.setData(Qt.DisplayRole, int(pend))
             self.queues_tab_table.setItem(i, j, item)
 
-            # Fill "RUN" item.
+            # Fill "RUN" item
             j = j + 1
 
             if i == len(queue_list) - 1:
@@ -3751,7 +3854,20 @@ Made with ❤️  by liyanqing.1987
         refresh_action = QAction('Refresh', self)
         refresh_action.triggered.connect(self.refresh_queues_tab_table)
         menu.addAction(refresh_action)
+
+        menu.addSeparator()
+
+        reset_width_action = QAction('Reset column widths', self)
+        reset_width_action.triggered.connect(self.reset_queues_tab_column_widths)
+        menu.addAction(reset_width_action)
+
         menu.exec_(self.queues_tab_table.mapToGlobal(pos))
+
+    def reset_queues_tab_column_widths(self):
+        """
+        Restore every column of self.queues_tab_table to its default width.
+        """
+        common_pyqt5.reset_table_column_widths(self.queues_tab_table)
 
     def refresh_queues_tab_table(self):
         my_show_message = ShowMessage('Info', 'Loading queue information, please wait ...', persistent=True)
@@ -3762,7 +3878,7 @@ Made with ❤️  by liyanqing.1987
         my_show_message.wait(3000)
 
     def gen_queues_tab_frame0(self):
-        # "Queue" item.
+        # "Queue" item
         queues_tab_queue_label = QLabel('Queue', self.queues_tab_frame0)
         queues_tab_queue_label.setStyleSheet("font-weight: bold;")
         queues_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3770,7 +3886,7 @@ Made with ❤️  by liyanqing.1987
         self.queues_tab_queue_combo = common_pyqt5.QComboCheckBox(self.queues_tab_frame0, enableFilter=True)
         self.set_queues_tab_queue_combo()
 
-        # "Begin_Date" item.
+        # "Begin_Date" item
         queues_tab_begin_date_label = QLabel('Begin_Date', self.queues_tab_frame0)
         queues_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         queues_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3781,7 +3897,7 @@ Made with ❤️  by liyanqing.1987
         self.queues_tab_begin_date_edit.setCalendarPopup(True)
         self.queues_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
-        # "End_Date" item.
+        # "End_Date" item
         queues_tab_end_date_label = QLabel('End_Date', self.queues_tab_frame0)
         queues_tab_end_date_label.setStyleSheet("font-weight: bold;")
         queues_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -3792,7 +3908,7 @@ Made with ❤️  by liyanqing.1987
         self.queues_tab_end_date_edit.setCalendarPopup(True)
         self.queues_tab_end_date_edit.setDate(QDate.currentDate())
 
-        # "Check" button.
+        # "Check" button
         queues_tab_check_button = QPushButton('Check', self.queues_tab_frame0)
         queues_tab_check_button.clicked.connect(self.update_queues_tab_info)
 
@@ -3823,6 +3939,7 @@ Made with ❤️  by liyanqing.1987
         """
         if checked_queue_list is None:
             checked_queue_list = ['ALL']
+
         self.queues_tab_queue_combo.clear()
         self.fresh_lsf_info('bqueues')
 
@@ -3837,7 +3954,7 @@ Made with ❤️  by liyanqing.1987
         for queue in queue_list:
             self.queues_tab_queue_combo.addCheckBoxItem(queue)
 
-        # Set to checked status for checked_queue_list.
+        # Set to checked status for checked_queue_list
         for (i, qBox) in enumerate(self.queues_tab_queue_combo.checkBoxList):
             if (qBox.text() in checked_queue_list) and (qBox.isChecked() is False):
                 self.queues_tab_queue_combo.checkBoxList[i].setChecked(True)
@@ -3846,7 +3963,7 @@ Made with ❤️  by liyanqing.1987
         """
         If click the QUEUE name, show queue information on QUEUE tab.
         If click the PEND number, jump to the JOBS Tab and show the queue PEND jobs.
-        If click the RUN number, jump to the JOB Tab and show the queue RUN jobs.
+        If click the RUN number, jump to the JOBS Tab and show the queue RUN jobs.
         """
         if item is not None:
             current_row = self.queues_tab_table.currentRow()
@@ -3878,7 +3995,7 @@ Made with ❤️  by liyanqing.1987
                     self.gen_jobs_tab_table()
                     self.main_tab.setCurrentWidget(self.jobs_tab)
 
-            # Update queue information first.
+            # Refresh the queue table last, after the jump target is prepared
             self.gen_queues_tab_table()
 
     def gen_queues_tab_frame1(self):
@@ -3907,17 +4024,17 @@ Made with ❤️  by liyanqing.1987
         queue_list = list(self.queues_tab_queue_combo.selectedItems().values())
         queue_date_dic = self.get_queue_job_num_list(queue_list)
 
-        # Get sorted date list.
+        # Get sorted date list
         date_list = list(queue_date_dic.keys())
         date_list.sort()
 
-        # Get total_list, pend_list, run_list.
+        # Get total_list, pend_list, run_list
         total_list = []
         pend_list = []
         run_list = []
 
         for i, date in enumerate(date_list):
-            # Switch date format.
+            # Switch date format
             if self.enable_queue_detail:
                 date_list[i] = datetime.datetime.strptime(date_list[i], '%Y%m%d_%H%M%S')
             else:
@@ -3967,7 +4084,7 @@ Made with ❤️  by liyanqing.1987
         """
         Update self.queues_tab_frame1 and self.queues_tab_frame2.
         """
-        # Hide the empty-state hint once the user triggers a load.
+        # Hide the empty-state hint once the user triggers a load
         self.hide_empty_hint(getattr(self, 'queues_tab_hint_label', None))
 
         self.update_queues_tab_frame1()
@@ -3975,7 +4092,7 @@ Made with ❤️  by liyanqing.1987
 
     def get_queue_job_num_list(self, queue_list):
         """
-        Draw (PEND/RUN) job number curve for specified queueu.
+        Get (PEND/RUN) job number data for the specified queues.
         """
         queue_date_dic = {}
         queue_db_file = str(self.cluster_db_path) + '/queue.db'
@@ -4011,9 +4128,9 @@ Made with ❤️  by liyanqing.1987
                                 date = re.sub(r'_.*', '', sample_time)
 
                             tmp_date_dic.setdefault(date, {'total': [], 'pend': [], 'run': []})
-                            tmp_date_dic[date]['total'].append(int(data_dic['TOTAL'][i]))
-                            tmp_date_dic[date]['pend'].append(int(data_dic['PEND'][i]))
-                            tmp_date_dic[date]['run'].append(int(data_dic['RUN'][i]))
+                            tmp_date_dic[date]['total'].append(_safe_int(data_dic['TOTAL'][i]))
+                            tmp_date_dic[date]['pend'].append(_safe_int(data_dic['PEND'][i]))
+                            tmp_date_dic[date]['run'].append(_safe_int(data_dic['RUN'][i]))
 
                         for date in tmp_date_dic.keys():
                             queue_date_dic.setdefault(date, {})
@@ -4032,7 +4149,7 @@ Made with ❤️  by liyanqing.1987
         """
         axes = fig.add_subplot(111)
 
-        # Get queue string.
+        # Get queue string
         if len(queue_list) == 0:
             queue_string = ''
         elif len(queue_list) == 1:
@@ -4040,8 +4157,8 @@ Made with ❤️  by liyanqing.1987
         else:
             queue_string = str(queue_list[0]) + '...'
 
-        # In detail mode there are many dense sample points; use a thin line
-        # so the curve stays readable (matches the old expected_linewidth logic).
+        # In detail mode there are many dense sample points; use a thin line so
+        # the curve stays readable (matches the old expected_linewidth logic)
         if self.enable_queue_detail:
             lw = theme.CHART_LINEWIDTH_DETAIL
         else:
@@ -4060,9 +4177,13 @@ Made with ❤️  by liyanqing.1987
                                  xlabel='Sample Time' if self.enable_queue_detail else 'Sample Date',
                                  ylabel='Num')
         self.queues_tab_num_canvas.draw()
-# For queues TAB (end) #
+# ============================================================================
+# For queues TAB (end)
+# ============================================================================
 
-# For utilization TAB (start) #
+# ============================================================================
+# For utilization TAB (start)
+# ============================================================================
     def gen_utilization_tab(self):
         """
         Generate the utilization tab on lsfMonitor GUI, show host utilization (slot/cpu/mem) information.
@@ -4085,34 +4206,36 @@ Made with ❤️  by liyanqing.1987
         # self.utilization_tab - Grid
         utilization_tab_grid = QGridLayout()
 
-        utilization_tab_grid.addWidget(self.utilization_tab_frame0, 0, 0, 1, 2)
-        utilization_tab_grid.addWidget(self.utilization_tab_table, 1, 0)
-        utilization_tab_grid.addWidget(self.utilization_tab_frame1, 1, 1)
+        utilization_tab_grid.addWidget(self.utilization_tab_frame0, 0, 0)
+
+        utilization_tab_splitter = QSplitter()
+        utilization_tab_splitter.addWidget(self.utilization_tab_table)
+        utilization_tab_splitter.addWidget(self.utilization_tab_frame1)
+        utilization_tab_splitter.setChildrenCollapsible(False)
+        utilization_tab_splitter.setHandleWidth(6)
+        utilization_tab_splitter.setStyleSheet('QSplitter::handle { background: transparent; }')
+        self._apply_splitter_ratio(utilization_tab_splitter, 38)
+
+        utilization_tab_grid.addWidget(utilization_tab_splitter, 1, 0)
 
         utilization_tab_grid.setRowStretch(0, 1)
         utilization_tab_grid.setRowStretch(1, 10)
 
-        utilization_tab_grid.setColumnStretch(0, 38)
-        utilization_tab_grid.setColumnStretch(1, 62)
-
         self.utilization_tab.setLayout(utilization_tab_grid)
 
-        # Generate sub-frame
         self.gen_utilization_tab_frame0()
         self.gen_utilization_tab_table()
         self.gen_utilization_tab_frame1()
 
-        # Empty-state hint: the UTILIZATION table stays empty until the user
-        # clicks "Check". Shown over the chart frame (the tab's graphics area)
-        # so the filter row and table stay interactive; hidden once a load is
-        # triggered.
+        # Empty-state hint: shown over the chart frame so the filter row and
+        # table stay interactive; hidden once a load is triggered
         self.utilization_tab_hint_label = self._make_empty_hint(
-            utilization_tab_grid, 1, 1, 1, 1, 'Click "Check" button to load queue utilization information.'
+            self.utilization_tab_frame1.layout(), 0, 0, 2, 1, 'Click "Check" button to load queue utilization information.'
         )
 
     def gen_utilization_tab_frame0(self):
         # self.utilization_tab_frame0
-        # "Cluster" item.
+        # "Cluster" item
         utilization_tab_cluster_label = QLabel('Cluster', self.utilization_tab_frame0)
         utilization_tab_cluster_label.setStyleSheet("font-weight: bold;")
         utilization_tab_cluster_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -4122,31 +4245,33 @@ Made with ❤️  by liyanqing.1987
         self.utilization_tab_cluster_combo.currentTextChanged.connect(self.update_utilization_tab_queue_combo_by_cluster)
         self.utilization_tab_cluster_combo.currentTextChanged.connect(self.update_utilization_tab_group_combo_by_cluster)
 
-        # "Queue" item.
+        # "Queue" item
         utilization_tab_queue_label = QLabel('Queue', self.utilization_tab_frame0)
         utilization_tab_queue_label.setStyleSheet("font-weight: bold;")
         utilization_tab_queue_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.utilization_tab_queue_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_queue_combo()
-        # Queue 与 Group 互斥:选中 Queue 非 ALL 项时,Group 强制回到 ALL。
+        # Queue and Group are mutually exclusive: selecting a non-ALL Queue
+        # forces Group back to ALL
         self.utilization_tab_queue_combo.currentTextChanged.connect(self.enforce_utilization_tab_group_all)
 
-        # "Group" item.
+        # "Group" item
         utilization_tab_group_label = QLabel('Group', self.utilization_tab_frame0)
         utilization_tab_group_label.setStyleSheet("font-weight: bold;")
         utilization_tab_group_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         self.utilization_tab_group_combo = common_pyqt5.QComboCheckBox(self.utilization_tab_frame0, enableFilter=True)
         self.set_utilization_tab_group_combo()
-        # Group 与 Queue 互斥:选中 Group 非 ALL 项时,Queue 强制回到 ALL。
+        # Group and Queue are mutually exclusive: selecting a non-ALL Group
+        # forces Queue back to ALL
         self.utilization_tab_group_combo.currentTextChanged.connect(self.enforce_utilization_tab_queue_all)
 
-        # "Check" button.
+        # "Check" button
         utilization_tab_check_button = QPushButton('Check', self.utilization_tab_frame0)
         utilization_tab_check_button.clicked.connect(self.update_utilization_tab_info)
 
-        # "Begin_Date" item.
+        # "Begin_Date" item
         utilization_tab_begin_date_label = QLabel('Begin_Date', self.utilization_tab_frame0)
         utilization_tab_begin_date_label.setStyleSheet("font-weight: bold;")
         utilization_tab_begin_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -4157,7 +4282,7 @@ Made with ❤️  by liyanqing.1987
         self.utilization_tab_begin_date_edit.setCalendarPopup(True)
         self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
-        # "End_Date" item.
+        # "End_Date" item
         utilization_tab_end_date_label = QLabel('End_Date', self.utilization_tab_frame0)
         utilization_tab_end_date_label.setStyleSheet("font-weight: bold;")
         utilization_tab_end_date_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -4211,11 +4336,11 @@ Made with ❤️  by liyanqing.1987
         for cluster in cluster_list:
             self.utilization_tab_cluster_combo.addCheckBoxItem(cluster)
 
-        # 默认选中当前集群
+        # Default to the current cluster
         if checked_cluster_list is None:
             checked_cluster_list = [self.cluster]
 
-        # Set to checked status for checked_cluster_list.
+        # Set to checked status for checked_cluster_list
         for (i, qBox) in enumerate(self.utilization_tab_cluster_combo.checkBoxList):
             if (qBox.text() in checked_cluster_list) and (qBox.isChecked() is False):
                 self.utilization_tab_cluster_combo.checkBoxList[i].setChecked(True)
@@ -4228,7 +4353,7 @@ Made with ❤️  by liyanqing.1987
         db_root_path = Path(self.lsf_db_root)
         queue_list = []
 
-        # 获取所有集群的所有队列
+        # Get every queue of every cluster
         if db_root_path.exists() and db_root_path.is_dir():
             for entry in os.scandir(db_root_path):
                 if entry.is_dir():
@@ -4237,7 +4362,7 @@ Made with ❤️  by liyanqing.1987
                     queue_host_mapping_db = cluster_db_path / 'queue_host_mapping.db'
 
                     if queue_host_mapping_db.exists():
-                        # 读取当前集群的所有队列
+                        # Read the current cluster's queue list
                         (result, conn) = common_sqlite3.connect_db_file(str(queue_host_mapping_db))
 
                         if result == 'passed':
@@ -4249,8 +4374,9 @@ Made with ❤️  by liyanqing.1987
 
                             conn.close()
 
-        # 兜底:若 db 中没有当前集群的 queue 数据(如全新环境未采样过),
-        # 实时用 bqueues 获取当前集群的 queue 列表填充,避免 Queue combo 为空。
+        # Fallback: when the db has no queue data for the current cluster (e.g.
+        # a fresh environment that has never been sampled), query bqueues live
+        # to fill the Queue combo instead of leaving it empty
         if self.cluster:
             current_cluster_has_queue = any(
                 (q != 'ALL') and (self._parse_queue_full_name(q)[0] == self.cluster)
@@ -4268,7 +4394,8 @@ Made with ❤️  by liyanqing.1987
                 except Exception as warning:
                     common.bprint(f'Failed on getting queue list from bqueues: {warning}', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
 
-        # 按 (cluster, queue_name) 二级排序,使同一 cluster 的 queue 连续显示。
+        # Sort by (cluster, queue_name) so queues of the same cluster stay
+        # together
         def _queue_sort_key(q):
             c, n = self._parse_queue_full_name(q)
 
@@ -4286,7 +4413,7 @@ Made with ❤️  by liyanqing.1987
 
             self.utilization_tab_queue_combo.addCheckBoxItem(display_text, data=queue, update_width=True)
 
-        # 处理默认选中逻辑:默认选中当前 Cluster 的所有 Queue(不选 ALL)。
+        # Default selection: check every Queue of the current Cluster (not ALL)
         if checked_queue_list is None:
             checked_queue_list = []
 
@@ -4300,7 +4427,8 @@ Made with ❤️  by liyanqing.1987
                     if q_cluster == self.cluster:
                         checked_queue_list.append(queue)
 
-        # Set to checked status for checked_queue_list(按内部值 data 匹配)。
+        # Set checked status for checked_queue_list (matched by internal data
+        # value)
         for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
             data = self.utilization_tab_queue_combo.itemData(i)
 
@@ -4321,14 +4449,13 @@ Made with ❤️  by liyanqing.1987
         self.utilization_tab_queue_combo.blockSignals(True)
 
         try:
-            # 获取选中的集群
             selected_cluster_dic = self.utilization_tab_cluster_combo.selectedItems()
             selected_clusters = sorted(list(selected_cluster_dic.values())) if selected_cluster_dic else []
             select_all = False
 
             if 'ALL' in selected_clusters:
                 select_all = True
-                # 选中ALL时获取所有集群
+                # When ALL is selected, take every cluster
                 selected_clusters = []
                 db_root_path = Path(self.lsf_db_root)
 
@@ -4337,13 +4464,14 @@ Made with ❤️  by liyanqing.1987
                         if entry.is_dir():
                             selected_clusters.append(entry.name)
 
-            # 调整队列选中状态(按内部值 data 匹配)。
+            # Adjust queue checked state (matched by internal data value)
             if not selected_clusters:
-                # 没有选中任何集群时，所有队列都不选中
+                # With no cluster selected, uncheck every queue
                 for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
                     qBox.setChecked(False)
             elif select_all:
-                # 选中Cluster的ALL时，Queue只需要选中ALL即可，不需要选中所有队列
+                # When a cluster's ALL is selected, the Queue combo only needs
+                # ALL checked, not every queue
                 for (i, qBox) in enumerate(self.utilization_tab_queue_combo.checkBoxList):
                     if self.utilization_tab_queue_combo.itemData(i) == 'ALL':
                         qBox.setChecked(True)
@@ -4354,11 +4482,12 @@ Made with ❤️  by liyanqing.1987
                     queue_name = self.utilization_tab_queue_combo.itemData(i)
 
                     if queue_name == 'ALL':
-                        # 选中部分集群时ALL保持选中
+                        # When only some clusters are selected, keep ALL
+                        # checked
                         qBox.setChecked(True)
                         continue
 
-                    # 获取队列所属集群
+                    # Resolve the cluster a queue belongs to
                     if '-' in queue_name:
                         queue_cluster, _ = self._parse_queue_full_name(queue_name)
 
@@ -4367,7 +4496,7 @@ Made with ❤️  by liyanqing.1987
                         else:
                             qBox.setChecked(False)
                     else:
-                        # 特殊队列（如lost_and_found）默认不选中
+                        # Special queues (e.g. lost_and_found) start unchecked
                         qBox.setChecked(False)
 
             self.utilization_tab_queue_combo.updateLineEdit()
@@ -4383,7 +4512,7 @@ Made with ❤️  by liyanqing.1987
         db_root_path = Path(self.lsf_db_root)
         group_list = []
 
-        # 获取所有集群的所有 host group。
+        # Get every host group of every cluster
         if db_root_path.exists() and db_root_path.is_dir():
             for entry in os.scandir(db_root_path):
                 if entry.is_dir():
@@ -4403,7 +4532,8 @@ Made with ❤️  by liyanqing.1987
 
                             conn.close()
 
-        # 库为空时 fallback 实时 bmgroup(当前集群)。
+        # Fallback: query bmgroup live (current cluster) when the db has no
+        # data
         if not group_list:
             self.fresh_lsf_info('host_group')
 
@@ -4411,7 +4541,8 @@ Made with ❤️  by liyanqing.1987
                 for group in groups:
                     group_list.append(f"{self.cluster}-{group}")
 
-        # 按 (cluster, group_name) 二级排序,使同一 cluster 的 group 连续显示。
+        # Sort by (cluster, group_name) so groups of the same cluster stay
+        # together
         def _group_sort_key(g):
             c, n = self._parse_group_full_name(g)
 
@@ -4429,11 +4560,12 @@ Made with ❤️  by liyanqing.1987
 
             self.utilization_tab_group_combo.addCheckBoxItem(display_text, data=group, update_width=True)
 
-        # 处理默认选中逻辑:默认只选 ALL。
+        # Default selection: check ALL only
         if checked_group_list is None:
             checked_group_list = ['ALL']
 
-        # Set to checked status for checked_group_list(按内部值 data 匹配)。
+        # Set checked status for checked_group_list (matched by internal data
+        # value)
         for (i, qBox) in enumerate(self.utilization_tab_group_combo.checkBoxList):
             data = self.utilization_tab_group_combo.itemData(i)
 
@@ -4470,7 +4602,8 @@ Made with ❤️  by liyanqing.1987
         if self._utilization_tab_has_non_all(self.utilization_tab_group_combo):
             return True
 
-        # Queue 空选且 Group 有选(ALL 或具体项) → 交给 Group 维度。
+        # Queue empty but Group selected (ALL or specific) -> hand over to the
+        # Group dimension
         if queue_empty and group_has_selection:
             return True
 
@@ -4494,7 +4627,8 @@ Made with ❤️  by liyanqing.1987
                     if qBox.isChecked():
                         combo.checkBoxList[i].setChecked(False)
 
-            # blockSignals 挡了 qBoxStateChanged→updateLineEdit,这里手动同步显示文本。
+            # blockSignals suppresses qBoxStateChanged -> updateLineEdit, so
+            # sync the display text manually here
             combo.updateLineEdit()
         finally:
             combo.blockSignals(False)
@@ -4537,13 +4671,12 @@ Made with ❤️  by liyanqing.1987
         """
         Update self.utilization_tab_table and self.utilization_tab_frame1.
         """
-        # Hide the empty-state hint once the user triggers a load.
+        # Hide the empty-state hint once the user triggers a load
         self.hide_empty_hint(getattr(self, 'utilization_tab_hint_label', None))
 
-        # 先清空所有旧数据，避免切换Cluster时残留
+        # Clear all old data first so switching cluster leaves nothing behind
         self.utilization_full_time_data = None
         self.utilization_time_range = None
-        # 清空表格
         self.utilization_tab_table.setRowCount(0)
 
         return_data = self.get_queue_utilization_info()
@@ -4554,7 +4687,6 @@ Made with ❤️  by liyanqing.1987
 
         queue_utilization_dic, full_time_util, begin_second, end_second = return_data
 
-        # 保存到实例变量供图表使用
         self.utilization_full_time_data = full_time_util
         self.utilization_time_range = (begin_second, end_second)
 
@@ -4594,14 +4726,11 @@ Made with ❤️  by liyanqing.1987
             self.fresh_lsf_info('queue_host')
             return list(self.queue_host_dic.keys()), [(begin_second, end_second, self.queue_host_dic)], list(self.queue_host_dic.keys())
 
-        # Get all queue tables
         table_list = common_sqlite3.get_sql_table_list(queue_host_mapping_db_file, conn)
         queue_list = [re.sub(r'^queue_', '', table) for table in table_list if table.startswith('queue_')]
 
-        # Collect all change points
         for queue in queue_list:
             table_name = f'queue_{queue}'
-            # Get all mapping records in time range
             data = common_sqlite3.get_sql_table_data(
                 queue_host_mapping_db_file, conn, table_name,
                 ['sample_second', 'hosts'],
@@ -4615,29 +4744,29 @@ Made with ❤️  by liyanqing.1987
 
                 all_queues.add(queue)
 
-        # Get current existing queues: 仅能获取当前集群的队列列表，其他集群无法通过LSF命令查询
+        # Only the current cluster queue list can be queried — LSF commands
+        # cannot reach other clusters
         current_cluster_db_path = str(self.cluster_db_path)
 
         if db_path == current_cluster_db_path:
             self.fresh_lsf_info('bqueues')
             current_queue_list = self.bqueues_dic.get('QUEUE_NAME', []) if hasattr(self, 'bqueues_dic') else []
         else:
-            # 其他集群的队列默认视为存在，不标记deleted状态
+            # Queues of other clusters are assumed to exist and are never
+            # marked deleted
             current_queue_list = list(all_queues)
 
-        # Sort change points by time
         queue_change_points.sort(key=lambda x: x[0])
 
-        # Generate time slices
         if not queue_change_points:
             # No changes in time range, use current mapping
             self.fresh_lsf_info('queue_host')
             return list(all_queues) if all_queues else list(self.queue_host_dic.keys()), [(begin_second, end_second, self.queue_host_dic)], current_queue_list
 
-        # Build mapping matrix
         current_mapping = {}
 
-        # Initialize mapping: if no records before begin_second, use queue's earliest record as default for pre-begin time
+        # Initialize mapping: if no records before begin_second, use queue's
+        # earliest record as default for pre-begin time
         for queue in queue_list:
             table_name = f'queue_{queue}'
             # First try to get the latest record before begin_second
@@ -4650,7 +4779,8 @@ Made with ❤️  by liyanqing.1987
             if data and data['hosts']:
                 current_mapping[queue] = data['hosts'][0].split()
             else:
-                # No records before begin_second, get queue's earliest record to use for pre-begin period
+                # No records before begin_second, get queue's earliest record
+                # to use for pre-begin period
                 earliest_data = common_sqlite3.get_sql_table_data(
                     queue_host_mapping_db_file, conn, table_name,
                     ['sample_second', 'hosts'],
@@ -4660,7 +4790,6 @@ Made with ❤️  by liyanqing.1987
                 if earliest_data and earliest_data['hosts']:
                     current_mapping[queue] = earliest_data['hosts'][0].split()
 
-        # Process change points to build time slices
         all_change_times = sorted(list(set([cp[0] for cp in queue_change_points] + [begin_second, end_second])))
 
         for i in range(len(all_change_times) - 1):
@@ -4670,12 +4799,10 @@ Made with ❤️  by liyanqing.1987
             if slice_start >= slice_end:
                 continue
 
-            # Update mapping for this slice
             for cp_time, queue, hosts in queue_change_points:
                 if cp_time == all_change_times[i]:
                     current_mapping[queue] = hosts
 
-            # Add to matrix
             mapping_matrix.append((slice_start, slice_end, copy.deepcopy(current_mapping)))
 
         conn.close()
@@ -4696,12 +4823,13 @@ Made with ❤️  by liyanqing.1987
         all_groups = set()
         group_change_points = []
 
-        # 库缺失时 fallback 实时 host_group_dic(当前集群快照)。
+        # Fallback: use the live host_group_dic (current cluster snapshot) when
+        # the db is missing
         if not os.path.exists(host_group_mapping_db_file):
             common.bprint(f'Host group-host mapping database "{host_group_mapping_db_file}" is missing.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             self.fresh_lsf_info('host_group')
 
-            # host_group_dic 是 {host: [groups]},反转为 {group: [hosts]}。
+            # host_group_dic is {host: [groups]}; invert it to {group: [hosts]}
             current_group_host_dic = {}
 
             for host, groups in self.host_group_dic.items():
@@ -4724,11 +4852,11 @@ Made with ❤️  by liyanqing.1987
 
             return list(current_group_host_dic.keys()), [(begin_second, end_second, current_group_host_dic)], list(current_group_host_dic.keys())
 
-        # Get all group tables.
+        # Get all group tables
         table_list = common_sqlite3.get_sql_table_list(host_group_mapping_db_file, conn)
         group_list = [re.sub(r'^group_', '', table) for table in table_list if table.startswith('group_')]
 
-        # Collect all change points.
+        # Collect all change points
         for group in group_list:
             table_name = f'group_{group}'
             data = common_sqlite3.get_sql_table_data(
@@ -4744,7 +4872,8 @@ Made with ❤️  by liyanqing.1987
 
                 all_groups.add(group)
 
-        # 当前集群才标记 deleted(用实时 bmgroup 判断 group 是否仍存在);其他集群默认视为存在。
+        # Only the current cluster is checked for deletions (live bmgroup tells
+        # whether a group still exists); other clusters are assumed to exist
         current_cluster_db_path = str(self.cluster_db_path)
 
         if db_path == current_cluster_db_path:
@@ -4759,10 +4888,10 @@ Made with ❤️  by liyanqing.1987
         else:
             current_group_list = list(all_groups)
 
-        # Sort change points by time.
+        # Sort change points by time
         group_change_points.sort(key=lambda x: x[0])
 
-        # Generate time slices.
+        # Generate time slices
         if not group_change_points:
             current_group_host_dic = {}
 
@@ -4772,10 +4901,11 @@ Made with ❤️  by liyanqing.1987
 
             return list(all_groups) if all_groups else list(current_group_host_dic.keys()), [(begin_second, end_second, current_group_host_dic)], current_group_list
 
-        # Build mapping matrix.
+        # Build mapping matrix
         current_mapping = {}
 
-        # Initialize mapping: use the latest record before begin_second for each group.
+        # Initialize mapping: use the latest record before begin_second for
+        # each group
         for group in group_list:
             table_name = f'group_{group}'
             data = common_sqlite3.get_sql_table_data(
@@ -4796,7 +4926,7 @@ Made with ❤️  by liyanqing.1987
                 if earliest_data and earliest_data['hosts']:
                     current_mapping[group] = earliest_data['hosts'][0].split()
 
-        # Process change points to build time slices.
+        # Process change points to build time slices
         all_change_times = sorted(list(set([cp[0] for cp in group_change_points] + [begin_second, end_second])))
 
         for i in range(len(all_change_times) - 1):
@@ -4806,12 +4936,12 @@ Made with ❤️  by liyanqing.1987
             if slice_start >= slice_end:
                 continue
 
-            # Update mapping for this slice.
+            # Update mapping for this slice
             for cp_time, group, hosts in group_change_points:
                 if cp_time == all_change_times[i]:
                     current_mapping[group] = hosts
 
-            # Add to matrix.
+            # Add to matrix
             mapping_matrix.append((slice_start, slice_end, copy.deepcopy(current_mapping)))
 
         conn.close()
@@ -4827,21 +4957,18 @@ Made with ❤️  by liyanqing.1987
         my_show_message = ShowMessage('Info', 'Loading queue utilization info ...', persistent=True)
         my_show_message.start()
 
-        # Import pandas AFTER the loading prompt is shown — pandas' first import
-        # takes ~2s, so showing the prompt first keeps the UI responsive
-        # instead of freezing for 2s before anything appears.
+        # Import pandas AFTER the loading prompt is shown — pandas' first
+        # import takes ~2s, so showing the prompt first keeps the UI responsive
+        # instead of freezing for 2s before anything appears
         import pandas as pd
 
-        # Get time range
         begin_date = self.utilization_tab_begin_date_edit.date().toString(Qt.ISODate)
         original_begin_second = int(time.mktime(time.strptime(f"{begin_date} 00:00:00", '%Y-%m-%d %H:%M:%S')))
         end_date = self.utilization_tab_end_date_edit.date().toString(Qt.ISODate)
         original_end_second = int(time.mktime(time.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')))
-        # 缓存查询用的时间范围
         begin_second = original_begin_second
         end_second = original_end_second
 
-        # 获取选中的集群
         db_root_path = Path(self.lsf_db_root)
         selected_cluster_dic = self.utilization_tab_cluster_combo.selectedItems()
         selected_clusters = sorted(list(selected_cluster_dic.values())) if selected_cluster_dic else []
@@ -4854,10 +4981,13 @@ Made with ❤️  by liyanqing.1987
                     if entry.is_dir():
                         selected_clusters.append(entry.name)
 
-        # 确定当前生效维度:Group 选中了非 ALL 项时按 group 维度统计,否则按 queue 维度。
+        # Resolve the active dimension: group when a non-ALL Group item is
+        # selected, otherwise queue
         group_active = self._utilization_tab_group_active()
 
-        # 获取选中的队列/Group(二者互斥,生效维度决定数据来源)。取内部值(完整名 {cluster}-{name})。
+        # Get the selected queue/Group (mutually exclusive; the active
+        # dimension decides the source). Uses the internal value (full name
+        # {cluster}-{name})
         if group_active:
             selected_entity_dic = self.utilization_tab_group_combo.selectedData()
         else:
@@ -4865,14 +4995,16 @@ Made with ❤️  by liyanqing.1987
 
         selected_queues = list(selected_entity_dic.values()) if selected_entity_dic else []
 
-        # 生效维度 combo 完全空选时(如双侧都空,或 Group 维度但 Group 也空),视为 ALL 取全部。
+        # An empty selection in the active combo (both sides empty, or Group
+        # dimension with no Group) is treated as ALL
         if not selected_queues:
             selected_queues = ['ALL']
 
-        # Generate cache key (增量查询优化：key包含集群、维度和队列/group，同条件下复用缓存)
+        # Generate cache key (incremental-query optimisation: the key covers
+        # cluster, dimension and queue/group so identical queries reuse the
+        # cache)
         cache_base_key = (tuple(selected_clusters), 'group' if group_active else 'queue', tuple(selected_queues), self.enable_utilization_detail)
 
-        # Check cache
         current_time = time.time()
         cached_full_util = None
         cached_begin = 0
@@ -4882,10 +5014,8 @@ Made with ❤️  by liyanqing.1987
             cached_full_util, cache_time, cached_begin, cached_end = self.utilization_cache[cache_base_key]
 
             if current_time - cache_time < self.utilization_cache_timeout:
-                # 检查新查询的时间范围是否完全在缓存范围内
                 if begin_second >= cached_begin and end_second <= cached_end:
                     common.bprint('Using cached utilization data (full hit).', date_format='%Y-%m-%d %H:%M:%S')
-                    # 从缓存中截取需要的时间段
                     queue_utilization_dic = {}
 
                     for queue in cached_full_util:
@@ -4911,19 +5041,15 @@ Made with ❤️  by liyanqing.1987
                     time.sleep(0.01)
                     my_show_message.terminate()
                     my_show_message.wait(3000)
-                    # 缓存命中时也返回完整数据
                     return queue_utilization_dic, cached_full_util, original_begin_second, original_end_second
                 else:
                     common.bprint('Using cached utilization data (partial hit), only querying new time range.', date_format='%Y-%m-%d %H:%M:%S')
-                    # 部分命中，扩展时间范围查询
                     new_begin = min(begin_second, cached_begin)
                     new_end = max(end_second, cached_end)
 
                     if new_begin == begin_second and new_end == end_second:
-                        # 完全不重叠，重新查询
                         cached_full_util = None
                     else:
-                        # 调整查询范围为新增部分
                         if begin_second < cached_begin:
                             query_begin = begin_second
                             query_end = cached_begin
@@ -4933,19 +5059,17 @@ Made with ❤️  by liyanqing.1987
 
                         begin_second, end_second = query_begin, query_end
 
-        # Clean up expired cache
         keys_to_delete = [k for k, (_, t, _, _) in self.utilization_cache.items() if current_time - t > self.utilization_cache_timeout]
 
         for k in keys_to_delete:
             del self.utilization_cache[k]
 
-        # Limit cache size to 20 entries
         if len(self.utilization_cache) > 20:
             oldest_key = sorted(self.utilization_cache.keys(), key=lambda k: self.utilization_cache[k][1])[0]
             del self.utilization_cache[oldest_key]
 
-        # Update message: loading historical mapping
-        # 解析 queue/group 与集群的映射(group_active 时维度为 group)。
+        # Resolve the queue/group -> cluster mapping (dimension is group when
+        # group_active)
         parse_full_name = self._parse_group_full_name if group_active else self._parse_queue_full_name
         queue_cluster_map = {}
         queue_full_name_map = {}
@@ -4965,7 +5089,6 @@ Made with ❤️  by liyanqing.1987
                     queue_cluster_map[cluster].append(queue_name)
                     queue_full_name_map[(cluster, queue_name)] = q
 
-        # 遍历每个集群收集数据
         all_time_based_util = {}
         all_queue_avg = {}
 
@@ -4983,13 +5106,13 @@ Made with ❤️  by liyanqing.1987
             my_show_message.start()
             QApplication.processEvents()
 
-            # Get historical mapping for current cluster (queue or group dimension).
+            # Get historical mapping for current cluster (queue or group
+            # dimension)
             if group_active:
                 historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_host_group_mapping(str(cluster_db_path), original_begin_second, original_end_second)
             else:
                 historical_queue_list, mapping_matrix, current_queue_list = self.get_historical_queue_host_mapping(str(cluster_db_path), original_begin_second, original_end_second)
 
-            # 确定当前集群要处理的队列
             if only_all_selected or 'ALL' in selected_queues:
                 cluster_process_queues = historical_queue_list
             else:
@@ -5023,7 +5146,6 @@ Made with ❤️  by liyanqing.1987
             my_show_message.start()
             QApplication.processEvents()
 
-            # Get utilization data for current cluster
             df_cluster = pd.DataFrame()
 
             if self.enable_utilization_detail:
@@ -5068,7 +5190,6 @@ Made with ❤️  by liyanqing.1987
 
                     conn.close()
 
-            # 转换数值类型
             for res in ['slot', 'cpu', 'mem']:
                 if res in df_cluster.columns:
                     df_cluster[res] = pd.to_numeric(df_cluster[res], errors='coerce').fillna(0).clip(upper=100)
@@ -5084,7 +5205,6 @@ Made with ❤️  by liyanqing.1987
             my_show_message.start()
             QApplication.processEvents()
 
-            # 生成时间key
             if self.enable_utilization_detail:
                 df_cluster['time_key'] = df_cluster['sample_second'].apply(lambda x: time.strftime('%Y%m%d_%H%M%S', time.localtime(x)))
                 df_cluster['ts'] = df_cluster['sample_second']
@@ -5092,7 +5212,6 @@ Made with ❤️  by liyanqing.1987
                 df_cluster['ts'] = pd.to_datetime(df_cluster['sample_date'], format='%Y%m%d').astype(np.int64) // 10**9 + 12 * 3600
                 df_cluster['time_key'] = df_cluster['sample_date']
 
-            # 处理当前集群的每个时间切片
             for slice_idx, (slice_start, slice_end, mapping) in enumerate(mapping_matrix):
                 if slice_end - slice_start <= 0:
                     continue
@@ -5103,7 +5222,6 @@ Made with ❤️  by liyanqing.1987
                 if df_slice.empty:
                     continue
 
-                # 处理单个队列
                 for queue in cluster_process_queues:
                     if queue not in mapping:
                         continue
@@ -5132,7 +5250,8 @@ Made with ❤️  by liyanqing.1987
 
                                 all_time_based_util[full_queue_name][res][time_key].append(avg_val)
 
-                # 处理当前集群的ALL队列数据，汇总到全局ALL
+                # Handle the current cluster's ALL queue data and merge it into
+                # the global ALL
                 if 'ALL' not in all_time_based_util:
                     all_time_based_util['ALL'] = {'slot': {}, 'cpu': {}, 'mem': {}}
                     all_queue_avg['ALL'] = {'is_deleted': False}
@@ -5155,11 +5274,10 @@ Made with ❤️  by liyanqing.1987
 
                             all_time_based_util['ALL'][res][time_key].append(avg_val)
 
-        # 合并所有集群的数据，计算平均值
         queue_utilization_dic = copy.deepcopy(all_queue_avg)
         full_time_util = {}
 
-        # 处理detail模式下的多值平均
+        # Handle multi-value averaging in detail mode
         for queue in all_time_based_util:
             full_time_util[queue] = {'is_deleted': queue_utilization_dic[queue]['is_deleted']}
 
@@ -5184,9 +5302,7 @@ Made with ❤️  by liyanqing.1987
                 else:
                     queue_utilization_dic[queue][res] = 0.0
 
-        # 合并缓存数据（如果有部分命中）
         if cached_full_util is not None:
-            # 合并新旧时间序列数据
             for queue in full_time_util:
                 if queue not in cached_full_util:
                     cached_full_util[queue] = {'is_deleted': full_time_util[queue]['is_deleted']}
@@ -5194,14 +5310,11 @@ Made with ❤️  by liyanqing.1987
                     for res in ['slot', 'cpu', 'mem']:
                         cached_full_util[queue][res] = {}
 
-                # 合并每个时间点的数据
                 for res in ['slot', 'cpu', 'mem']:
                     cached_full_util[queue][res].update(full_time_util[queue][res])
 
-            # 使用合并后的完整数据
             full_time_util = cached_full_util
 
-        # 保存到缓存
         cache_begin = min(original_begin_second, cached_begin) if cached_full_util is not None else original_begin_second
         cache_end = max(original_end_second, cached_end) if cached_full_util is not None else original_end_second
         self.utilization_cache[cache_base_key] = (full_time_util, current_time, cache_begin, cache_end)
@@ -5218,38 +5331,46 @@ Made with ❤️  by liyanqing.1987
 
     def gen_utilization_tab_table(self, queue_utilization_dic=None):
         """
-        Generte self.utilization_tab_table.
+        Generate self.utilization_tab_table.
         """
         if queue_utilization_dic is None:
             queue_utilization_dic = {}
 
         self.utilization_tab_table.setShowGrid(True)
         self.utilization_tab_table.setSortingEnabled(False)
-        self.utilization_tab_table.setColumnCount(0)
-        self.utilization_tab_table.setColumnCount(5)
+        # The first column header follows the active dimension: "Group" in
+        # group mode, otherwise "Queue"
+        group_active = self._utilization_tab_group_active()
+        self.utilization_tab_table_title_list = ['Group' if group_active else 'Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
+
+        first_build = self.utilization_tab_table.columnCount() != len(self.utilization_tab_table_title_list)
+
+        if first_build:
+            self.utilization_tab_table.setColumnCount(len(self.utilization_tab_table_title_list))
+
+        self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
+
+        if first_build:
+            self.utilization_tab_table.setColumnWidth(1, 87)  # min 87
+            self.utilization_tab_table.setColumnWidth(2, 75)  # min 75
+            self.utilization_tab_table.setColumnWidth(3, 92)  # min 92
+            self.utilization_tab_table.setColumnWidth(4, 91)  # min 91
+            common_pyqt5.auto_size_table_columns(self.utilization_tab_table, flex_cols=[0])
+
         self.utilization_tab_table.setRowCount(0)
         self.utilization_tab_table.setRowCount(len(queue_utilization_dic))
 
-        # 首列标题随生效维度切换:Group 维度显示 Group,否则显示 Queue。
-        group_active = self._utilization_tab_group_active()
-        self.utilization_tab_table_title_list = ['Group' if group_active else 'Queue', 'slots', 'slot(%)', 'cpu(%)', 'mem(%)']
-        self.utilization_tab_table.setHorizontalHeaderLabels(self.utilization_tab_table_title_list)
-
-        self.utilization_tab_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.utilization_tab_table.setColumnWidth(1, 70)
-        self.utilization_tab_table.setColumnWidth(2, 60)
-        self.utilization_tab_table.setColumnWidth(3, 60)
-        self.utilization_tab_table.setColumnWidth(4, 60)
-        common_pyqt5.auto_size_table_columns(self.utilization_tab_table)
-
-        # Fresh LSF bhosts/queues/queue_host/host_group information.
+        # Fresh LSF bhosts/queues/queue_host/host_group information
         self.fresh_lsf_info('bhosts')
         self.fresh_lsf_info('queue_host')
         self.fresh_lsf_info('host_group')
 
-        # 按生效维度选择 entity->hosts 映射:group 维度用 host group,否则用 queue。
+        bhosts_index_dic = {host: i for (i, host) in enumerate(self.bhosts_dic.get('HOST_NAME', []))}
+
+        # Pick the entity->hosts mapping by active dimension: host group in
+        # group mode, otherwise queue
         if group_active:
-            # host_group_dic 是 {host: [groups]},反转为 {group: [hosts]}。
+            # host_group_dic is {host: [groups]}; invert it to {group: [hosts]}
             entity_host_dic = {}
 
             for host, groups in self.host_group_dic.items():
@@ -5258,10 +5379,11 @@ Made with ❤️  by liyanqing.1987
         else:
             entity_host_dic = self.queue_host_dic
 
-        # 按生效维度选择 full name 解析函数(queue 或 group),整个表格生成期间不变。
+        # Pick the full-name parser by active dimension (queue or group); it
+        # stays fixed for the whole table build
         parse_full_name = self._parse_group_full_name if group_active else self._parse_queue_full_name
 
-        # Fill self.utilization_tab_table items.
+        # Fill self.utilization_tab_table items
         if queue_utilization_dic:
             row = -1
 
@@ -5270,7 +5392,8 @@ Made with ❤️  by liyanqing.1987
                 queue_data = queue_utilization_dic[queue]
                 is_deleted = queue_data.get('is_deleted', False) if isinstance(queue_data, dict) else False
 
-                # Fill "Queue/Group" item(显示名 <name>  (<cluster>),内部完整名存 UserRole 供下钻使用)。
+                # Fill the "Queue/Group" item (display name <name> (<cluster>);
+                # the full name is stored in UserRole for drill-down)
                 if queue == 'ALL':
                     queue_display = 'ALL'
                 else:
@@ -5289,7 +5412,7 @@ Made with ❤️  by liyanqing.1987
 
                 self.utilization_tab_table.setItem(row, 0, item)
 
-                # Fill "slots" item.
+                # Fill "slots" item
                 total = 0
 
                 if queue == 'ALL':
@@ -5299,7 +5422,8 @@ Made with ❤️  by liyanqing.1987
                     all_hosts = set()
 
                     for q in selected_entities:
-                        # 检查是否有跨集群、已删除或不存在的 entity
+                        # Check for cross-cluster, deleted or non-existent
+                        # entities
                         entity_name = q
 
                         if '-' in q:
@@ -5318,13 +5442,12 @@ Made with ❤️  by liyanqing.1987
                     if has_na:
                         total = 'N/A'
                     else:
-                        # Calculate sum of slots for unique hosts
                         total = 0
 
                         if 'HOST_NAME' in self.bhosts_dic and 'MAX' in self.bhosts_dic:
                             for host in all_hosts:
-                                if host in self.bhosts_dic['HOST_NAME']:
-                                    host_index = self.bhosts_dic['HOST_NAME'].index(host)
+                                if host in bhosts_index_dic:
+                                    host_index = bhosts_index_dic[host]
                                     host_max = self.bhosts_dic['MAX'][host_index]
 
                                     if re.match(r'^\d+$', host_max):
@@ -5332,21 +5455,22 @@ Made with ❤️  by liyanqing.1987
                 elif (not group_active and queue == 'lost_and_found') or is_deleted:
                     total = 'N/A'
                 else:
-                    # 检查是否是跨集群 entity
+                    # Check whether this is a cross-cluster entity
                     if '-' in queue:
                         q_cluster, _ = parse_full_name(queue)
 
                         if q_cluster != self.cluster:
                             total = 'N/A'
                         else:
-                            # 同集群的带前缀 entity,提取名称查询
+                            # Same-cluster prefixed entity: strip the prefix
+                            # and look up by name
                             _, entity_name = parse_full_name(queue)
 
                             if entity_name in entity_host_dic:
                                 for entity_host in entity_host_dic[entity_name]:
                                     if 'HOST_NAME' in self.bhosts_dic:
-                                        if entity_host in self.bhosts_dic['HOST_NAME']:
-                                            host_index = self.bhosts_dic['HOST_NAME'].index(entity_host)
+                                        if entity_host in bhosts_index_dic:
+                                            host_index = bhosts_index_dic[entity_host]
                                             host_max = self.bhosts_dic['MAX'][host_index]
 
                                             if re.match(r'^\d+$', host_max):
@@ -5354,12 +5478,12 @@ Made with ❤️  by liyanqing.1987
                             else:
                                 total = 'N/A'
                     else:
-                        # 当前集群普通 entity
+                        # Plain entity of the current cluster
                         if queue in entity_host_dic:
                             for entity_host in entity_host_dic[queue]:
                                 if 'HOST_NAME' in self.bhosts_dic:
-                                    if entity_host in self.bhosts_dic['HOST_NAME']:
-                                        host_index = self.bhosts_dic['HOST_NAME'].index(entity_host)
+                                    if entity_host in bhosts_index_dic:
+                                        host_index = bhosts_index_dic[entity_host]
                                         host_max = self.bhosts_dic['MAX'][host_index]
 
                                         if re.match(r'^\d+$', host_max):
@@ -5380,7 +5504,7 @@ Made with ❤️  by liyanqing.1987
                 self.utilization_tab_table.setItem(row, 1, item)
 
                 for (i, resource) in enumerate(self.utilization_tab_resource_list):
-                    # Fill <resource> item.
+                    # Fill <resource> item
                     item = QTableWidgetItem()
 
                     if isinstance(queue_data, dict) and resource in queue_data:
@@ -5401,20 +5525,23 @@ Made with ❤️  by liyanqing.1987
         """
         if item is not None:
             current_row = self.utilization_tab_table.currentRow()
-            # 优先取 UserRole 存的完整名(单元格显示名为 <name>  (<cluster>)),回退到 text。
+            # Prefer the full name stored in UserRole (the cell shows <name>
+            # (<cluster>)); fall back to text
             cell_item = self.utilization_tab_table.item(current_row, 0)
             queue = cell_item.data(Qt.UserRole) if cell_item.data(Qt.UserRole) else cell_item.text().strip()
             # Remove (deleted) suffix if exists
             queue = re.sub(r'\s*\(deleted\)$', '', queue)
 
             if item.column() == 0:
-                # 当前生效维度决定下钻到 queue 还是 group。
+                # The active dimension decides whether to drill into queue or
+                # group
                 group_active = self._utilization_tab_group_active()
 
                 if group_active:
                     common.bprint(f'Checking utilization for group "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
                     self.set_utilization_tab_group_combo(checked_group_list=[queue, ])
-                    # set_utilization_tab_group_combo 内部不会自动互斥 queue,显式触发一次。
+                    # set_utilization_tab_group_combo does not enforce the
+                    # queue side itself, so trigger it explicitly once
                     self.enforce_utilization_tab_queue_all()
                 else:
                     common.bprint(f'Checking utilization for queue "{queue}".', date_format='%Y-%m-%d %H:%M:%S')
@@ -5424,7 +5551,7 @@ Made with ❤️  by liyanqing.1987
 
     def gen_utilization_tab_frame1(self):
         """
-        Generte self.utilization_tab_frame1.
+        Generate self.utilization_tab_frame1.
         """
         # self.utilization_tab_frame1
         self.utilization_tab_utilization_canvas = common_pyqt5.FigureCanvasQTAgg()
@@ -5442,20 +5569,22 @@ Made with ❤️  by liyanqing.1987
 
     def update_utilization_tab_frame1(self):
         """
-        Draw Ut curve for specified queue on self.utilization_tab_frame1, 使用和左侧表格完全相同的计算结果，保证数据一致
+        Draw the slot/cpu/mem utilization curves for the current selection on
+        self.utilization_tab_frame1, reusing the left-hand table's computation
+        so both stay consistent.
         """
-        # Generate figure.
+        # Generate figure
         fig = self.utilization_tab_utilization_canvas.figure
         fig.clear()
         self.utilization_tab_utilization_canvas.draw()
 
-        # 检查是否有已计算好的利用率数据
         if not hasattr(self, 'utilization_full_time_data') or not self.utilization_full_time_data:
             warning_message = 'No utilization data available, please click "Check" button first.'
             self.gui_warning(warning_message)
             return
 
-        # Get selected queues(取内部值)。Group 维度时取 Group combo,Queue 维度时取 Queue combo。
+        # Get selected queues (internal values). Group combo in group mode,
+        # Queue combo in queue mode
         if self._utilization_tab_group_active():
             selected_queue_dic = self.utilization_tab_group_combo.selectedData()
         else:
@@ -5463,16 +5592,18 @@ Made with ❤️  by liyanqing.1987
 
         selected_queues = list(selected_queue_dic.values()) if selected_queue_dic else []
 
-        # 生效维度 combo 空选时视为 ALL(与取数逻辑一致),否则会误报 "No queue"。
+        # An empty active combo counts as ALL (matching the data path),
+        # otherwise it would wrongly report "No queue"
         if not selected_queues:
             selected_queues = ['ALL']
 
         selected_resource_list = list(self.utilization_tab_resource_list)
 
-        # 获取时间范围
+        # Get the time range
         begin_second, end_second = self.utilization_time_range
 
-        # 无论选择多少队列，只显示汇聚的ALL曲线
+        # Regardless of how many queues are selected, only the aggregated ALL
+        # curve is drawn
         display_queues = ['ALL'] if 'ALL' in self.utilization_full_time_data else []
 
         if not display_queues:
@@ -5480,11 +5611,11 @@ Made with ❤️  by liyanqing.1987
             self.gui_warning(warning_message)
             return
 
-        # 为每个资源每个队列准备数据
         plot_data = {}
         title_lines = []
 
-        # 资源颜色配置：与 theme 色板对齐（slot=蓝, cpu=橙, mem=绿）。
+        # Resource colors, aligned with the theme palette (slot=blue,
+        # cpu=orange, mem=green)
         resource_colors = {
             'slot': {'line': theme.CHART_SERIES[0], 'fill': theme.CHART_SERIES[0], 'alpha': 0.12},
             'cpu': {'line': '#F59E0B', 'fill': '#F59E0B', 'alpha': 0.15},
@@ -5494,12 +5625,10 @@ Made with ❤️  by liyanqing.1987
         for queue in display_queues:
             queue_data = self.utilization_full_time_data[queue]
 
-            # 计算队列的总平均，和左侧表格一致
             for res in selected_resource_list:
                 res_vals = []
 
                 for ts_key, val in queue_data[res].items():
-                    # 只统计当前时间范围内的数据
                     if self.enable_utilization_detail:
                         ts = int(time.mktime(time.strptime(ts_key, '%Y%m%d_%H%M%S')))
                     else:
@@ -5512,7 +5641,6 @@ Made with ❤️  by liyanqing.1987
                     avg_val = round(sum(res_vals) / len(res_vals), 1)
                     title_lines.append(f"{queue} {res}: {avg_val}%")
 
-                    # 整理时间序列数据
                     time_series = []
 
                     for ts_key, val in queue_data[res].items():
@@ -5526,7 +5654,6 @@ Made with ❤️  by liyanqing.1987
                         if begin_second <= ts <= end_second:
                             time_series.append((dt, val))
 
-                    # 按时间排序
                     time_series.sort(key=lambda x: x[0])
                     date_list = [x[0] for x in time_series]
                     util_list = [min(x[1], 100.0) for x in time_series]
@@ -5544,35 +5671,30 @@ Made with ❤️  by liyanqing.1987
             self.gui_warning(warning_message)
             return
 
-        # 绘制曲线
         axes = fig.add_subplot(111)
 
-        # 设置标题
         title = ';    '.join(title_lines)
 
-        # 设置线宽和标记大小
         if self.enable_utilization_detail:
             lw = theme.CHART_LINEWIDTH_DETAIL
         else:
             lw = theme.CHART_LINEWIDTH
 
-        # 绘制曲线
         for plot_key, data in plot_data.items():
             queue = data['queue']
             res = data['resource']
             date_list = data['date_list']
             util_list = data['util_list']
 
-            # 选择颜色
             line_color = resource_colors[res]['line']
             fill_color = resource_colors[res]['fill']
             fill_alpha = resource_colors[res]['alpha']
 
-            # 绘制曲线
             label = f"{queue}_{res.upper()}" if queue != 'ALL' else res.upper()
             axes.plot(date_list, util_list, color=line_color, linewidth=lw, label=label)
 
-            # 只有ALL队列做填充，避免多队列时颜色叠加变色
+            # Only the ALL queue gets a fill, so overlapping colors cannot
+            # muddy multi-queue charts
             if queue == 'ALL':
                 axes.fill_between(date_list, util_list, color=fill_color, alpha=fill_alpha)
 
@@ -5584,10 +5706,14 @@ Made with ❤️  by liyanqing.1987
                                  ylabel='Utilization (%)')
         self.utilization_tab_utilization_canvas.draw()
 
-# For utilization TAB (end) #
+# ============================================================================
+# For utilization TAB (end)
+# ============================================================================
 
 
-# Export table (start) #
+# ============================================================================
+# Export table (start)
+# ============================================================================
     def export_jobs_table(self):
         self._ensure_inner_tab_built(self.jobs_tab)
         self.export_table('jobs', self.jobs_tab_table, self.jobs_tab_table_title_list)
@@ -5620,7 +5746,7 @@ Made with ❤️  by liyanqing.1987
         (output_file, output_file_type) = QFileDialog.getSaveFileName(self, 'Export ' + str(table_type) + ' table', default_output_file, 'CSV Files (*.csv)')
 
         if output_file:
-            # Get table content.
+            # Get table content
             content_dic = {}
             row_num = table_item.rowCount()
             column_num = table_item.columnCount()
@@ -5640,7 +5766,9 @@ Made with ❤️  by liyanqing.1987
             common.bprint(f'Writing {table_type} table into "{output_file}" ...', date_format='%Y-%m-%d %H:%M:%S')
             common.write_csv(csv_file=output_file, content_dic=content_dic)
 
-# Export table (end) #
+# ============================================================================
+# Export table (end)
+# ============================================================================
 
 
 class CheckIssueReason(QThread):

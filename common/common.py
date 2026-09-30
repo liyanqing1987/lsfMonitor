@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+################################
+# File Name   : common.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : Shared helpers: bprint (ANSI-colored output), create_dir with
+#               self-healing permissions, write_csv, and the optional ssh_client
+################################
+
 import os
 import re
 import sys
@@ -68,7 +77,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
     w      |   write mode, create a new file and write content.
     -----------------------------------------------------------
     """
-    # Check arguments.
+    # Check arguments
     color_dic = {'black': 30,
                  'red': 31,
                  'green': 32,
@@ -185,7 +194,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
         # Normalize 'append'/'write' to the open() mode letters 'a'/'w' so the
         # accepted aliases actually work (open() only accepts 'a'/'w' and would
-        # otherwise raise ValueError, caught as a warning and the file skipped).
+        # otherwise raise ValueError, caught as a warning and the file skipped)
         if save_file_method == 'append':
             save_file_method = 'a'
         elif save_file_method == 'write':
@@ -206,7 +215,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
             return
 
-    # Set default color/background_color/display_method setting for different levels.
+    # Set default color/background_color/display_method setting for different levels
     if level:
         if level == 'Warning':
             if not display_method:
@@ -234,7 +243,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
                 if not color:
                     color = 35
 
-    # Get final color setting.
+    # Get final color setting
     final_color_setting = ''
 
     if color or background_color or display_method:
@@ -263,7 +272,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
         final_color_setting = str(final_color_setting) + 'm'
 
-    # Get current_time if date_format is specified.
+    # Get current_time if date_format is specified
     current_time = ''
 
     if date_format:
@@ -275,7 +284,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
             bprint(f'*Warning* (bprint): "{date_format}": Invalid date_format setting, suggest to use the default setting.', date_format='', color=33, display_method=1)
             return
 
-    # Print message with specified format.
+    # Print message with specified format
     final_message = ''
 
     if current_time:
@@ -296,7 +305,7 @@ def bprint(message, color='', background_color='', display_method='', date_forma
 
     print(final_message_with_color, end=end)
 
-    # Save file.
+    # Save file
     if save_file:
         try:
             with open(save_file, save_file_method) as SF:
@@ -388,7 +397,7 @@ def create_dir(dir_path, permission=0o1777):
     """
     Create dir with specified permission.
 
-    Golden permission spec: docs/db_permissions.md (single source of truth).
+    Golden permission spec: docs/lsfMonitor_user_manual.md 附3.
     Also chmod-s existing dirs (repairs 0o755 left by a cp -r / umask),
     so a re-run self-heals historical permission drift. PermissionError
     (non-owner chmod) is silently skipped; other errors still sys.exit(1).
@@ -396,10 +405,11 @@ def create_dir(dir_path, permission=0o1777):
     try:
         if not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
+
         os.chmod(dir_path, permission)
     except PermissionError:
         # Non-owner: cannot chmod an existing dir we don't own. Leave it
-        # as-is — callers that need write access will hit their fallback.
+        # as-is — callers that need write access will hit their fallback
         pass
     except Exception as error:
         bprint(f'Failed on creating directory "{dir_path}".', level='Error')
@@ -407,7 +417,8 @@ def create_dir(dir_path, permission=0o1777):
         sys.exit(1)
 
 
-# paramiko 为可选依赖,仅 ssh_client 使用;未安装时降级为不可用。
+# paramiko is an optional dependency used only by ssh_client; ssh_client
+# degrades to unavailable when it is not installed
 try:
     import paramiko
     HAS_PARAMIKO = True
@@ -461,12 +472,12 @@ def ssh_client(host_name='', port=22, user_name=getpass.getuser(), password='', 
     return stdout_list
 
 
-# ==========================================================================
+# ============================================================================
 # Safe expression evaluator (for the Run panel result filtering). A restricted
 # AST evaluator: allows boolean/comparison/binary ops, indexing/slicing, and a
 # whitelist of functions. Disallows attribute access, imports, comprehensions,
-# and underscore names (blocks __builtins__ escapes).
-# ==========================================================================
+# and underscore names (blocks __builtins__ escapes)
+# ============================================================================
 _SAFE_BINOPS = {
     _ast.Add: _operator.add, _ast.Sub: _operator.sub, _ast.Mult: _operator.mul,
     _ast.Div: _operator.truediv, _ast.FloorDiv: _operator.floordiv, _ast.Mod: _operator.mod,
@@ -479,7 +490,7 @@ _SAFE_CMPOPS = {
 }
 _SAFE_UNARY = {_ast.UAdd: _operator.pos, _ast.USub: _operator.neg, _ast.Not: _operator.not_}
 
-# Whitelisted built-in functions (callable only by direct name, no attribute access).
+# Whitelisted built-in functions (callable only by direct name, no attribute access)
 _SAFE_FUNCS = {
     'len': len, 'int': int, 'float': float, 'str': str, 'bool': bool,
     'abs': abs, 'min': min, 'max': max, 'round': round,
@@ -523,20 +534,26 @@ class _SafeEvalVisitor(_ast.NodeVisitor):
         return self.names[name]
 
     def visit_BoolOp(self, node):
-        values = [self.visit(v) for v in node.values]
-
+        # Short-circuit like Python: once the result is decided, later operands
+        # must not be evaluated (e.g. "len(x) > 0 and x[0] == 'a'" on empty x)
         if isinstance(node.op, _ast.And):
             result = True
 
-            for v in values:
-                result = result and v
+            for v in node.values:
+                result = self.visit(v)
+
+                if not result:
+                    return result
 
             return result
         else:
             result = False
 
-            for v in values:
-                result = result or v
+            for v in node.values:
+                result = self.visit(v)
+
+                if result:
+                    return result
 
             return result
 
@@ -582,7 +599,7 @@ class _SafeEvalVisitor(_ast.NodeVisitor):
         return set(self.visit(e) for e in node.elts)
 
     def visit_Call(self, node):
-        # Only direct calls to whitelisted function names: func(...).
+        # Only direct calls to whitelisted function names: func(...)
         if not isinstance(node.func, _ast.Name):
             raise SafeEvalError('only direct function calls are allowed')
 

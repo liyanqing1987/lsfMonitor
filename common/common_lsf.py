@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+################################
+# File Name   : common_lsf.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : All LSF command wrappers and their output parsers (bjobs / bhist /
+#               bhosts / bqueues / lsload / lsid / bmgroup / busers / ...)
+################################
+
 import os
 import re
 import sys
@@ -26,7 +35,7 @@ def get_command_dict(command):
         if line:
             i += 1
 
-            # Some special preprocess.
+            # Some special preprocess
             if re.search(r'lsload', command):
                 line = re.sub(r'\*', ' ', line)
 
@@ -81,7 +90,7 @@ def get_bhosts_info(command='bhosts -w'):
 
 def get_bjobs_info(command='bjobs -u all -w'):
     """
-    Get bjobs info with command "bjobs'.
+    Get bjobs info with command "bjobs".
     ====
     JOBID   USER      STAT  QUEUE      FROM_HOST   EXEC_HOST   JOB_NAME            SUBMIT_TIME
     101     liyanqing RUN   normal     cmp01       2*cmp01     Tesf for lsfMonitor Oct 26 17:43
@@ -189,7 +198,7 @@ def get_bhosts_load_info(command='bhosts -l'):
     # values shift and 'ut' may capture 'r1m'/'r15m' (run-queue length, can be
     # far >100). A single >100 ut means the whole parse is suspect (same code
     # path for every host), so discard bhosts_load entirely and rebuild from
-    # 'lsload' (one call, all hosts) so all columns stay consistent.
+    # 'lsload' (one call, all hosts) so all columns stay consistent
     if _bhosts_load_ut_has_outlier(bhosts_load_dic):
         common.bprint('bhosts -l ut sanity check failed (some ut >100, likely column misalignment), falling back to lsload for all hosts.', level='Warning')
 
@@ -244,7 +253,7 @@ def _build_bhosts_load_from_lsload(lsload_dic):
 
     # lsload_dic is {column_name: [values]}; map matching keys into the
     # bhosts_load 'Total' shape. ut is normalized (drop '%' and '*' high-load
-    # marker) so the downstream '^[0-9]+$' check doesn't trip on a '*'.
+    # marker) so the downstream '^[0-9]+$' check doesn't trip on a '*'
     for idx, host in enumerate(host_names):
         total = {}
 
@@ -289,7 +298,7 @@ def get_lsload_info(command='lsload -l'):
 
 def get_busers_info(command='busers all'):
     """
-    Get lsload info with command "busers".
+    Get busers info with command "busers".
     ====
     USER/GROUP          JL/P    MAX  NJOBS   PEND    RUN  SSUSP  USUSP    RSV
     liyanqing           -       -    2       0       2    0      0        0
@@ -420,7 +429,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                 my_match = job_compile_dic['job_compile'].match(line)
                 job = my_match.group(1)
 
-                # Initialization for my_dic[job].
+                # Initialization for my_dic[job]
                 my_dic[job] = {'job_info': '',
                                'job_id': job,
                                'job_name': '',
@@ -509,7 +518,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                     my_match = job_compile_dic['rusage_mem_compile'].match(line)
                     my_dic[job]['rusage_mem'] = my_match.group(1)
 
-                    # Switch rusage_mem unit into "MB".
+                    # Switch rusage_mem unit into "MB"
                     if lsf_unit_for_limits == 'KB':
                         my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']) / 1024, 1)
                     elif lsf_unit_for_limits == 'MB':
@@ -544,7 +553,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                     my_dic[job]['mem'] = my_match.group(1)
                     unit = my_match.group(3)
 
-                    # Switch mem unit into "MB".
+                    # Switch mem unit into "MB"
                     if unit == 'Kbytes':
                         my_dic[job]['mem'] = round(float(my_dic[job]['mem']) / 1024, 1)
                     elif unit == 'Mbytes':
@@ -559,7 +568,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                     my_dic[job]['swap'] = my_match.group(1)
                     unit = my_match.group(3)
 
-                    # Switch swap unit into "MB".
+                    # Switch swap unit into "MB"
                     if unit == 'Kbytes':
                         my_dic[job]['swap'] = round(float(my_dic[job]['swap']) / 1024, 1)
                     elif unit == 'Mbytes':
@@ -588,7 +597,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                 my_dic[job]['max_mem'] = my_match.group(1)
                 unit = my_match.group(3)
 
-                # Switch max_mem unit into "MB".
+                # Switch max_mem unit into "MB"
                 if unit == 'Kbytes':
                     my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem']) / 1024, 1)
                 elif unit == 'Mbytes':
@@ -601,7 +610,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                 my_dic[job]['avg_mem'] = my_match.group(4)
                 unit = my_match.group(6)
 
-                # Switch avg_mem unit into "MB".
+                # Switch avg_mem unit into "MB"
                 if unit == 'Kbytes':
                     my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem']) / 1024, 1)
                 elif unit == 'Mbytes':
@@ -614,7 +623,7 @@ def get_lsf_bjobs_uf_info(command='bjobs -u all -UF', get_lsf_unit_for_limits_co
                 my_match = job_compile_dic['effective_rusage_mem_compile'].match(line)
                 my_dic[job]['rusage_mem'] = my_match.group(1)
 
-                # Switch rusage_mem unit into "MB".
+                # Switch rusage_mem unit into "MB"
                 if lsf_unit_for_limits == 'KB':
                     my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']) / 1024, 1)
                 elif lsf_unit_for_limits == 'MB':
@@ -717,7 +726,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                 my_match = job_compile_dic['job_compile'].match(line)
                 job = my_match.group(1)
 
-                # Initialization for my_dic[job].
+                # Initialization for my_dic[job]
                 my_dic[job] = {'job_info': '',
                                'job_id': job,
                                'job_name': '',
@@ -806,7 +815,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                     my_match = job_compile_dic['rusage_mem_compile'].match(line)
                     my_dic[job]['rusage_mem'] = my_match.group(1)
 
-                    # Switch rusage_mem unit into "MB".
+                    # Switch rusage_mem unit into "MB"
                     if lsf_unit_for_limits == 'KB':
                         my_dic[job]['rusage_mem'] = round(float(my_dic[job]['rusage_mem']) / 1024, 1)
                     elif lsf_unit_for_limits == 'MB':
@@ -841,7 +850,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                     my_dic[job]['mem'] = my_match.group(1)
                     unit = my_match.group(3)
 
-                    # Switch mem unit into "MB".
+                    # Switch mem unit into "MB"
                     if unit == 'Kbytes':
                         my_dic[job]['mem'] = round(float(my_dic[job]['mem']) / 1024, 1)
                     elif unit == 'Mbytes':
@@ -856,7 +865,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                     my_dic[job]['swap'] = my_match.group(1)
                     unit = my_match.group(3)
 
-                    # Switch swap unit into "MB".
+                    # Switch swap unit into "MB"
                     if unit == 'Kbytes':
                         my_dic[job]['swap'] = round(float(my_dic[job]['swap']) / 1024, 1)
                     elif unit == 'Mbytes':
@@ -885,7 +894,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                 my_dic[job]['max_mem'] = my_match.group(1)
                 unit = my_match.group(3)
 
-                # Switch max_mem unit into "MB".
+                # Switch max_mem unit into "MB"
                 if unit == 'Kbytes':
                     my_dic[job]['max_mem'] = round(float(my_dic[job]['max_mem']) / 1024, 1)
                 elif unit == 'Mbytes':
@@ -898,7 +907,7 @@ def get_openlava_bjobs_uf_info(command='bjobs -u all -UF'):
                 my_dic[job]['avg_mem'] = my_match.group(4)
                 unit = my_match.group(6)
 
-                # Switch avg_mem unit into "MB".
+                # Switch avg_mem unit into "MB"
                 if unit == 'Kbytes':
                     my_dic[job]['avg_mem'] = round(float(my_dic[job]['avg_mem']) / 1024, 1)
                 elif unit == 'Mbytes':
@@ -1095,14 +1104,15 @@ def get_host_group_info(get_bmgroup_info_command='bmgroup -w -r'):
 
 def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
     """
-    Get LSF LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
-    Try "badmin showconf mbd all" first, fall back to reading lsf.conf via $LSF_ENVDIR.
+    Get the LSF_UNIT_FOR_LIMITS setting, it could be KB/MB/GB/TB.
+    Try "badmin showconf mbd all" first, fall back to reading lsf.conf via
+    $LSF_ENVDIR / $LSF_CONFDIR.
     LSF default is MB, volclava/openlava default is KB.
     """
     unit_map = {'K': 'KB', 'M': 'MB', 'G': 'GB', 'T': 'TB',
                 'KB': 'KB', 'MB': 'MB', 'GB': 'GB', 'TB': 'TB'}
 
-    # Try badmin command (works in LSF).
+    # Try badmin command (works in LSF)
     (return_code, stdout, stderr) = common.run_command(command)
 
     for line in str(stdout, 'utf-8').split('\n'):
@@ -1113,7 +1123,7 @@ def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
             value = my_match.group(1).upper()
             return unit_map.get(value, value)
 
-    # Fallback: read lsf.conf from $LSF_ENVDIR or $LSF_CONFDIR.
+    # Fallback: read lsf.conf from $LSF_ENVDIR or $LSF_CONFDIR
     lsf_conf = ''
 
     for env_var in ['LSF_ENVDIR', 'LSF_CONFDIR']:
@@ -1139,7 +1149,7 @@ def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
         except Exception:
             pass
 
-    # Default: LSF=MB, but if we can't determine, use KB (safer for volclava/openlava).
+    # Default: LSF=MB, but if we can't determine, use KB (safer for volclava/openlava)
     (tool, tool_version, cluster, master) = get_lsid_info()
 
     if tool == 'LSF':
@@ -1150,12 +1160,13 @@ def get_lsf_unit_for_limits(command='badmin showconf mbd all'):
 
 def switch_bjobs_uf_time(bjobs_uf_time, format=''):
     """
-    Switch bjobs_uf_time from "%Y %b %d %H:%M:%S" into specified format.
+    Switch bjobs_uf_time (bjobs -UF format "%a %b %d %H:%M:%S", e.g.
+    "Mon Oct 26 17:46:17"; the year is inferred) into the specified format.
     """
     new_bjobs_uf_time = bjobs_uf_time
 
     if bjobs_uf_time and (bjobs_uf_time != 'N/A'):
-        # Switch bjobs_uf_time to start_seconds.
+        # Switch bjobs_uf_time to start_seconds
         current_year = datetime.date.today().year
         bjobs_uf_time_list = bjobs_uf_time.split()
 
@@ -1180,7 +1191,7 @@ def switch_bjobs_uf_time(bjobs_uf_time, format=''):
             except Exception:
                 return new_bjobs_uf_time
 
-        # Switch start_seconds to expected time format.
+        # Switch start_seconds to expected time format
         new_bjobs_uf_time = time.strftime(format, time.localtime(start_seconds))
 
     return new_bjobs_uf_time
@@ -1236,7 +1247,7 @@ def get_bhist_info(command='bhist -l', timeout=120):
         if not line:
             continue
 
-        # Event流水行: "<Month> <Day> <HH:MM:SS>: <desc>"
+        # Event line: "<Month> <Day> <HH:MM:SS>: <desc>"
         event_match = re.match(r'(\w{3} \w{3}\s+\d+ [\d:]+): (.+)', line)
 
         if event_match:
@@ -1270,8 +1281,8 @@ def get_bhist_info(command='bhist -l', timeout=120):
                 my_dic['finished_time'] = match.group(1)
                 my_dic['status'] = match.group(2)
 
-                if match.group(4):
-                    my_dic['exit_code'] = match.group(4)
+                if match.group(3):
+                    my_dic['exit_code'] = match.group(3)
             elif key == 'cpu_time_compile':
                 my_dic['cpu_time'] = match.group(1)
             elif key == 'max_mem_compile':

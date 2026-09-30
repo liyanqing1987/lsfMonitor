@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+################################
+# File Name   : common_pyqt5.py
+# Author      : liyanqing.1987
+# Created On  : 2026-09-02
+# Description : PyQt5 UI helpers: table column auto-sizing, window placement, and
+#               the multi-value completer widgets
+################################
+
 import os
 import re
 import math
@@ -5,7 +14,7 @@ import datetime
 import subprocess
 import screeninfo
 
-from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QCompleter, QTableWidget, QTabBar
+from PyQt5.QtWidgets import QDesktopWidget, QComboBox, QHeaderView, QLineEdit, QListWidget, QCheckBox, QListWidgetItem, QCompleter, QMenu, QAction, QTableWidget, QTabBar
 from PyQt5.QtGui import QTextCursor, QFont, QGuiApplication, QKeySequence
 from PyQt5.Qt import QFontMetrics
 from PyQt5.QtCore import Qt, QEvent, QObject, QTimer, QThread, QSize
@@ -29,10 +38,12 @@ def center_window(window):
 def auto_resize(window, width=0, height=0):
     """
     Scaling down the window size if screen resolution is smaller than window resolution.
-    input:  Window: Original window; Width: window width; Height: window height
-    output: Window: Scaled window
+
+    window: the window to resize in place.
+    width/height: target size; 0 means use the monitor size.
+    Returns (width, height) unchanged when no monitor is detected.
     """
-    # Get default width/height setting.
+    # Get default width/height setting
     monitor_list = screeninfo.get_monitors()
 
     if not monitor_list:
@@ -46,7 +57,7 @@ def auto_resize(window, width=0, height=0):
     if not height:
         height = monitor.height
 
-    # If the screen size is too small, automatically obtain the appropriate length and width value.
+    # If the screen size is too small, automatically obtain the appropriate length and width value
     if (monitor.width < width) or (monitor.height < height):
         width_rate = math.floor((monitor.width / width) * 100)
         height_rate = math.floor((monitor.height / height) * 100)
@@ -54,27 +65,129 @@ def auto_resize(window, width=0, height=0):
         width = int((width * min_rate) / 100)
         height = int((height * min_rate) / 100)
 
-    # Resize with auto width/height value.
+    # Resize with auto width/height value
     window.resize(width, height)
 
 
-def auto_size_table_columns(table, padding=40):
+class _FlexColumnManager(QObject):
+    """Give ``flex_cols`` the leftover width, each floored at its own header.
+
+    Replaces ``QHeaderView.Stretch``, whose header-wide ``minimumSectionSize``
+    also overrides every other column's ``setColumnWidth``.
+    """
+
+    def __init__(self, table, flex_cols, floors):
+        super().__init__(table)
+        self.table = table
+        self.flex_cols = sorted(flex_cols)
+        self.floors = dict(floors)
+        self.busy = False
+        self.last_width = -1
+
+        header = table.horizontalHeader()
+
+        for col in self.flex_cols:
+            header.setSectionResizeMode(col, QHeaderView.Interactive)
+
+        header.sectionResized.connect(self.on_section_resized)
+        table.viewport().installEventFilter(self)
+
+        if table.contextMenuPolicy() != Qt.CustomContextMenu:
+            # Tables with their own right-click menu add the reset item
+            # themselves; the rest get one here
+            table.setContextMenuPolicy(Qt.CustomContextMenu)
+            table.customContextMenuRequested.connect(self.on_context_menu)
+
+    def on_context_menu(self, pos):
+        """Right-click menu with a single item: restore the default widths."""
+        menu = QMenu(self.table)
+
+        reset_action = QAction('Reset column widths', self.table)
+        reset_action.triggered.connect(self.reset)
+        menu.addAction(reset_action)
+
+        menu.exec_(self.table.mapToGlobal(pos))
+
+    def on_section_resized(self, col, old_size, new_size):
+        """Clamp a drag that goes below the column's floor."""
+        if self.busy:
+            return
+
+        floor = self.floors.get(col)
+
+        if (floor is not None) and (new_size < floor):
+            self.busy = True
+            self.table.setColumnWidth(col, floor)
+            self.busy = False
+
+    def eventFilter(self, obj, event):
+        # Width only: a scrollbar appearing also resizes the viewport, and
+        # re-sharing on that would undo the drag that caused it.
+        if (event.type() == QEvent.Resize) and (not self.busy):
+            if self.table.viewport().width() != self.last_width:
+                self.apply()
+
+        return False
+
+    def reset(self):
+        """Restore the default widths, then re-share the flex columns."""
+        self.busy = True
+
+        try:
+            for col, width in self.floors.items():
+                if col not in self.flex_cols:
+                    self.table.setColumnWidth(col, width)
+        finally:
+            self.busy = False
+
+        self.apply()
+
+    def apply(self):
+        """Share the leftover width equally across the flex columns."""
+        if self.busy or not self.flex_cols:
+            return
+
+        self.busy = True
+
+        try:
+            viewport_width = self.table.viewport().width()
+            self.last_width = viewport_width
+            fixed_width = sum(self.table.columnWidth(col) for col in range(self.table.columnCount())
+                              if col not in self.flex_cols)
+            leftover = viewport_width - fixed_width
+            share = leftover // len(self.flex_cols)
+            # Give the rounding remainder to the last column so the row fills the
+            # viewport exactly
+            remainder = leftover - share * len(self.flex_cols)
+
+            for i, col in enumerate(self.flex_cols):
+                width = share + (remainder if i == len(self.flex_cols) - 1 else 0)
+                self.table.setColumnWidth(col, max(self.floors.get(col, 0), width))
+        finally:
+            self.busy = False
+
+
+def auto_size_table_columns(table, padding=40, flex_cols=()):
     """
     Ensure every column of ``table`` is at least wide enough to show its
     **header label** in full, while preserving any explicit ``setColumnWidth``
-    initial widths and existing Stretch / ResizeToContents resize modes.
+    initial widths.
 
     Call this *after* ``setHorizontalHeaderLabels`` and all per-column
-    ``setColumnWidth`` / ``setSectionResizeMode`` calls.  It is safe to call
-    multiple times (e.g. once during widget construction, and again from a
-    showEvent so that the applied QSS font is taken into account).  It:
+    ``setColumnWidth`` calls, and only once per table: the widths it applies are
+    recorded as the columns' defaults (what reset_table_column_widths restores),
+    so a later call would bake in whatever the user has dragged since. It
+    measures with the font in effect at that moment (forced bold to match the
+    QSS header weight).  It:
       * measures each header label with the header's own font (forced to bold
         to match the QSS `font-weight: 600` rule for table headers),
-      * sets ``setColumnWidth`` to ``max(current_width, text_width + padding)``,
-      * sets ``header.setMinimumSectionSize`` so the user cannot drag a column
-        narrower than its (padded) header text,
-      * leaves Stretch / Fixed / Interactive / ResizeToContents modes alone so
-        columns that were already set to Stretch still fill remaining space.
+      * raises each plain column to ``max(current_width, text_width + padding)``
+        so the caller's own ``setColumnWidth`` value stays its floor,
+      * gives ``flex_cols`` the leftover width, each never narrower than its own
+        header (see ``_FlexColumnManager``).  Use this instead of
+        ``QHeaderView.Stretch``: Qt clamps Stretch sections to the header-wide
+        ``minimumSectionSize``, so a floor high enough to protect a Stretch
+        header would also override every plain column's width.
 
     ``padding`` (default 40 px) accounts for the sort-indicator arrow (~14 px,
     which only appears after the column is clicked to sort) plus the header's
@@ -86,10 +199,12 @@ def auto_size_table_columns(table, padding=40):
 
     header = table.horizontalHeader()
     # Force a bold QFontMetrics to match the QSS `QHeaderView::section { font-weight: 600 }`
-    # rule — measuring with the regular font underestimates bold glyph widths.
+    # rule — measuring with the regular font underestimates bold glyph widths
     bold_font = QFont(header.font())
     bold_font.setBold(True)
     font_metrics = QFontMetrics(bold_font)
+    flex_cols = set(flex_cols)
+    floors = {}
     global_min = 0
 
     for col in range(table.columnCount()):
@@ -99,24 +214,63 @@ def auto_size_table_columns(table, padding=40):
         if not label:
             continue
 
-        text_width = font_metrics.horizontalAdvance(label)
-        needed = text_width + padding
+        needed = font_metrics.horizontalAdvance(label) + padding
+
+        if col in flex_cols:
+            floors[col] = needed
+            continue
+
         # Do not shrink columns the caller sized wider, and never shrink below
-        # the user's current drag-adjusted width after the first layout.
+        # the user's current drag-adjusted width after the first layout
         current = table.columnWidth(col)
 
         if needed > current:
             table.setColumnWidth(col, needed)
+            current = needed
+
+        floors[col] = current
 
         if needed > global_min:
             global_min = needed
 
-    # Floor for the absolute minimum a column can be dragged to — enough for
-    # the narrowest 3-char labels like "Num" / "RUN" / "Slot".
-    floor = max(50, int(global_min * 0.45))
+    if flex_cols:
+        # Floors are per column now, so the header-wide minimum only has to stay
+        # out of the way: the narrowest floor overrides no column but still
+        # bounds how far a column can be dragged. floors is empty when no column
+        # has a header label yet, so leave the header minimum alone then.
+        if floors:
+            header.setMinimumSectionSize(min(floors.values()))
 
-    if header.minimumSectionSize() < floor:
-        header.setMinimumSectionSize(floor)
+        manager = getattr(table, '_flex_column_manager', None)
+
+        if manager is None:
+            manager = _FlexColumnManager(table, flex_cols, floors)
+            table._flex_column_manager = manager
+        else:
+            manager.flex_cols = sorted(flex_cols)
+            manager.floors = floors
+
+        manager.apply()
+    else:
+        # Floor for the absolute minimum a column can be dragged to — enough for
+        # the narrowest 3-char labels like "Num" / "RUN" / "Slot"
+        floor = max(50, int(global_min * 0.45))
+
+        if header.minimumSectionSize() < floor:
+            header.setMinimumSectionSize(floor)
+
+
+def reset_table_column_widths(table):
+    """
+    Restore every column of ``table`` to the width auto_size_table_columns applied.
+
+    Undoes any manual column resizing. Only tables set up with ``flex_cols``
+    record defaults, so it is a no-op for the others.
+    """
+    manager = getattr(table, '_flex_column_manager', None)
+
+    if manager is not None:
+        manager.reset()
 
 
 def make_table_readonly(table, copy_enabled=True):
@@ -145,7 +299,7 @@ def make_table_readonly(table, copy_enabled=True):
         if not selected_ranges:
             return
 
-        # Collect a row x col grid across the union of selected ranges.
+        # Collect a row x col grid across the union of selected ranges
         rows = set()
         cols = set()
 
@@ -199,8 +353,8 @@ class BoldAwareTabBar(QTabBar):
         bold_font = QFont(self.font())
         bold_font.setBold(True)
         font_metrics = QFontMetrics(bold_font)
-        # mainTab QSS: padding 8px 20px (left+right = 40) + margin 4px each side (8).
-        # Add ~12px safety margin so the label never clips even when bold-selected.
+        # mainTab QSS: padding 8px 20px (left+right = 40) + margin 4px each side (8)
+        # Add ~12px safety margin so the label never clips even when bold-selected
         text_width = font_metrics.horizontalAdvance(text) + 40 + 8 + 12
 
         if text_width > size.width():
@@ -225,14 +379,17 @@ def text_edit_visible_position(text_edit_item, position='End'):
 
 
 class MultiValueCompleter(QCompleter):
-    """按空格分段，只对最后一段补全，支持一个输入框填多个值。"""
+    """Complete only the last space-separated segment, so one input box can
+    hold multiple values."""
 
     def __init__(self, item_list):
         super().__init__(item_list)
 
-        # 最后一次 splitPath 时记录的前面段（用户已输入、非最后一段）。
-        # splitPath 在用户键入时被 Qt 调用，path 是当前完整输入文本，
-        # 比 textEdited 更可靠（popup 选中浏览不触发 splitPath，不会污染）。
+        # Segments before the last one, captured on the most recent splitPath
+        # call (i.e. what the user has already typed). Qt calls splitPath on
+        # every keystroke with the full input text, which is more reliable than
+        # textEdited — browsing the popup does not trigger splitPath, so the
+        # recorded prefix cannot be polluted
         self._prefix_segments = []
         self.activated.connect(self._on_activated)
 
@@ -242,9 +399,10 @@ class MultiValueCompleter(QCompleter):
     def splitPath(self, path):
         segments = path.split(' ')
 
-        # 只拿最后一段去匹配，前面段保持原样；同时记录前面段供 activated 使用。
-        # 仅当文本含空格（即有前面段）时才更新记录，避免 popup 浏览选中项
-        # （单个值、无空格）时把已记录的前缀清空。
+        # Match only the last segment and leave the earlier ones untouched,
+        # while recording them for _on_activated. Only update the record when
+        # the text actually contains a space — otherwise picking a single
+        # value from the popup would wipe the recorded prefix
         if len(segments) > 1:
             self._prefix_segments = segments[:-1]
 
@@ -256,8 +414,9 @@ class MultiValueCompleter(QCompleter):
         if widget is None:
             return
 
-        # Qt 在 activated 之后会用选中项再次替换输入框文本，所以延迟到下一个
-        # 事件循环再设值，确保最终文本是「前面段 + 选中值」。
+        # Qt replaces the input text with the activated item right after
+        # emitting activated, so defer the assignment to the next event-loop
+        # turn to make sure the final text is "<prefix segments> + <selected>"
         base = ' '.join(self._prefix_segments)
         full = (base + ' ' + text) if base else text
 
@@ -276,12 +435,12 @@ def get_completer(item_list):
     """
     completer_ins = MultiValueCompleter(item_list)
 
-    # Enable Qt.MatchContains mode (just like re.search()), not Qt.MatchStartsWith or Qt.MatchEndsWith.
+    # Enable Qt.MatchContains mode (just like re.search()), not Qt.MatchStartsWith or Qt.MatchEndsWith
     completer_ins.setFilterMode(Qt.MatchContains)
-    # Match upper/lower case.
+    # Match upper/lower case
     completer_ins.setCaseSensitivity(Qt.CaseInsensitive)
 
-    # Adjust the appropriate size of the item.
+    # Widen the completer popup to fit the longest candidate item
     if item_list:
         list_view = completer_ins.popup()
         max_length = max(len(item) for item in item_list)
@@ -339,7 +498,7 @@ class ComboBoxEventFilter(QObject):
 
     def eventFilter(self, obj, event):
         # MouseButtonPress == 3; the "mouse left the widget" event is QEvent.Leave
-        # (value 11 in Qt5). Kept as magic numbers to stay robust across PyQt5 builds.
+        # (value 11 in Qt5). Kept as magic numbers to stay robust across PyQt5 builds
         if event.type() == 3:
             self.droppedDown = True
         elif event.type() == 11:
@@ -369,7 +528,7 @@ class QComboCheckBox(QComboBox):
         self.qLineEdit.setReadOnly(True)
         # A read-only QLineEdit does not forward mouse clicks to the combo, so
         # clicking the content area would not drop down the list. Install a
-        # filter that pops up the list on any button press inside the line edit.
+        # filter that pops up the list on any button press inside the line edit
         self.qLineEdit.installEventFilter(_ComboLineEditClickFilter(self))
         self.setLineEdit(self.qLineEdit)
 
@@ -413,8 +572,9 @@ class QComboCheckBox(QComboBox):
         Add QCheckBox format item into QListWidget(QComboCheckBox).
 
         Args:
-            text: 显示文本(可不同于内部值)。
-            data: 内部值(可选)。为 None 时回退为 text,selectedData() 返回 text。
+            text: display text (may differ from the internal value).
+            data: internal value (optional); None falls back to text, and
+                  selectedData() then returns text.
         """
         if self.enableFilter:
             self._ensureFilterItem()
@@ -426,7 +586,7 @@ class QComboCheckBox(QComboBox):
         self.itemDataList.append(data)
         self.qListWidget.setItemWidget(qItem, qBox)
 
-        # Ensure a comfortable row height so text (esp. Chinese) isn't clipped.
+        # Ensure a comfortable row height so text (esp. Chinese) isn't clipped
         hint = qBox.sizeHint()
         qItem.setSizeHint(QSize(hint.width(), max(hint.height(), 28)))
 
@@ -630,7 +790,7 @@ class QComboCheckBox(QComboBox):
                 item.setHidden(patt not in qBox.text().lower())
 
     def showPopup(self):
-        # Auto-widen popup so long labels aren't clipped.
+        # Auto-widen popup so long labels aren't clipped
         try:
             view = self.view()
             fm = view.fontMetrics()
@@ -702,6 +862,7 @@ def apply_chart_style():
         return
 
     import matplotlib as mpl
+
     try:
         from gui import theme
     except Exception:
@@ -717,7 +878,7 @@ def apply_chart_style():
         # on Linux and triggers "findfont: ... not found". Chart titles/labels
         # are English-only here, so use the generic 'sans-serif' family —
         # matplotlib falls back to DejaVu Sans (bundled, always available) with
-        # no warning. Add CJK names only if a chart ever needs Chinese text.
+        # no warning. Add CJK names only if a chart ever needs Chinese text
         'font.family':         'sans-serif',
         'font.size':           9,
         'axes.titlesize':      10,
@@ -773,24 +934,27 @@ def style_axes(axes, dark_mode=False, title=None, xlabel=None, ylabel=None):
         pass
 
     # Grid: y-axis only, subtle. rcParams sets axes.grid=True for both axes;
-    # narrow it to y here (callers that want x-grid can re-enable per-axes).
+    # narrow it to y here (callers that want x-grid can re-enable per-axes)
     axes.grid(True, axis='y', color=pal['grid'], linestyle='--', linewidth=0.6, alpha=0.6)
     axes.grid(False, axis='x')
 
-    # Spines: hide top/right (rcParams already does), tint left/bottom.
+    # Spines: hide top/right (rcParams already does), tint left/bottom
     for side in ('top', 'right'):
         axes.spines[side].set_visible(False)
+
     for side in ('left', 'bottom'):
         axes.spines[side].set_color(pal['spine'])
         axes.spines[side].set_linewidth(0.8)
 
-    # Ticks.
+    # Ticks
     axes.tick_params(colors=pal['tick'], length=3, width=0.6)
 
     if title is not None:
         axes.set_title(title, color=pal['text'], fontsize=10, pad=8)
+
     if xlabel is not None:
         axes.set_xlabel(xlabel, color=pal['label'])
+
     if ylabel is not None:
         axes.set_ylabel(ylabel, color=pal['label'])
 
@@ -877,7 +1041,7 @@ class NavigationToolbar2QT(NavigationToolbar2QT):
                 lines = self.canvas.figure.gca().get_lines()
 
                 # Empty figure (e.g. a hint-only canvas with just text and no
-                # plotted lines): get_lines() is empty, [0] would IndexError.
+                # plotted lines): get_lines() is empty, [0] would IndexError
                 if not lines:
                     return ''
 
@@ -929,10 +1093,10 @@ class ShowMessage(QThread):
         self.message = message
         self.persistent = persistent
         self._proc = None
-        # Signaled once run() has assigned self._proc (or is about to exit).
+        # Signaled once run() has assigned self._proc (or is about to exit)
         # terminate() waits on this so it never observes _proc=None mid-startup
         # and fails to kill a persistent (no-autoclose) child — which would
-        # otherwise block self.wait() forever.
+        # otherwise block self.wait() forever
         import threading
         self._proc_ready = threading.Event()
 
@@ -948,7 +1112,7 @@ class ShowMessage(QThread):
             command.append('--no-autoclose')
 
         # Tracked subprocess so terminate() can kill the message window;
-        # otherwise a persistent (--no-autoclose) window would be orphaned.
+        # otherwise a persistent (--no-autoclose) window would be orphaned
         self._proc = subprocess.Popen(command)
         self._proc_ready.set()
         self._proc.wait()
@@ -972,11 +1136,11 @@ class ShowMessage(QThread):
         3s self.wait — every call site also does msg.wait(3000) afterward, so
         there is a second chance before any rebind/scope-exit.
         """
-        # Step 1: if terminate() races ahead of run(), wait for _proc.
+        # Step 1: if terminate() races ahead of run(), wait for _proc
         if self._proc is None:
             self._proc_ready.wait(timeout=2.0)
 
-        # Step 2 + 3: kill and reap the subprocess.
+        # Step 2 + 3: kill and reap the subprocess
         if self._proc is not None:
             try:
                 self._proc.terminate()  # SIGTERM — graceful for PyQt app
@@ -999,5 +1163,5 @@ class ShowMessage(QThread):
                 pass
 
         # Step 4: let run() return. Bounded so a wedged child can't freeze the
-        # GUI thread indefinitely; caller's wait(3000) is the backstop.
+        # GUI thread indefinitely; caller's wait(3000) is the backstop
         self.wait(3000)
