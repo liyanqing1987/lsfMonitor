@@ -650,6 +650,19 @@ def safe_eval_expr(expression, names):
     return _SafeEvalVisitor(names).visit(tree)
 
 
+def safe_float(value):
+    """
+    Convert ``value`` to float, returning 0 for empty/non-numeric input.
+
+    Guards db columns the sampler may fill with non-numeric markers such as
+    'N/A' (see _safe_int in gui/lsf_panel.py for the integer equivalent).
+    """
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def match_exact_or_fuzzy(keywords, items):
     """
     Match keywords against items with exact-preferred semantics.

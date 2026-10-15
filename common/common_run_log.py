@@ -17,6 +17,7 @@ import json
 
 if 'LSFMONITOR_INSTALL_PATH' in os.environ:
     sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
+
 from common import common_sqlite3
 
 # 'id' is an auto-increment surrogate key (not a business key) so INSERT OR

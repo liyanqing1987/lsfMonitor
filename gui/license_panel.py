@@ -1931,9 +1931,9 @@ class LicensePanel(PanelBase):
                                                 curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'] = 'Uncounted'
                                             else:
                                                 if curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'] != 'Uncounted':
-                                                    curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'] += float(issued_num)
+                                                    curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'] += common.safe_float(issued_num)
 
-                                            curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['in_use'] += float(in_use_num)
+                                            curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['in_use'] += common.safe_float(in_use_num)
 
                                             # Collect summary information
                                             issued_list.append(curve_dic[feature][vendor_daemon]['sample_data'][sample_time]['issued'])
@@ -2428,9 +2428,9 @@ class LicensePanel(PanelBase):
                                                 utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['issued'] = 'Uncounted'
                                             else:
                                                 if utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['issued'] != 'Uncounted':
-                                                    utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['issued'] += float(issued_num)
+                                                    utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['issued'] += common.safe_float(issued_num)
 
-                                            utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['in_use'] += float(in_use_num)
+                                            utilization_dic[feature][vendor_daemon]['sample_data'][sample_date]['in_use'] += common.safe_float(in_use_num)
 
                             utilization_db_conn.close()
 

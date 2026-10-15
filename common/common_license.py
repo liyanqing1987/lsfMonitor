@@ -16,6 +16,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed, TimeoutError
 
 if 'LSFMONITOR_INSTALL_PATH' in os.environ:
     sys.path.append(str(os.environ['LSFMONITOR_INSTALL_PATH']))
+
 from common import common
 
 os.environ['PYTHONUNBUFFERED'] = '1'

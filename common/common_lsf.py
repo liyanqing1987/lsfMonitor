@@ -192,25 +192,30 @@ def get_bhosts_load_info(command='bhosts -l'):
             else:
                 head_list = line.split()
 
-    # Sanity check + whole-fallback: bhosts -l parses Total rows by column
-    # index alignment (head_list[i] <-> total_load_list[i]); if any host's
-    # output has fewer/more columns (e.g. an empty 'it' field collapses split),
-    # values shift and 'ut' may capture 'r1m'/'r15m' (run-queue length, can be
-    # far >100). A single >100 ut means the whole parse is suspect (same code
-    # path for every host), so discard bhosts_load entirely and rebuild from
-    # 'lsload' (one call, all hosts) so all columns stay consistent
-    if _bhosts_load_ut_has_outlier(bhosts_load_dic):
-        common.bprint('bhosts -l ut sanity check failed (some ut >100, likely column misalignment), falling back to lsload for all hosts.', level='Warning')
+    # A host whose parsed 'ut' is not a sane percentage had its Total row
+    # mis-parsed (column shift), so rebuild only those hosts from 'lsload'
+    # and leave every other host on its real bhosts -l values
+    outlier_hosts = _bhosts_load_ut_outlier_hosts(bhosts_load_dic)
+
+    if outlier_hosts:
+        common.bprint(f'bhosts -l ut sanity check failed on {len(outlier_hosts)} host(s), likely column misalignment; using lsload for those hosts only.', level='Warning')
 
         lsload_dic = get_lsload_info()
 
-        return _build_bhosts_load_from_lsload(lsload_dic)
+        _patch_bhosts_load_from_lsload(bhosts_load_dic, outlier_hosts, lsload_dic)
 
     return bhosts_load_dic
 
 
-def _bhosts_load_ut_has_outlier(bhosts_load_dic):
-    """Return True if any host's parsed 'ut' is >100 or non-numeric (suspect)."""
+def _bhosts_load_ut_outlier_hosts(bhosts_load_dic):
+    """Return the set of hosts whose parsed 'ut' is suspect.
+
+    'ut' is a percentage and may be printed with a decimal (e.g. "0.0%"), so it
+    is parsed as float. A value that is not a number, or above 100, means the
+    host's Total row was mis-parsed and every column of that host is untrusted.
+    """
+    outlier_hosts = set()
+
     for host in bhosts_load_dic:
         total = bhosts_load_dic[host].get('Total', {})
 
@@ -225,36 +230,40 @@ def _bhosts_load_ut_has_outlier(bhosts_load_dic):
         ut_clean = re.sub(r'[%\*]', '', str(ut))
 
         try:
-            ut_val = int(ut_clean)
+            ut_val = float(ut_clean)
         except ValueError:
-            return True
+            outlier_hosts.add(host)
+            continue
 
         if ut_val > 100:
-            return True
+            outlier_hosts.add(host)
 
-    return False
+    return outlier_hosts
 
 
-def _build_bhosts_load_from_lsload(lsload_dic):
-    """Rebuild a bhosts_load-shaped dict from lsload data (Total level only,
-    no Reserved — lsload has no reserved row).
+def _patch_bhosts_load_from_lsload(bhosts_load_dic, hosts, lsload_dic):
+    """Replace the 'Total' block of ``hosts`` with values from lsload.
 
-    Used as a whole-fallback when bhosts -l ut sanity check fails, so all
-    columns (ut/mem/...) stay consistent (from the same source) instead of a
-    mix of bhosts -l (some hosts) + lsload (outlier hosts). Downstream reads
-    bhosts_load_dic[host]['Total']['ut'/'mem'/...], so the shape is preserved.
+    Only the listed hosts are touched — their bhosts -l row was mis-parsed, so
+    every column is suspect. Other hosts keep their bhosts -l values. 'Reserved'
+    is left as parsed (lsload has no reserved row). Each patched host is flagged
+    with 'Fallback': True so callers can mark the substituted values.
     """
-    new_dic = {}
-
     if not lsload_dic or 'HOST_NAME' not in lsload_dic:
-        return new_dic
+        return
 
     host_names = lsload_dic['HOST_NAME']
+    host_index = {name: idx for idx, name in enumerate(host_names)}
 
     # lsload_dic is {column_name: [values]}; map matching keys into the
     # bhosts_load 'Total' shape. ut is normalized (drop '%' and '*' high-load
-    # marker) so the downstream '^[0-9]+$' check doesn't trip on a '*'
-    for idx, host in enumerate(host_names):
+    # marker) so the downstream percentage check doesn't trip on a '*'
+    for host in hosts:
+        idx = host_index.get(host)
+
+        if (host not in bhosts_load_dic) or (idx is None):
+            continue
+
         total = {}
 
         for key in ('r15s', 'r1m', 'r15m', 'ut', 'pg', 'ls', 'it', 'tmp', 'swp', 'mem'):
@@ -267,9 +276,8 @@ def _build_bhosts_load_from_lsload(lsload_dic):
                 total[key] = val
 
         if total:
-            new_dic[host] = {'Total': total}
-
-    return new_dic
+            bhosts_load_dic[host]['Total'] = total
+            bhosts_load_dic[host]['Fallback'] = True
 
 
 def get_lshosts_info(command='lshosts -w'):

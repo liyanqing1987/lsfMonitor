@@ -57,6 +57,11 @@ TAB_USERS = 'USERS'
 TAB_QUEUES = 'QUEUES'
 TAB_UTILIZATION = 'UTILIZATION'
 
+# HOSTS columns whose value comes from the lsload fallback when a host's
+# bhosts -l row is mis-parsed (see common_lsf.get_bhosts_load_info)
+FALLBACK_COLUMN_NAMES = ('Ut (%)', 'Swp (G)', 'Tmp (G)', 'saMem (G)')
+FALLBACK_COLUMN_TIP = "Taken from lsload: this host's bhosts -l row could not be parsed."
+
 os.environ.update({
     'LSB_NTRIES': '3',
     'PYTHONUNBUFFERED': '1',
@@ -1117,7 +1122,7 @@ Made with ❤️  by liyanqing.1987
         if init:
             line_edit.setText('')
         elif mem_mb != '':
-            line_edit.setText(str(round(float(mem_mb) / 1024, 1)) + ' G')
+            line_edit.setText(str(round(common.safe_float(mem_mb) / 1024, 1)) + ' G')
             line_edit.setCursorPosition(0)
 
     def update_job_tab_frame1(self, init=False):
@@ -1142,7 +1147,7 @@ Made with ❤️  by liyanqing.1987
             idle_factor = job_dic.get('idle_factor', '')
 
             if idle_factor != '':
-                idle_value = str(round(float(idle_factor), 2))
+                idle_value = str(round(common.safe_float(idle_factor), 2))
 
             self.job_tab_idle_factor_line.setText(idle_value)
             self.job_tab_idle_factor_line.setCursorPosition(0)
@@ -2477,14 +2482,14 @@ Made with ❤️  by liyanqing.1987
 
             ut = re.sub(r'%', '', ut)
 
-            if not re.match(r'^[0-9]+$', ut):
+            if not re.match(r'^[0-9]+(\.[0-9]+)?$', ut):
                 common.bprint(f'Host({host}) ut info "{ut}": invalid value, reset it to "0".', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
                 ut = 0
 
             item = QTableWidgetItem()
-            item.setData(Qt.DisplayRole, int(ut))
+            item.setData(Qt.DisplayRole, float(ut))
 
-            if fatal_error or (int(ut) > 90):
+            if fatal_error or (float(ut) > 90):
                 item.setBackground(QBrush(QColor(STATUS_EXIT)))
 
             self.hosts_tab_table.setItem(i, j, item)
@@ -2593,17 +2598,28 @@ Made with ❤️  by liyanqing.1987
 
             self.hosts_tab_table.setItem(i, j, item)
 
+            if self.bhosts_load_dic.get(host, {}).get('Fallback'):
+                for col_name in FALLBACK_COLUMN_NAMES:
+                    cell = self.hosts_tab_table.item(i, self.hosts_tab_table_title_list.index(col_name))
+
+                    if cell is not None:
+                        cell.setForeground(QBrush(QColor(theme.STATUS_WARN)))
+                        cell.setToolTip(FALLBACK_COLUMN_TIP)
+
         self.hosts_tab_table.setSortingEnabled(True)
 
     def mem_unit_switch(self, mem_string):
         """
         Switch mem unit M/G/T into G, then remove the unit string.
+
+        Both "112.1G" and "683_g" forms are accepted — LSF prints either
+        depending on the server version and configuration.
         """
-        mem_match = re.match(r'^([\d.]+)([MGT])$', str(mem_string))
+        mem_match = re.match(r'^(\d+(?:\.\d+)?)[_]?([MGTmgt])$', str(mem_string))
 
         if mem_match:
             value = float(mem_match.group(1))
-            unit = mem_match.group(2)
+            unit = mem_match.group(2).upper()
 
             if unit == 'M':
                 return value / 1024
@@ -3631,15 +3647,8 @@ Made with ❤️  by liyanqing.1987
                                         user_dic[user]['exit_num'] += 1
                                         user_dic['ALL']['exit_num'] += 1
 
-                                    if data_dic['rusage_mem'][i]:
-                                        rusage_mem = float(data_dic['rusage_mem'][i])
-                                    else:
-                                        rusage_mem = 0
-
-                                    if data_dic['max_mem'][i]:
-                                        max_mem = float(data_dic['max_mem'][i])
-                                    else:
-                                        max_mem = 0
+                                    rusage_mem = common.safe_float(data_dic['rusage_mem'][i])
+                                    max_mem = common.safe_float(data_dic['max_mem'][i])
 
                                     user_dic[user]['rusage_mem'] += rusage_mem
                                     user_dic['ALL']['rusage_mem'] += rusage_mem

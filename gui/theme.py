@@ -194,6 +194,7 @@ STATUS_RUN = '#16A34A'     # Green-600 (a little deeper than #52C41A, easier on 
 STATUS_PEND = PRIMARY     # Pending = brand blue
 STATUS_DONE = '#94A3B8'   # Done = neutral grey (Slate-400)
 STATUS_EXIT = '#DC2626'   # Failed = Red-600 (steadier than #FF4D4F)
+STATUS_WARN = '#D97706'   # Amber-600 — value came from a fallback source, not the primary one
 
 # ============================================================================
 # Chart palette (matplotlib) — aligns chart colors with the AntD-ish UI theme

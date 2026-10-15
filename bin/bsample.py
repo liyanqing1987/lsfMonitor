@@ -930,18 +930,18 @@ class Sampling:
                     # Get cpu_utilization
                     cpu_utilization = 0
 
-                    if re.match(r'^\d+%$', lsload_dic['ut'][i]):
+                    if re.match(r'^\d+(\.\d+)?%$', lsload_dic['ut'][i]):
                         cpu_utilization = re.sub('%', '', lsload_dic['ut'][i])
 
                     # Get mem_utilization
                     mem_utilization = 0
 
                     for (k, host_name) in enumerate(lshosts_dic['HOST_NAME']):
-                        if (host_name == host) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i]):
+                        if (host_name == host) and re.match(r'^(\d+(\.[0-9]+)?)[_]?([MGTmgt])$', lshosts_dic['maxmem'][k]) and re.match(r'^(\d+(\.[0-9]+)?)[_]?([MGTmgt])$', lsload_dic['mem'][i]):
                             # Get maxmem with MB
-                            maxmem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lshosts_dic['maxmem'][k])
+                            maxmem_match = re.match(r'^(\d+(\.[0-9]+)?)[_]?([MGTmgt])$', lshosts_dic['maxmem'][k])
                             maxmem = float(maxmem_match.group(1))
-                            maxmem_unit = maxmem_match.group(3)
+                            maxmem_unit = maxmem_match.group(3).upper()
 
                             if maxmem_unit == 'G':
                                 maxmem = maxmem * 1024
@@ -949,9 +949,9 @@ class Sampling:
                                 maxmem = maxmem * 1024 * 1024
 
                             # Get mem with MB
-                            mem_match = re.match(r'^(\d+(\.\d+)?)([MGT])$', lsload_dic['mem'][i])
+                            mem_match = re.match(r'^(\d+(\.[0-9]+)?)[_]?([MGTmgt])$', lsload_dic['mem'][i])
                             mem = float(mem_match.group(1))
-                            mem_unit = mem_match.group(3)
+                            mem_unit = mem_match.group(3).upper()
 
                             if mem_unit == 'G':
                                 mem = mem * 1024
