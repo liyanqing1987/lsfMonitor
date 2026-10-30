@@ -34,9 +34,14 @@ pypdf==6.10.2
 faiss-cpu==1.13.2
 requests==2.32.5
 
+# --- jobMine MCP server (optional) ---
+mcp==1.26.0
+
 # --- memPrediction subsystem (sampling/training/prediction web app) ---
 flask==3.1.2
 flask_restful==0.3.10
+gunicorn==23.0.0
+gevent==25.9.1
 elasticsearch==8.19.3
 elasticsearch-dsl==8.18.0
 es_pandas==0.0.23

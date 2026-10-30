@@ -13,12 +13,13 @@
 import os
 
 
-def resolve_db_path(subsystem_config, subsystem_name):
+def resolve_db_path(subsystem_config, subsystem_name, cluster=''):
     """Return the db_path for a subsystem.
 
     Priority:
       1. subsystem_config.db_path (if non-empty) — per-subsystem override wins.
-      2. top-level config.py db_path + '/' + subsystem_name.
+      2. top-level config.py db_path + '/' + subsystem_name (cluster-specific
+         config_<cluster>.py db_path wins when cluster is given).
       3. $LSFMONITOR_INSTALL_PATH/db/<subsystem> (fallback when config.py absent).
     """
     sub_db = getattr(subsystem_config, 'db_path', '') or ''
@@ -28,7 +29,7 @@ def resolve_db_path(subsystem_config, subsystem_name):
 
     from common import common_config
 
-    default_config = common_config.load_default_config()
+    default_config = common_config.load_default_config(cluster)
     base = getattr(default_config, 'db_path', '') if default_config else ''
 
     if not base:

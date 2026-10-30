@@ -328,6 +328,53 @@ def _safe_getuser():
         return ''
 
 
+def connect_rw(db_file, timeout=120):
+    """Open a read-write connection with a bounded busy wait.
+
+    Unlike connect_db_file(mode='write'), this does NOT treat an existing
+    journal as a hard conflict; callers add their own policy (skip or retry).
+    """
+
+    conn = sqlite3.connect(db_file, timeout=timeout)
+    conn.execute(f'PRAGMA busy_timeout = {int(timeout * 1000)}')
+
+    return conn
+
+
+def connect_ro(db_file, timeout=30):
+    """Open a read-only connection with a bounded busy wait."""
+
+    conn = sqlite3.connect(f'file:{db_file}?mode=ro', uri=True, timeout=timeout)
+    conn.execute(f'PRAGMA busy_timeout = {int(timeout * 1000)}')
+
+    return conn
+
+
+def commit_with_retry(connection, attempts=30, base_delay=1.0, max_delay=10.0):
+    """Commit, retrying with exponential backoff on lock contention.
+
+    Long-running builders (jobMine) must not abandon work because another
+    process briefly holds the write lock. Sampling callers keep using
+    connect_db_file()'s skip-on-journal policy instead.
+    """
+
+    for attempt in range(attempts):
+        try:
+            connection.commit()
+            return
+        except sqlite3.OperationalError as error:
+            message = str(error).lower()
+
+            if ('locked' not in message and 'busy' not in message) or attempt == attempts - 1:
+                raise
+
+            if attempt == 3:
+                common.bprint('Waiting for SQLite write lock (another process is writing)...',
+                              level='Warning')
+
+            time.sleep(min(base_delay * (2 ** attempt), max_delay))
+
+
 def connect_db_file(db_file, mode='read'):
     """
     Connect db_file in 'read' or 'write' mode (default 'read').
@@ -580,7 +627,7 @@ def get_sql_table_list(db_file, orig_conn):
         return table_list
 
     try:
-        command = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+        command = "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
         results = curs.execute(command)
         all_items = results.fetchall()
 
@@ -675,8 +722,10 @@ def get_sql_table_data(db_file, orig_conn, table_name, key_list=None, select_con
                     else:
                         data_dic[key] = [value, ]
     except Exception as error:
-        common.bprint(f'Failed on getting table info from table "{table_name}" of db_file "{db_file}".', level='Warning')
-        common.bprint(error, color='yellow', display_method=1, indent=11)
+        # A missing table just means this user/queue had no data that day.
+        if 'no such table' not in str(error).lower():
+            common.bprint(f'Failed on getting table info from table "{table_name}" of db_file "{db_file}".', level='Warning')
+            common.bprint(error, color='yellow', display_method=1, indent=11)
     finally:
         if orig_conn == '':
             conn.close()

@@ -44,7 +44,7 @@ Beyond the GUI:
 
 ### 1. Install dependencies
 
-Requires **Python 3.12.12**.
+Requires **Python 3.12.12**. The optional jobMine MCP server additionally needs the `mcp` package, already listed in `requirements.txt`.
 
 ```bash
 pip install -r requirements.txt
@@ -56,7 +56,9 @@ pip install -r requirements.txt
 python3 install.py
 ```
 
-Options: `-p PREFIX` (install path), `-c` (cleanup shell tools & configs before install), `-f` (force reinstall, overwrites config), `-m` (include memPrediction subsystem).
+The install path is the current working directory; `cd` to the target directory first. Options: `-c` (cleanup shell tools & configs before install), `-f` (force reinstall, overwrites config).
+
+`jobMine` and `memPrediction` are optional sub-projects: each is installed automatically when its source directory (with its own `install.py`) is present, and skipped with a warning otherwise.
 
 ### 3. Configure
 
@@ -81,14 +83,14 @@ Set up crontab for periodic data collection:
 # Remember to set PATH and LSF_* environment variables in crontab header
 
 3 0 * * * <INSTALL_PATH>/bin/bsample -c         # cleanup
-10 11,23 * * * <INSTALL_PATH>/bin/bsample -j    # jobs history
+10 8,12,16,20 * * * <INSTALL_PATH>/bin/bsample -j # jobs history (daytime dense)
 */5 * * * * <INSTALL_PATH>/bin/bsample -m       # job memory & idle_factor
 */5 * * * * <INSTALL_PATH>/bin/bsample -q       # queues
 */30 * * * * <INSTALL_PATH>/bin/bsample -qH     # queue-host mapping
 */30 * * * * <INSTALL_PATH>/bin/bsample -gH     # host group-host mapping
 */5 * * * * <INSTALL_PATH>/bin/bsample -H       # hosts
 */5 * * * * <INSTALL_PATH>/bin/bsample -l       # load
-30 11,23 * * * <INSTALL_PATH>/bin/bsample -u    # users
+30 8,20 * * * <INSTALL_PATH>/bin/bsample -u    # users
 */10 * * * * <INSTALL_PATH>/bin/bsample -U      # utilization
 55 23 * * * <INSTALL_PATH>/bin/bsample -UD      # utilization daily
 5 8 * * * <INSTALL_PATH>/bin/bsample -A         # AI cluster analysis report (requires AI config)
@@ -205,7 +207,9 @@ Located under `tools/`:
 ## Documentation
 
 - [User Manual](docs/lsfMonitor_user_manual.md) — installation, config, GUI panels, bmonitor_cli, auxiliary tools (§5), FAQ, exit codes, db_path permission spec (附3)
-- [memPrediction Manual](docs/memPrediction_user_manual.md) — ML subsystem
+- [memPrediction Manual](memPrediction/docs/memPrediction_user_manual.md) — ML subsystem
+- [jobMine Manual](jobMine/docs/jobMine_user_manual.md) — job-history → flow knowledge subsystem
+- [jobMine Design](jobMine/docs/jobMine_design.md) — jobMine design notes
 
 > Auxiliary tool usage (akill / patch / rag_builder / seedb) is documented inside the User Manual §5, not as standalone files.
 

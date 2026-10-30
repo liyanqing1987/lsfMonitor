@@ -41,11 +41,11 @@ akill — LSF 作业批量删除工具
     parser.add_argument('-J', '--job_name',
                         nargs='+',
                         default=[],
-                        help='按 job_name 删除作业，支持模糊匹配')
+                        help='按 job_name 删除作业，支持 * 通配；不含 * 时精确匹配')
     parser.add_argument('-c', '--command',
                         nargs='+',
                         default=[],
-                        help='按 command 删除作业，支持模糊匹配')
+                        help='按 command 删除作业，支持 * 通配；不含 * 时精确匹配')
     parser.add_argument('-s', '--submit_time',
                         nargs='+',
                         default=[],
@@ -146,20 +146,22 @@ class AutoKill():
     def kill_base_job_name(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for job_name in self.job_name_list:
-                # Glob semantics: only '*' is a wildcard, everything else is literal
+                # Glob semantics: only '*' is a wildcard; without it the whole
+                # name must match, so "test" cannot kill "test2"
                 job_name_pattern = re.escape(job_name).replace(r'\*', '.*')
 
-                if job_dic['job_name'] and re.match(job_name_pattern, job_dic['job_name']):
+                if job_dic['job_name'] and re.fullmatch(job_name_pattern, job_dic['job_name']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 
     def kill_base_command(self, jobs_dic):
         for (job, job_dic) in jobs_dic.items():
             for command in self.command_list:
-                # Glob semantics: only '*' is a wildcard, everything else is literal
+                # Glob semantics: only '*' is a wildcard; without it the whole
+                # command must match, so "sleep" cannot kill "sleep 100"
                 command_pattern = re.escape(command).replace(r'\*', '.*')
 
-                if job_dic['command'] and re.match(command_pattern, job_dic['command']):
+                if job_dic['command'] and re.fullmatch(command_pattern, job_dic['command']):
                     command = 'bkill ' + str(job)
                     self.run_command(command)
 

@@ -83,7 +83,7 @@ lsfMonitor的开发和测试操作系统为 CentOS Linux release 7.9.2009 (Core)
 GCC和OpenSSL需要满足如下版本要求，最好使用NAS安装的版本，以做到跨服务器、跨操作系统版本通用。
 
 - GCC >= 8.5
-- OpenSSL = 1.1.1
+- OpenSSL >= 1.1.1
 
 ### 2.2 python版本依赖
 
@@ -105,7 +105,7 @@ make altinstall
 
 lsfMonitor依赖LSF/Oenlava/Volclava集群管理系统，暂不支持其它集群管理系统。
 
-LSF 9.1.3及以上的版本良好支持，volclava支持良好，Openlava几个版本间输出信息格式有一定差异，仅支持openlava4.0的主流版本。
+LSF 9.1.3及以上的版本良好支持，volclava支持良好，Openlava几个版本间输出信息格式有一定差异，仅支持openlava 4.0。
 
 ## 三、工具安装及配置
 
@@ -142,21 +142,19 @@ python3 install.py
 
 ```
 python3 install.py -h
-usage: install.py [-h] [-p PREFIX] [-c] [-f] [-m]
+usage: install.py [-h] [-c] [-f]
 
 options:
-  -h, --help            show this help message and exit
-  -p PREFIX, --prefix PREFIX
-                        Specify lsfMonitor install path on config file, default is current directory.
-  -c, --clean           Cleanup old installation.
-  -f, --force           Install by force.
-  -m, --memPrediction   Install memPrediction the same time.
+  -h, --help   show this help message and exit
+  -c, --clean  Cleanup old installation.
+  -f, --force  Install by force.
 ```
 
-- `--prefix`：指定安装路径，默认为当前路径。
+- 安装路径固定为执行命令时的当前目录（CWD）；如需安装到其他位置，请先 `cd` 到目标目录再执行 `install.py`。
 - `--clean`：清理旧的安装数据。
 - `--force`：强制重新初始化配置文件，用于二次安装时不保留旧的设置，慎用。
-- `--memPrediction`：同时安装memPrediction这个附加工具。
+
+`jobMine` 和 `memPrediction` 是可选子项目：安装时如果对应目录存在（且带 `install.py`），会自动一并安装；目录不存在则打印提示并跳过，不影响主程序安装。
 
 ### 3.3 工具配置
 
@@ -172,7 +170,25 @@ lsfMonitor 采用**分 panel 配置**：1 个顶层默认配置 + 4 个 panel �
 
 此外 `config/lsf/` 下存放 LSF 子系统的静态数据文件（`exit_code.yaml`、`term_signal.yaml`，供 `bmonitor_cli job --diagnose fail` 解读 exit code 与 term signal），`config/license/LM_LICENSE_FILE` 存放 license server 来源（见 4.2.11）。
 
-如果 `config/config_<CLUSTER>.py` 存在，则对 LSF 配置优先生效（集群级覆盖）。安装后默认配置如下，一般需要重新配置。
+**集群级配置（cluster-specific，可选）**：全部 5 个配置文件都支持按集群覆盖，命名规则统一——集群版 = 原名去掉 `.py` 后加 `_<CLUSTER>`：
+
+| 基础配置 | 集群版 |
+|---|---|
+| `config/config.py`（顶层默认） | `config/config_<CLUSTER>.py` |
+| `config/config_lsf.py` | `config/config_lsf_<CLUSTER>.py` |
+| `config/config_license.py` | `config/config_license_<CLUSTER>.py` |
+| `config/config_run.py` | `config/config_run_<CLUSTER>.py` |
+| `config/config_ai.py` | `config/config_ai_<CLUSTER>.py` |
+
+`~/.lsfMonitor/config/` 下放同名文件则优先级更高（个人/集群个人覆盖）。合并优先级从低到高（以 LSF 为例，其余 panel 同构）：
+
+```
+config/config_lsf.py < config/config_lsf_<CLUSTER>.py < ~/.lsfMonitor/config/config_lsf.py < ~/.lsfMonitor/config/config_lsf_<CLUSTER>.py
+```
+
+> **兼容性说明**：旧版本中 LSF panel 曾用 `config/<CLUSTER>.py`（无 lsf_ 前缀）作为集群覆盖；新版本中该命名归还给顶层 `config.py`，LSF 请改用 `config_lsf_<CLUSTER>.py`。
+
+安装后默认配置如下，一般需要重新配置。
 
 **配置文件权限**：install 生成的 `config_lsf.py`/`config_run.py`/`config_ai.py` 为 `0o644`（属主可写、其他只读），`config_license.py` 为 `0o755`。其中 `config_ai.py` 含 `ai_api_key`，视为团队共享密钥，所有用户可读以使用 AI 功能，仅属主可改，避免误改基线配置影响他人。
 
@@ -334,23 +350,23 @@ bsample 用于采集 LSF 集群的 job/queue/host/load/user/utilization 信息�
 bsample -h
 usage: bsample.py [-h] [-c] [-j] [-m] [-q] [-qH] [-gH] [-H] [-l] [-u] [-U] [-UD] [-A]
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
-  -c, --cleanup         Clean up database with expire days limiation.
-  -j, --job             Sample (finished) job info with command "bjobs -u all -d -UF".
-  -m, --job_mem         Sample (running) job mem and idle_factor(cputime/runtime) with command "bjobs -u all -r -UF".
-  -q, --queue           Sample queue info with command "bqueues".
+  -c, --cleanup         清理过期数据（按 config_lsf.py 的 cleanup_expire_days 配置）
+  -j, --job             采集已完成作业信息（bjobs -u all -d -UF）
+  -m, --job_mem         采集运行中作业的内存和 idle_factor（bjobs -u all -r -UF）
+  -q, --queue           采集队列状态（bqueues）
   -qH, --queue_host_mapping
-                        Sample queue-host mapping info with command "bqueues -l".
+                        采集队列-主机映射（bqueues -l）
   -gH, --group_host_mapping
-                        Sample host group-host mapping info with command "bmgroup -w -r".
-  -H, --host            Sample host info with command "bhosts".
-  -l, --load            Sample host load (ut/tmp/swp/mem) info with command "lsload".
-  -u, --user            Sample user (finished) job info with command "bjobs -u all -d -UF".
-  -U, --utilization     Sample utilization (slot/cpu/mem) info with command "lsload/bhosts/lshosts".
+                        采集 host group-主机映射（bmgroup -w -r）
+  -H, --host            采集主机状态（bhosts）
+  -l, --load            采集主机负载 ut/tmp/swp/mem（lsload）
+  -u, --user            采集用户作业统计（bjobs -u all -d -UF）
+  -U, --utilization     采集集群利用率 slot/cpu/mem（lsload/bhosts/lshosts）
   -UD, --utilization_day
-                        Count and save utilization-day info with utilization data.
-  -A, --analyze         Generate an AI cluster analysis HTML report (requires AI config).
+                        计算并保存日利用率统计（基于 -U 数据）
+  -A, --analyze         生成 AI 集群分析 HTML 报告（需配置 config_ai.py）
 ```
 
 - `--help`: 打印帮助信息。
@@ -385,9 +401,9 @@ usage: license_sample.py [-h] [-c] [-u] [-U]
 
 options:
   -h, --help            show this help message and exit
-  -c, --cleanup         Clean up database with expire days limitation.
-  -u, --usage           Sample license usage info with command "lmstat -a -i".
-  -U, --utilization     Sample license utilization info.
+  -c, --cleanup         清理过期数据（按 config_license.py 的 cleanup_expire_days 配置）
+  -u, --usage           采集 feature 使用快照（lmstat -a -i）：谁在用、用了多少
+  -U, --utilization     采集 feature 利用率统计（基于历史数据计算）
 ```
 
 - `--help`: 打印帮助信息。
@@ -407,7 +423,7 @@ bin/license_sample -u
 
 首先，建议LSF的CLEAN_PERIOD参数至少设置为86400（一天），默认值一般为3600（一小时），这个值过小的话容易导致部分采样中出现数据缺失。
 
-我们推荐用crontab来自动定时采样，job/user采样较慢所以一天两次即可，其它采样建议5~10分钟一次。下面是一个示例。（crontab -e）
+我们推荐用crontab来自动定时采样，其它采样建议5~10分钟一次。`bsample -j`（已完成作业）每次都会扫描 CLEAN_PERIOD 窗口内的全部完成作业，成本随频率线性增长，因此不必均匀加密：建议白天 08:10/12:10/16:10/20:10 各一次（4 次/天），以便在 scratch 日志被清理前采到；夜间无人清理，20:10→次日 08:10 的 12h 空窗是安全的。作业量小的集群维持 2 次/天也可。`bsample -u`（用户统计）2 次/天即可。下面是一个示例。（crontab -e）
 
 bsample -c / license_sample -c 则用于自动清理database中的旧数据，以防止数据库尺寸过大。
 
@@ -422,14 +438,14 @@ LSF_TOP=/ic/software/tools/lsf
 
 # For lsfMonitor (LSF)
 3 0 * * * /ic/software/tools/lsfMonitor/bin/bsample -c
-10 11,23 * * * /ic/software/tools/lsfMonitor/bin/bsample -j
+10 8,12,16,20 * * * /ic/software/tools/lsfMonitor/bin/bsample -j
 */5 * * * * /ic/software/tools/lsfMonitor/bin/bsample -m
 */5 * * * * /ic/software/tools/lsfMonitor/bin/bsample -q
 */30 * * * * /ic/software/tools/lsfMonitor/bin/bsample -qH
 */30 * * * * /ic/software/tools/lsfMonitor/bin/bsample -gH
 */5 * * * * /ic/software/tools/lsfMonitor/bin/bsample -H
 */5 * * * * /ic/software/tools/lsfMonitor/bin/bsample -l
-30 11,23 * * * /ic/software/tools/lsfMonitor/bin/bsample -u
+30 8,20 * * * /ic/software/tools/lsfMonitor/bin/bsample -u
 */10 * * * * /ic/software/tools/lsfMonitor/bin/bsample -U
 55 23 * * * /ic/software/tools/lsfMonitor/bin/bsample -UD
 5 8 * * * /ic/software/tools/lsfMonitor/bin/bsample -A
@@ -497,7 +513,7 @@ group_host_mapping.db  host.db  job/  job_data/  load.db  queue.db  queue_host_m
 
 - `host.db`：记录主机 NJOBS/RUN/SSUSP/USUSP，表名 `host_<host>`，由 `bsample -H` 生成。
 - `job/<date>.db`：记录已完成作业详情（单表 `job`，作业 id 为主键），由 `bsample -j` 按完成日期生成。
-- `job_data/<head>_<tail>.db`：记录运行中作业的 mem/idle_factor 时序（单表 `job_data`，主键 job_id+sample_second，按 10 万 jobid 分档 `range_size=100000`），由 `bsample -m` 生成。读取方（GUI/bmonitor_cli）按 10 万档优先、100 万档回退的双档查找兼容历史数据。
+- `job_data/<min>_<max>.db`：记录运行中作业的 mem/idle_factor 时序（单表 `job_data`，主键 job_id+sample_second，按 10 万 jobid 分档 `range_size=100000`），由 `bsample -m` 生成。读取方（GUI/bmonitor_cli）按 10 万档优先、100 万档回退的双档查找兼容历史数据。
 - `load.db`：记录主机负载 ut/tmp/swp/mem，表名 `load_<host>`，由 `bsample -l` 生成。
 - `queue.db`：记录队列 SLOTS/PEND/RUN/SUSP，表名 `queue_<queue>`（含 `queue_ALL` 汇总行），由 `bsample -q` 生成。
 - `queue_host_mapping.db`：记录队列-主机映射，表名 `queue_<queue>`，仅成员变化时写，由 `bsample -qH` 生成。
@@ -650,7 +666,7 @@ bmonitor菜单栏包含File，Setup，Function，Help四部分。
 
 JOB页主要用于查看指定job的详细信息，以及job内存用量和idle_factor（cputime/runtime）的历史曲线。
 
-在Job框输入jobid，点击Check按钮，可以查看指定job的详细信息（来源于bjob -UF \<JOBID\>），以及job的内存用量曲线和idle_factor曲线。
+在Job框输入jobid，点击Check按钮，可以查看指定job的详细信息（来源于bjobs -UF \<JOBID\>），以及job的内存用量曲线和idle_factor曲线。
 
 ![JOB tab](images/LSF_JOB.jpg)
 
@@ -865,7 +881,7 @@ bmonitor_cli cluster-info                                 # 集群基本信息�
 bmonitor_cli host-groups                                  # host group 列表
 bmonitor_cli job <jobid>                                  # 单作业详情（bjobs -UF）
 bmonitor_cli job <jobid> --diagnose pend|slow|fail        # 诊断 PEND/SLOW/FAIL
-bmonitor_cli jobs [--user X] [--status RUN/PEND/DONE/EXIT] [--queue X] [--host X] [--limit N]
+bmonitor_cli jobs [--user X] [--status PEND/RUN/SSUSP/USUSP/PSUSP/DONE/EXIT/UNKWN/WAIT/ZOMBI] [--queue X] [--host X] [--limit N]
 bmonitor_cli hosts [--status ok/closed_Full/...] [--queue X] [--group X] [--sort-load] [--limit N]
 bmonitor_cli queues                                       # 队列状态总览（bqueues -w）
 bmonitor_cli queue <name>                                 # 单队列详情（bqueues -l 配置 + 成员主机）
@@ -878,6 +894,7 @@ bmonitor_cli license-expires [--feature X]                # License 到期时间
 bmonitor_cli license-usage [--user X]                     # License 用户使用详情
 ```
 
+`jobs --status` 仅接受上述合法值；传入非法值时返回 `{"error": "Invalid status ..."}`。
 `job --diagnose` 与 GUI 的 Function 菜单 Check Pend/Slow/Fail reason 对应：
 - `pend`：返回 pending reason + 队列 slot/pend/run 数 + 请求资源
 - `slow`：返回 idle_factor + CPU/内存 + 主机负载
@@ -963,6 +980,8 @@ optional arguments:
                         kill specified job(s) based on user(s).
 ```
 
+- job_name / command 匹配：`*` 是唯一通配符，不含 `*` 时按完整名称精确匹配（例如 `-J test` 不会误杀 `test2`；需要前缀匹配时写 `-J "test*"`）。submit_time 仍按子串包含匹配；存在 `-j`/`-J`/`-c`/`-s` 任一条时，均基于 `bjobs -r -p -UF` 返回的作业集合筛选。
+
 ### 5.2 patch
 
 patch是帮助lsfMonitor打补丁的工具，其帮助信息如下。
@@ -984,6 +1003,13 @@ options:
 - `--no-backup`：在打补丁之前跳过备份环节。
 
 patch脚本主要用于小版本更新的补丁操作，针对较大的变更，推荐重新安装以确保全量更新，拷贝 `config/` 下的配置文件及早期数据库文件即可实现无缝升级。
+
+patch对以下文件有专门保护，升级时不会覆盖或删除：
+
+- **install 生成物**（发版包中不存在，只存在于各站点安装树）：shell wrapper（`bin/bmonitor`、`bin/bsample`、`bin/jobmine`、`bin/jobmine_mcp_server`、`bin/snapshot`、`tools/akill` 等）、`config/license/LM_LICENSE_FILE`、`memPrediction` 的 wrapper/`.env`/`predict_web.service` 等全部生成文件；
+- **用户配置**（`config/config*.py`）：不走直接覆盖，而是自动迁移——保留用户改过的值，合入新版本新增的变量；
+- 变更与删除的文件在打补丁前自动备份到 `<install>/.patch_backup/<时间戳>/`，可整体回退；
+- 补丁包内没有的普通文件会被删除（发版瘦身），目录空了会一并移除。
 
 ### 5.3 rag_builder
 
@@ -1157,8 +1183,9 @@ options:
                         输出文件，默认为 "<当前工作目录>/LM_LICENSE_FILE"
 ```
 
-- `--module_files_dirs`: 必选，指定存放 module 配置文件的目录（支持多个，空格分隔）。工具会递归扫描其中的 module 文件，提取 license server 行。
+- `--module_files_dirs`: 必选，指定存放 module 配置文件的目录（支持多个，空格分隔）。工具会递归扫描其中的 module 文件，提取 license server 行；目录内的二进制文件或不可读文件会跳过并打印 Warning，不影响其余文件的解析。
 - `--LM_LICENSE_FILE_file`: 指定输出文件路径，默认为当前工作目录下的 `LM_LICENSE_FILE`。
+- 退出码：若解析到的 license server 全部不可达（或 module 目录中没有 `LM_LICENSE_FILE` 配置），工具会打印 Error 并以非零码退出，且不生成输出文件。
 
 示例：
 
@@ -1342,273 +1369,46 @@ HOSTS页中的Mem值跟LOAD页中的mem值信息来源不一样，作用也不�
 
 ### 附2. LSF任务exit code含义
 
+作业退出码是进程自己 exit() 返回的 0~255 无符号值，**LSF 不定义其余含义**：除下列有
+shell/信号约定的条目外，退出码均为应用自定义，请结合作业输出（stdout/stderr）与
+TERM_* 终止原因判断（`bjobs -UF` 可同时看到两者）。本附录与
+`config/lsf/exit_code.yaml` 内容一致（`bmonitor_cli job --diagnose fail` 使用）。
+
 | Exit Code | 含义 |
 |-----------|------|
-| -9 | 作业被强制终止 |
-| -8 | 资源严重不足 |
-| -7 | 无效的主机名或节点 |
-| -6 | 作业被系统强制终止 |
-| -5 | 作业被用户终止或中断 |
-| -4 | 无效的队列名称 |
-| -3 | 无效的作业 ID |
-| -2 | 内部错误 |
-| -1 | 系统级错误 |
-| 0 | 成功完成并正常退出 |
-| 1 | 一般性的警告性错误 |
-| 2 | 一般性的错误 |
-| 3 | 一般性的致命错误 |
-| 4 | 初始化失败 |
-| 5 | 输入/输出错误 |
-| 6 | 无效的参数 |
-| 7 | 无法分配足够的内存 |
-| 8 | 目录不存在或无法访问 |
-| 9 | 文件不存在或无法访问 |
-| 10 | 不支持的功能或操作 |
-| 11 | 文件已存在 |
-| 12 | 超时错误 |
-| 13 | 权限被拒绝 |
-| 14 | 资源不足 |
-| 15 | 信号中断 |
-| 16 | 管道损坏或被关闭 |
-| 17 | 死锁错误 |
-| 18 | 磁盘已满 |
-| 19 | 读取错误 |
-| 20 | 写入错误 |
-| 21 | 连接错误 |
-| 22 | 无效或损坏的数据 |
-| 23 | 操作被中止 |
-| 24 | 过多打开的文件 |
-| 25 | 操作不可行 |
-| 26 | 无效的文件系统操作 |
-| 27 | 文件太大, 超出限制 |
-| 28 | 信号已被阻塞 |
-| 29 | 管道已满或破裂 |
-| 30 | 无效的进程 |
-| 31 | 操作中断时出现错误 |
-| 32 | 命令的语法错误 |
-| 33 | 触发限制或配额 |
-| 34 | 服务或进程的异常终止 |
-| 35 | 输入或输出的格式错误 |
-| 36 | 进程或作业已经在运行 |
-| 37 | 进程或作业已经停止或结束 |
-| 38 | 操作被取消或中断 |
-| 39 | 需要更高的权限来执行操作 |
-| 40 | 连接或会话已经关闭 |
-| 41 | 接收到无效或损坏的数据 |
-| 42 | 网络连接失败 |
-| 43 | 网络服务不可用 |
-| 44 | 数据库操作失败 |
-| 45 | 文件或目录已经损坏 |
-| 46 | 操作已超时 |
-| 47 | 安全验证失败 |
-| 48 | 发生未知的错误 |
-| 49 | 任务或处理已中断 |
-| 50 | 进程或作业达到资源限制 |
-| 51 | 故障引起的不可恢复的错误 |
-| 52 | 进程被非法访问或操作 |
-| 53 | 操作被有效的权限限制 |
-| 54 | 系统服务或组件不可用 |
-| 55 | 数据损坏或丢失 |
-| 56 | 网络连接已经超时 |
-| 57 | 数据库连接失败 |
-| 58 | 脚本或程序操作失败 |
-| 59 | 任务被取消或终止 |
-| 60 | 进程或作业已过期 |
-| 61 | 配置错误导致无法正常执行 |
-| 62 | 日志文件错误 |
-| 63 | 加密或解密操作失败 |
-| 64 | 进程或作业运行时间过长 |
-| 65 | 与硬件设备的通信失败 |
-| 66 | 数据库查询操作失败 |
-| 67 | 网络协议错误 |
-| 68 | 文件系统操作失败 |
-| 69 | 环境变量未设置或无效 |
-| 70 | 进程或作业的使用量超过限制 |
-| 71 | 数据库连接超时 |
-| 72 | 配置文件错误 |
-| 73 | 依赖项未满足 |
-| 74 | 加密或解密密钥无效 |
-| 75 | 消息传递失败 |
-| 76 | 网络通信错误 |
-| 77 | 文件或目录已损坏 |
-| 78 | 版本错误 |
-| 79 | 资源不可用 |
-| 80 | 任务超时 |
-| 81 | 链接无效或过期 |
-| 82 | 权限被拒绝 |
-| 83 | 输入无效或错误 |
-| 84 | 输出无效或错误 |
-| 85 | 连接被重置 |
-| 86 | 数据库事务失败 |
-| 87 | 网络服务超负荷 |
-| 88 | 文件被锁定 |
-| 89 | 配置项缺失或无效 |
-| 90 | 配置文件丢失或损坏 |
-| 91 | 请求被限制或阻止 |
-| 92 | 协议错误 |
-| 93 | 验证失败 |
-| 94 | 数据传输错误 |
-| 95 | 脚本或程序非法操作 |
-| 96 | 任务被其他任务阻塞 |
-| 97 | 命令已过时或不再支持 |
-| 98 | 外部资源不可达 |
-| 99 | 时间戳无效或过期 |
-| 100 | 进程或作业已经终止 |
-| 101 | 协议切换失败 |
-| 102 | 网络连接已被废弃 |
-| 103 | 配置文件格式错误 |
-| 104 | 请求被重定向 |
-| 105 | 数据库操作异常 |
-| 106 | 加密或解密错误 |
-| 107 | 脚本或程序运行环境错误 |
-| 108 | 资源限制被超出 |
-| 109 | 输入输出错误 |
-| 110 | 网络连接超载 |
-| 111 | 进程或作业被阻塞 |
-| 112 | 命令执行失败 |
-| 113 | 服务不可达 |
-| 114 | 证书无效或过期 |
-| 115 | 文件系统错误 |
-| 116 | 资源被释放或移除 |
-| 117 | 地址被禁止访问 |
-| 118 | 任务被挂起或暂停 |
-| 119 | 操作系统错误 |
-| 120 | 协议版本错误 |
-| 121 | 文件或目录不存在 |
-| 122 | 资源临时不可用 |
-| 123 | 命令语法错误 |
-| 124 | 日志记录失败 |
-| 125 | 编码或解码错误 |
-| 126 | 执行权限不足 |
-| 127 | 命令未找到 |
-| 128 | 无效的退出状态 |
-| 129 | 库依赖项错误 |
-| 130 | 进程或作业被中断 |
-| 131 | 信号捕获失败 |
-| 132 | 文件被修改 |
-| 133 | 连接被拒绝 |
-| 134 | 堆栈溢出 |
-| 135 | 资源超时 |
-| 136 | 内存分配错误 |
-| 137 | 进程或作业因超出资源限制而被杀死 |
-| 138 | 信号超出范围 |
-| 139 | 分段错误 |
-| 140 | 程序或进程收到了致命信号 |
-| 141 | 时钟错误 |
-| 142 | 文件格式无效 |
-| 143 | 程序被终止或中断 |
-| 144 | 信号被阻止 |
-| 145 | 操作被终止 |
-| 146 | 目录切换失败 |
-| 147 | 管道错误 |
-| 148 | 孤儿进程（没有父进程） |
-| 149 | 挂起的进程或作业 |
-| 150 | 资源耗尽 |
-| 151 | 镜像损坏或无效 |
-| 152 | 文件被锁定 |
-| 153 | 内存映射错误 |
-| 154 | 信号处理失败 |
-| 155 | 网络操作失败 |
-| 156 | 设备驱动错误 |
-| 157 | 套接字连接错误 |
-| 158 | 链接超时 |
-| 159 | 文件描述符无效 |
-| 160 | 插件或扩展错误 |
-| 161 | 远程主机不可达 |
-| 162 | 文件读取错误 |
-| 163 | 文件写入错误 |
-| 164 | 数据包损坏 |
-| 165 | 数据库连接错误 |
-| 166 | 超出容量限制 |
-| 167 | 死锁状态 |
-| 168 | 证书验证失败 |
-| 169 | 系统时钟漂移 |
-| 170 | 正在进行的操作被取消 |
-| 171 | 权限不允许操作 |
-| 172 | 目标不可到达 |
-| 173 | 文件系统不支持操作 |
-| 174 | 系统服务异常 |
-| 175 | 网络地址不可用 |
-| 176 | 资源已经存在 |
-| 177 | 数据内容被篡改 |
-| 178 | 系统崩溃或故障 |
-| 179 | 进程或作业超时 |
-| 180 | 用户操作中止 |
-| 181 | 文件被加密 |
-| 182 | 库文件损坏 |
-| 183 | 账户权限不足 |
-| 184 | 资源被占用 |
-| 185 | 数据格式错误 |
-| 186 | 网络连接已关闭 |
-| 187 | 缺少依赖项 |
-| 188 | 系统日志错误 |
-| 189 | 命令行参数错误 |
-| 190 | 配置文件缺失或损坏 |
-| 191 | 文件权限错误 |
-| 192 | 进程或作业已经在运行 |
-| 193 | 设备或服务不可用 |
-| 194 | 数据验证错误 |
-| 195 | 协议操作失败 |
-| 196 | 系统初始化错误 |
-| 197 | 备份或恢复错误 |
-| 198 | 连接被重置 |
-| 199 | 程序逻辑错误 |
-| 200 | 程序或进程成功终止 |
-| 201 | 请求被响应成功 |
-| 202 | 异步操作已启动, 结果稍后返回 |
-| 203 | 已接收请求但未执行 |
-| 204 | 请求成功执行, 无返回内容 |
-| 205 | 请求成功, 需发送新请求获取更新 |
-| 206 | 请求成功, 仅返回部分内容 |
-| 207 | 多状态响应 |
-| 208 | 结果已包含在响应消息中 |
-| 209 | 返回信息已被代理修改 |
-| 210 | 资源已移动 |
-| 211 | 返回内容已更改 |
-| 212 | 需要额外的身份验证 |
-| 213 | 返回数据部分已失效 |
-| 214 | 没有满足请求的结果 |
-| 215 | 需要进一步处理 |
-| 216 | 范围不匹配 |
-| 217 | 返回数据类型不受支持 |
-| 218 | 返回数据已知 |
-| 219 | 存在内部冲突 |
-| 220 | 操作处于暂停状态 |
-| 221 | 返回内容未更改 |
-| 222 | 返回内容已被重新排序 |
-| 223 | 返回内容未被重置 |
-| 224 | 存在版本冲突 |
-| 225 | 服务器过载 |
-| 226 | 内容通过协商缓存生成 |
-| 227 | 源数据存在问题 |
-| 228 | 数据解析失败 |
-| 229 | 内容更新冲突 |
-| 230 | 返回内容包含警告信息 |
-| 231 | 返回内容需要用户进一步处理 |
-| 232 | 返回结果需要进一步验证 |
-| 233 | 返回内容需要管理员干预 |
-| 234 | 存在资源限制 |
-| 235 | 返回内容包含敏感信息 |
-| 236 | 返回内容包含过期信息 |
-| 237 | 返回内容存在冲突 |
-| 238 | 返回内容被转换 |
-| 239 | 服务端要求重新认证 |
-| 240 | 需要进行重定向 |
-| 241 | 存在过多的重定向 |
-| 242 | 返回内容需要安全验证 |
-| 243 | 返回内容需要数据转换 |
-| 244 | 存在连接超时 |
-| 245 | 返回内容已过期 |
-| 246 | 返回内容需要语义解析 |
-| 247 | 返回内容需要格式转换 |
-| 248 | 返回内容需要编码转换 |
-| 249 | 返回内容需要内容裁剪 |
-| 250 | 返回内容需要内容合并 |
-| 251 | 返回内容需要内容过滤 |
-| 252 | 返回内容需要内容排序 |
-| 253 | 返回内容需要内容分割 |
-| 254 | 返回内容需要内容聚合 |
-| 255 | 命令因不明原因执行失败 |
+| 0 | 成功完成，正常退出 |
+| 1 | 通用错误（应用自定义，最常见失败码），需查作业输出定位 |
+| 2 | 命令用法错误，或 Makefile 编译步骤（recipe）失败 |
+| 126 | 命令不可执行（无执行权限，或不是可执行格式） |
+| 127 | 命令未找到（未加载对应 module，或 PATH 未配置） |
+| 128 | 作业进程直接退出了 128，无信号含义 |
+| 129 | 终端会话断开导致中断（SIGHUP），交互式作业常见 |
+| 130 | 用户 Ctrl-C 手动中断（SIGINT） |
+| 131 | 程序异常退出并产生 core dump（SIGQUIT） |
+| 132 | CPU 不支持程序指令（SIGILL），常见于编译目标与机器架构不匹配 |
+| 133 | 调试断点/陷阱信号（SIGTRAP），正常作业罕见 |
+| 134 | 程序断言失败或主动 abort（SIGABRT），常伴随 core dump |
+| 135 | 总线错误（SIGBUS）：常见于读取损坏文件，或 mmap 的文件被截断（存储/磁盘问题） |
+| 136 | 程序算术运算异常，如除零、浮点溢出（SIGFPE） |
+| 137 | 内存不足被强制杀死（SIGKILL）：常见为内存申请超限被 LSF 终止、实际用量触达物理内存被系统 OOM killer 杀死，或 bkill -9 强杀；是谁杀的看 TERM_*：TERM_OWNER=用户自己强杀、TERM_ADMIN=管理员强杀、TERM_MEMLIMIT=内存超限被 LSF 杀、TERM_RUNLIMIT=超时被杀 |
+| 138 | 被用户信号 1 终止（SIGUSR1），部分 EDA 工具用其做内部通信或优雅退出 |
+| 139 | 段错误（SIGSEGV）：非法内存访问，程序 bug 或库版本不匹配 |
+| 140 | 被用户信号 2 终止（SIGUSR2） |
+| 141 | 管道破裂（SIGPIPE）：读取方已退出，程序仍在写管道/stdout |
+| 142 | 程序内部定时器超时（SIGALRM） |
+| 143 | 被请求终止（SIGTERM，bkill 默认方式）：是用户还是管理员杀的看 TERM_*：TERM_OWNER=用户自己 bkill 了该作业、TERM_ADMIN=集群管理员 bkill 了该作业、TERM_EXTERNAL_SIGNAL=外部程序杀掉；作业若因超时/超资源被 LSF 杀，TERM_* 会是 TERM_RUNLIMIT/TERM_MEMLIMIT 等，而不是 bkill |
+| 144~151 | 罕见信号终止（SIGSTKFLT/SIGCHLD/SIGCONT/SIGSTOP/SIGTSTP/SIGTTIN/SIGTTOU/SIGURG），分别对应信号 16~23 |
+| 152 | 超过 CPU 时间限制被杀（SIGXCPU）：作业 CPU 用量超出 CPULIMIT 或 ulimit -t |
+| 153 | 超过文件大小限制被杀（SIGXFSZ）：输出文件（fsdb/wave/日志等）超出文件大小限制 |
+| 154~158 | 罕见信号终止（SIGVTALRM/SIGPROF/SIGWINCH/SIGIO/SIGPWR），分别对应信号 26~30 |
+| 159 | 非法系统调用被杀（SIGSYS），常见于容器/安全策略限制 |
+| 255 | 脚本/包装层失败：LSF 常见于执行节点不可达、可执行文件缺失、环境初始化失败（用 bhist 与节点状态进一步定位） |
+
+**谁终止了作业（term_signal）**：信号不携带发送者身份，同一个 143/137 无法区分是用户
+还是管理员 bkill——请看 `bjobs -UF` 的 TERM_* 字段：`TERM_OWNER` / `TERM_FORCE_OWNER`
+= 用户自己 bkill；`TERM_ADMIN` / `TERM_FORCE_ADMIN` = 集群管理员 bkill；
+`TERM_RUNLIMIT` / `TERM_MEMLIMIT` / `TERM_CPULIMIT` 等 = 作业超限被 LSF 终止。完整
+TERM_* 清单见 `config/lsf/term_signal.yaml`。
 
 ### 附3. db_path 目录与权限规范
 

@@ -11,5 +11,5 @@
 import getpass
 
 VERSION = 'V3.0'
-RELEASE_DATE = '2026.10.15'
+RELEASE_DATE = '2026.10.30'
 USER = getpass.getuser()

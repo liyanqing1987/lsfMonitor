@@ -141,10 +141,31 @@ class AiPanel(PanelBase):
         pass
 
     def cleanup(self):
-        """Stop AI thread if running (called on application exit)."""
-        if self.ai_thread and self.ai_thread.isRunning():
-            self.ai_thread.stop()
-            self.ai_thread.wait(3000)
+        """Stop every background thread on application exit.
+
+        References are kept on purpose: dropping a thread that refused to stop
+        would destroy a live QThread and abort the process.
+        """
+        self._stop_thread(self.ai_thread)
+
+        for thread in list(getattr(self, '_ai_pending_threads', [])):
+            self._stop_thread(thread)
+
+        for thread in list(getattr(self, '_analyze_threads', {}).values()):
+            self._stop_thread(thread)
+
+        loader = getattr(self, '_doc_loader', None)
+
+        if loader is not None and loader.isRunning():
+            loader.wait(3000)
+
+    @staticmethod
+    def _stop_thread(thread):
+        """Cooperative stop + bounded wait for one panel-owned thread."""
+
+        if thread is not None and thread.isRunning():
+            thread.stop()
+            thread.wait(3000)
 
     # ---- For AI TAB (begin) ----
     def build_ai_tab(self):
@@ -879,9 +900,19 @@ class AiPanel(PanelBase):
         # Add to messages
         self.ai_messages.append({"role": "user", "content": user_text})
 
-        # Trim context if too long (keep system prompt + last 30 messages)
+        # Trim context if too long (keep system prompt + last 30 messages).
+        # Start from the first user message so an assistant(tool_calls)/tool
+        # pair is never split: OpenAI rejects a leading tool message
         if len(self.ai_messages) > 40:
-            self.ai_messages = [self.ai_messages[0]] + self.ai_messages[-30:]
+            trimmed = self.ai_messages[-30:]
+            start = next((i for i, msg in enumerate(trimmed) if msg.get('role') == 'user'), None)
+
+            if start is None:
+                trimmed = [msg for msg in trimmed if msg.get('role') != 'tool']
+            else:
+                trimmed = trimmed[start:]
+
+            self.ai_messages = [self.ai_messages[0]] + trimmed
 
         # Dangerous-command list and lmstat invocation come from config_ai /
         # config_license

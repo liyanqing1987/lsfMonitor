@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import time
+import threading
 import copy
 import shlex
 import datetime
@@ -56,6 +57,18 @@ TAB_LOAD = 'LOAD'
 TAB_USERS = 'USERS'
 TAB_QUEUES = 'QUEUES'
 TAB_UTILIZATION = 'UTILIZATION'
+
+# After a kill, bjobs may need a moment to reflect the new state (interactive
+# jobs can take tens of seconds); poll until a terminal state or until the job
+# leaves bjobs, within the retry budget.
+KILL_REFRESH_ATTEMPTS = 10
+KILL_REFRESH_INTERVAL = 2000    # ms
+KILL_REPORT_DELAY = 1000        # ms; reply to the user with the real state after this delay
+KILL_TERMINAL_STATUS = ('DONE', 'EXIT', 'KILL', 'UNKWN')
+# bkill returns non-zero for "already terminating/finished" replies too; those
+# mean the kill signal is in effect, not that the kill failed.
+KILL_IN_PROGRESS_PATTERN = re.compile(
+    r'(is being killed|being terminated|has already finished|is finished|is not found)', re.IGNORECASE)
 
 # HOSTS columns whose value comes from the lsload fallback when a host's
 # bhosts -l row is mis-parsed (see common_lsf.get_bhosts_load_info)
@@ -117,7 +130,7 @@ class LsfPanel(PanelBase):
         # matches bsample's db_path layout so GUI reads exactly where the
         # sampler writes resolve_db_path: config_lsf.db_path if set, else
         # config.py db_path/lsf
-        self.lsf_db_root = common_db_path.resolve_db_path(config_lsf, 'lsf')
+        self.lsf_db_root = common_db_path.resolve_db_path(config_lsf, 'lsf', self.cluster)
         self.cluster_db_path = self.lsf_db_root
 
         if self.cluster:
@@ -456,6 +469,15 @@ class LsfPanel(PanelBase):
 
         self.main_tab.setCurrentWidget(tab_dic[specified_tab])
 
+    def cleanup(self):
+        """Stop panel-owned background threads on application exit."""
+        old_thread = getattr(self, 'my_check_issue_reason', None)
+
+        if old_thread is not None and old_thread.isRunning():
+            old_thread.stop()
+
+        self._close_kill_notice()
+
     def register_menubar_actions(self, menubar, shared_menus=None):
         """
         Register this panel's menubar actions onto the shared top-level menus.
@@ -558,18 +580,33 @@ class LsfPanel(PanelBase):
                 self.utilization_tab_begin_date_edit.setDate(QDate.currentDate().addMonths(-1))
 
     def _stop_check_issue_reason_thread(self):
-        """Stop any running check_issue_reason thread before starting a new one."""
+        """Stop any running check_issue_reason thread before starting a new one.
+
+        Returns False when the old thread cannot be stopped; the caller must
+        not start a new one then, because rebinding the reference would destroy
+        a live QThread and abort the process.
+        """
         old_thread = getattr(self, 'my_check_issue_reason', None)
 
-        if old_thread is not None and old_thread.isRunning():
-            old_thread.terminate()
-            old_thread.wait(3000)
+        if old_thread is None or not old_thread.isRunning():
+            return True
+
+        old_thread.stop()
+
+        if old_thread.isRunning():
+            common.bprint('Previous issue-reason window is still running, skipped.', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+
+            return False
+
+        return True
 
     def check_pend_reason(self, job=''):
         """
         Call a separate script to check job pend reason.
         """
-        self._stop_check_issue_reason_thread()
+        if not self._stop_check_issue_reason_thread():
+            return
+
         self.my_check_issue_reason = CheckIssueReason(job=job, issue='PEND')
         self.my_check_issue_reason.start()
 
@@ -577,7 +614,9 @@ class LsfPanel(PanelBase):
         """
         Call a separate script to check job slow reason.
         """
-        self._stop_check_issue_reason_thread()
+        if not self._stop_check_issue_reason_thread():
+            return
+
         self.my_check_issue_reason = CheckIssueReason(job=job, issue='SLOW')
         self.my_check_issue_reason.start()
 
@@ -585,7 +624,9 @@ class LsfPanel(PanelBase):
         """
         Call a separate script to check job fail reason.
         """
-        self._stop_check_issue_reason_thread()
+        if not self._stop_check_issue_reason_thread():
+            return
+
         self.my_check_issue_reason = CheckIssueReason(job=job, issue='FAIL')
         self.my_check_issue_reason.start()
 
@@ -981,6 +1022,9 @@ Made with ❤️  by liyanqing.1987
         my_match = re.match(r'^(\d+)(\[\d+\])?$', self.job_tab_current_job)
 
         if not my_match:
+            # Do not keep the invalid input as the "current job": it would be
+            # passed to bkill (shell command) by kill_job_on_job_tab
+            self.job_tab_current_job = ''
             warning_message = 'No valid job is specified on JOB tab.'
             self.gui_warning(warning_message)
             return
@@ -1030,6 +1074,11 @@ Made with ❤️  by liyanqing.1987
                             job_finished_date_db_conn.close()
 
         if not self.job_tab_current_job_dic:
+            # Must stop the prompt thread before returning: letting the local
+            # QThread be GC'd while still running aborts the process with
+            # "QThread: Destroyed while thread is still running"
+            my_show_message.terminate()
+            my_show_message.wait(3000)
             warning_message = 'Not find job information for job "' + str(current_job) + '" on JOB tab.'
             self.gui_warning(warning_message)
             return
@@ -1049,45 +1098,207 @@ Made with ❤️  by liyanqing.1987
 
     def kill_job_on_job_tab(self):
         """
-        Kill job, update self.job_tab.
+        Kill job, notify the user and refresh the JOB tab.
         """
-        if self.job_tab_current_job:
-            return_code = self.kill_job(self.job_tab_current_job)
+        # Never pass unvalidated input to bkill (run_command uses a shell)
+        if not re.match(r'^\d+(\[\d+\])?$', self.job_tab_current_job or ''):
+            self.gui_warning('No valid job is specified on JOB tab.')
+            return
 
-            if return_code == 0:
-                self.check_job_on_job_tab()
+        jobid = self.job_tab_current_job
+        (return_code, output_text) = self.kill_job(jobid)
+        detail = output_text.strip()
+
+        if return_code == 0:
+            # rc=0 only means the signal was accepted (bkill prints "Job <xxx>
+            # is being terminated"); answer with the REAL state ~1s later,
+            # most jobs are already gone by then
+            self._schedule_job_kill_report(jobid, detail)
+        elif KILL_IN_PROGRESS_PATTERN.search(detail):
+            # e.g. re-killing a job that is already terminating: the kill
+            # signal is in effect, this is not a failure
+            self._show_kill_notice(f'Job {jobid} is already terminating.\n\n{detail}')
+        else:
+            QMessageBox.warning(self, 'lsfMonitor Warning',
+                                f'Failed on killing job {jobid}.\n\n'
+                                f'{detail or f"bkill exited with return code {return_code}."}')
+
+        # Poll either way: the real bjobs state is what the user cares about
+        self.refresh_job_after_kill(jobid, 0)
+
+    def _schedule_job_kill_report(self, jobid, bkill_detail):
+        """Reply to the user with the job's real state ~1s after bkill."""
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+
+        def _fire():
+            timer.deleteLater()
+            self._report_job_kill_state(jobid, bkill_detail)
+
+        timer.timeout.connect(_fire)
+        timer.start(KILL_REPORT_DELAY)
+
+    def _report_job_kill_state(self, jobid, bkill_detail):
+        """Show one dialog with the actual post-kill state of the job."""
+        if self.job_tab_current_job != str(jobid):
+            return
+
+        try:
+            job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(jobid))
+        except Exception as warning:
+            common.bprint(f'Failed on checking job "{jobid}" after kill: {warning}',
+                          date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            job_dic = {}
+
+        if job_dic:
+            job_info = job_dic.get(str(jobid)) or next(iter(job_dic.values()), {})
+            status = str(job_info.get('status', '')).upper()
+        else:
+            status = ''
+
+        if not status or status in KILL_TERMINAL_STATUS:
+            final_state = status or 'no longer in bjobs'
+            self._show_kill_notice(f'Job {jobid} has been killed (state: {final_state}).')
+        else:
+            self._show_kill_notice(
+                f'Kill signal sent to job {jobid}; it is still {status} (kill can be slow).\n\n'
+                f'{bkill_detail or "(no message from bkill)"}\n\n'
+                'This window closes automatically once the job exits.')
+
+    def _show_kill_notice(self, text):
+        """Show a non-modal kill notice that polling auto-closes when the job
+        reaches its final state (the user does not have to dismiss it)."""
+        self._close_kill_notice()
+        box = QMessageBox(self)
+        box.setWindowTitle('lsfMonitor')
+        box.setText(text)
+        box.setModal(False)
+        box.finished.connect(self._on_kill_notice_finished)
+        box.show()
+        self._kill_notice_box = box
+
+    def _on_kill_notice_finished(self, _result):
+        self._kill_notice_box = None
+
+    def _close_kill_notice(self):
+        """Close the pending kill notice, if any."""
+        box = getattr(self, '_kill_notice_box', None)
+
+        if box is not None:
+            self._kill_notice_box = None
+
+            try:
+                box.close()
+            except RuntimeError:
+                pass
+
+    def refresh_job_after_kill(self, jobid, attempt):
+        """
+        Refresh the JOB tab after a kill.
+
+        bkill is asynchronous: keep polling while the job is still reported as
+        RUN/PEND, and stop once it reaches a terminal state or leaves bjobs.
+        """
+        if self.job_tab_current_job != str(jobid):
+            return
+
+        try:
+            job_dic = common_lsf.get_bjobs_uf_info(command='bjobs -UF ' + str(jobid))
+        except Exception as warning:
+            common.bprint(f'Failed on refreshing job "{jobid}" after kill: {warning}',
+                          date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            job_dic = {}
+
+        if job_dic:
+            self.job_tab_current_job_dic = job_dic
+            self.update_job_tab_frame1()
+            self.update_job_tab_frame2()
+            self.update_job_tab_frame3()
+            job_info = job_dic.get(str(jobid)) or next(iter(job_dic.values()), {})
+            status = str(job_info.get('status', '')).upper()
+
+            if status in KILL_TERMINAL_STATUS:
+                self._close_kill_notice()
+
+                return
+
+            if attempt < KILL_REFRESH_ATTEMPTS:
+                self._schedule_job_refresh(jobid, attempt)
+
+                return
+
+            self._close_kill_notice()
+            self.job_tab_job_info_text.appendPlainText(
+                f'\n[lsfMonitor] Job {jobid} has not exited yet after the kill request; '
+                'click Check for the latest state.')
+
+            return
+
+        if attempt < KILL_REFRESH_ATTEMPTS:
+            self._schedule_job_refresh(jobid, attempt)
+
+            return
+
+        # The job has left bjobs: keep the last known fields and mark the
+        # terminal state instead of leaving the page blank
+        self._close_kill_notice()
+        init_mode = not bool(self.job_tab_current_job_dic)
+        self.update_job_tab_frame1(init=init_mode)
+        self.update_job_tab_frame2(init=init_mode)
+        self.update_job_tab_frame3(init=init_mode)
+        self.job_tab_status_line.setText('KILLED')
+        self.job_tab_job_info_text.appendPlainText(
+            f'\n[lsfMonitor] Job {jobid} is no longer listed by bjobs; it has been killed.')
+
+    def _schedule_job_refresh(self, jobid, attempt):
+        """Schedule the next post-kill refresh.
+
+        The QTimer is parented to the panel, so it is destroyed together with
+        the panel instead of firing into deleted widgets.
+        """
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+
+        def _retry():
+            timer.deleteLater()
+            self.refresh_job_after_kill(jobid, attempt + 1)
+
+        timer.timeout.connect(_retry)
+        timer.start(KILL_REFRESH_INTERVAL)
 
     def kill_job(self, jobid=None):
         """
         Kill job with "bkill".
+
+        Returns (return_code, output_text): output_text merges bkill's stdout
+        and stderr so the caller can classify the result ("is being terminated"
+        lives on stdout, errors on stderr) and show it in the GUI; the stdout
+        log is not always visible to GUI users.
         """
         if jobid:
             common.bprint(f'Kill job "{jobid}".', date_format='%Y-%m-%d %H:%M:%S')
 
             command = 'bkill ' + str(jobid)
             (return_code, stdout, stderr) = common.run_command(command)
+            parts_list = []
+
+            for stream in (stdout, stderr):
+                text = stream.decode('utf-8', 'replace') if isinstance(stream, bytes) else str(stream)
+
+                if text.strip():
+                    parts_list.append(text.strip())
+
+            output_text = '\n'.join(parts_list)
 
             if return_code == 0:
                 common.bprint(f'Kill {jobid} successfully!', date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage('Info', f'Kill {jobid} successfully!', persistent=True)
-                my_show_message.start()
-                # Non-blocking auto-close: a singleShot timer terminates the
-                # prompt after a short delay so the UI stays responsive (the
-                # old time.sleep(5) blocked the main thread for the whole
-                # window)
-                QTimer.singleShot(2500, my_show_message.terminate)
             else:
                 common.bprint(f'Failed on killing {jobid}.', date_format='%Y-%m-%d %H:%M:%S')
-                common.bprint(str(stderr, 'utf-8').strip(), date_format='%Y-%m-%d %H:%M:%S')
-                my_show_message = ShowMessage(f'Kill {jobid} fail', str(str(stderr, 'utf-8')).strip(), persistent=True)
-                my_show_message.start()
-                # Persistent prompts never auto-close on their own — schedule
-                # the terminate so a failure prompt can't become an orphan
-                QTimer.singleShot(5000, my_show_message.terminate)
+                common.bprint(output_text, date_format='%Y-%m-%d %H:%M:%S')
 
-            return return_code
+            return return_code, output_text
 
-        return -1
+        return -1, ''
 
     def trace_job(self, jobid='', job_status=''):
         """
@@ -5788,6 +5999,8 @@ class CheckIssueReason(QThread):
         super(CheckIssueReason, self).__init__()
         self.job = job
         self.issue = issue
+        self._proc = None
+        self._proc_ready = threading.Event()
 
     def run(self):
         command = [str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/tools/check_issue_reason', '-i', str(self.issue)]
@@ -5796,7 +6009,38 @@ class CheckIssueReason(QThread):
             common.bprint(f'Getting job {self.issue.lower()} reason for "{self.job}" ...', date_format='%Y-%m-%d %H:%M:%S')
             command += ['-j', str(self.job)]
 
-        subprocess.run(command)
+        try:
+            self._proc = subprocess.Popen(command)
+        except Exception as error:
+            common.bprint(f'Failed on starting check_issue_reason: {error}', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
+            self._proc_ready.set()
+
+            return
+
+        self._proc_ready.set()
+        self._proc.wait()
+
+    def stop(self):
+        """Kill the child tool window and wait for run() to return."""
+
+        if self._proc is None:
+            self._proc_ready.wait(timeout=2.0)
+
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except Exception:
+                pass
+
+            try:
+                self._proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    self._proc.kill()
+                except Exception:
+                    pass
+
+        self.wait(3000)
 
 
 #################

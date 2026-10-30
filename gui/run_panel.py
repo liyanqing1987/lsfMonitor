@@ -68,6 +68,18 @@ class RunPanel(PanelBase):
         """No special entry args for the run panel."""
         return
 
+    def cleanup(self):
+        """Stop the executor before the panel is destroyed.
+
+        The reference is intentionally kept: dropping it while the thread is
+        still running would destroy a live QThread and abort the process.
+        """
+        thread = self.run_thread
+
+        if thread is not None:
+            thread.stop()
+            thread.wait(5000)
+
     def register_menubar_actions(self, menubar, shared_menus=None):
         """Register export action into the shared File menu."""
         if not shared_menus:
@@ -687,9 +699,12 @@ class RunPanel(PanelBase):
         self._progress_overlay.show()
         self._progress_overlay.raise_()
 
+        # No Qt parent: a parented QThread is deleted together with the panel,
+        # which aborts the process when the thread is still running. cleanup()
+        # stops it explicitly instead.
         self.run_thread = RunThread(
             hosts_list, command, timeout, max_parallel,
-            ssh_targets=self.ssh_target_dict, ssh_command_base=default_ssh_command, parent=self,
+            ssh_targets=self.ssh_target_dict, ssh_command_base=default_ssh_command,
         )
         self.run_thread.host_finished.connect(self.on_host_finished)
         self.run_thread.progress.connect(self.on_progress)

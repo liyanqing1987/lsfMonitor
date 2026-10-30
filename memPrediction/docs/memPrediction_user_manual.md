@@ -5,7 +5,7 @@
 | **Product Name** | memPrediction |
 | **Product Version** | V1.1 |
 | **Release Date** | 2026.02 |
-| **Contact** | @张静文 (zhangjingwen.silvia@picoheart.com)、@李艳青 (liyanqing.1987@picoheart.com) |
+| **Contact** | @李艳青 (liyanqing1987@163.com)、@张静文 |
 
 ---
 
@@ -24,14 +24,14 @@
     - [3.3.1 定时采样部署 (required)](#331-定时采样部署-required)
     - [3.3.2 定时分析部署 (optional)](#332-定时分析部署-optional)
     - [3.3.3 定时训练部署 (required)](#333-定时训练部署-required)
-    - [3.3.5 在 LSF 中使用内存预测服务](#335-在-lsf-中使用内存预测服务)
-      - [3.3.5.1 部署模型预测 web 服务 (required)](#3351-部署模型预测-web-服务-required)
-      - [3.3.5.2 在 LSF 中启用模型预测服务 (required)](#3352-在-lsf-中启用模型预测服务-required)
-    - [3.3.6 Web 应用部署 (optional)](#336-web-应用部署-optional)
-      - [3.3.6.1 部署 Elastic Search 数据库](#3361-部署-elastic-search-数据库)
-      - [3.3.6.2 部署 Web 后端服务](#3362-部署-web-后端服务)
-      - [3.3.6.3 部署 Web 前端服务](#3363-部署-web-前端服务)
-      - [3.3.6.4 数据库导入](#3364-数据库导入)
+    - [3.3.4 在 LSF 中使用内存预测服务](#334-在-lsf-中使用内存预测服务)
+      - [3.3.4.1 部署模型预测 web 服务 (required)](#3341-部署模型预测-web-服务-required)
+      - [3.3.4.2 在 LSF 中启用模型预测服务 (required)](#3342-在-lsf-中启用模型预测服务-required)
+    - [3.3.5 Web 应用部署 (optional)](#335-web-应用部署-optional)
+      - [3.3.5.1 部署 Elastic Search 数据库](#3351-部署-elastic-search-数据库)
+      - [3.3.5.2 部署 Web 后端服务](#3352-部署-web-后端服务)
+      - [3.3.5.3 部署 Web 前端服务](#3353-部署-web-前端服务)
+      - [3.3.5.4 数据库导入](#3354-数据库导入)
   - [3.4 工具效果演示](#34-工具效果演示)
 - [四、工具介绍](#四工具介绍)
   - [4.1 sample: 数据采集工具](#41-sample-数据采集工具)
@@ -165,19 +165,17 @@ Python 3.12.12
 
 ```bash
 [root@ic-admin2 memPrediction]# python3 install.py -h
-usage: install.py [-h] [-p PREFIX] [-c] [-f]
+usage: install.py [-h] [-c] [-f]
 
 options:
-  -h, --help            show this help message and exit
-  -p PREFIX, --prefix PREFIX
-                        Specify lsfMonitor install path on config file, default is current directory.
-  -c, --clean           Cleanup old installation.
-  -f, --force           Install by force.
+  -h, --help   show this help message and exit
+  -c, --clean  Cleanup old installation.
+  -f, --force  Install by force.
 ```
 
 参数说明：
 
-- **prefix (-p)**：指定 memPrediction 的安装路径，默认安装在当前路径下。
+- **安装路径**：固定为执行命令时的当前目录（CWD）；如需安装到其他位置，请先 `cd` 到目标目录。
 - **clean (-c)**：指定该参数时，清理所有安装时生成的脚本和路径，将路径恢复到没有安装的情况。
 - **force (-f)**：在同一个路径下重复进行安装时，可以指定 `-f` 参数，将重新生成 config.py 等配置文件。默认为 False。
 
@@ -343,7 +341,7 @@ LSF_ENVDIR=/ic/software/tools/lsf/conf
 
 采集到的 job 信息，可以用于 job 的 memory/cpu 资源使用方面的分析。memory 分析会生成一份 markdown 报告，两种分析都会生成若干分析图表。这一步对于模型预测来说，不是必须的，而仅仅提供资源使用率方面的参考。
 
-如果需要定时进行 memory 和 cpu 方面的分析报告，可以将 report 也配置为定时任务，以便生成定期的 job 资源使用分析报告。report 工具更详细的用法请参考第四章第二小节 train：数据训练工具，其中提供了报告模板配置方法和模板的基本样式，这里仅记录快速上手配置方法。
+如果需要定时进行 memory 和 cpu 方面的分析报告，可以将 report 也配置为定时任务，以便生成定期的 job 资源使用分析报告。report 工具更详细的用法请参考第四章第二小节 report：数据分析工具，其中提供了报告模板配置方法和模板的基本样式，这里仅记录快速上手配置方法。
 
 该定时任务的 crontab 不需要额外配置环境变量，仅配置定时任务即可：`0 0 * * 1 ${INSTALL_PATH}/bin/report -m`，需要将其中的 `${INSTALL_PATH}` 更改为安装路径。
 
@@ -361,7 +359,7 @@ LSF_ENVDIR=/ic/software/tools/lsf/conf
 
 工具提供**模型训练脚本 train.sh**，在安装路径的 tools 目录下可以找到，可以通过直接执行该脚本的方式，进行模型训练和模型更新。模型训练也可以使用 crontab，定期使用采集到的数据进行训练，**推荐的定时任务频率是间隔 1 周以上**。
 
-train 工具更详细的用法请参考第四章第三小节 train：数据训练工具，其中提供了模型调优的方法和思路，这里仅记录快速上手配置方法。
+train 工具更详细的用法请参考第四章第三小节 train：模型训练工具，其中提供了模型调优的方法和思路，这里仅记录快速上手配置方法。
 
 该定时任务的 crontab 不需要额外配置环境变量，仅配置定时任务即可：`0 0 1 * * ${INSTALL_PATH}/tools/train.sh`，需要将其中的 `${INSTALL_PATH}` 更改为安装路径。
 
@@ -372,7 +370,7 @@ train 工具更详细的用法请参考第四章第三小节 train：数据训�
 0 0 1 * * /ic/software/tools/memPrediction/tools/train.sh
 ```
 
-#### 3.3.5 在 LSF 中使用内存预测服务
+#### 3.3.4 在 LSF 中使用内存预测服务
 
 memPrediction 可在 LSF 作业提交阶段通过 esub 自动调用预测服务。当 Job 未指定 memory 预留时，esub 会请求模型预测推荐值，并将该值写入 Job 的 `rusage[mem]` 作为内存预留值。
 
@@ -394,7 +392,7 @@ Job ---------------> 请求 memory 预测服务 ----> 访问内存预测服务 i
 >
 > 如果需要修改 memPrediction 内存预测服务所在的机器和端口，可以参考 4.5 内存预测服务 修改相关配置信息并重启服务生效。**如果当前有一个以上网络互相隔离的环境，需要在每个环境中的重新安装部署 memPrediction 服务和配置 esub 内存预测脚本。**
 
-##### 3.3.5.1 部署模型预测 web 服务 (required)
+##### 3.3.4.1 部署模型预测 web 服务 (required)
 
 由于模型的精准度和训练数据的分布和量是息息相关的。因此，**建议在数据采集一个月以上之后，再部署 memory 预测的 web 服务**。
 
@@ -416,7 +414,7 @@ check predict web status...
       Tasks: 1
       Memory: 3.5M
       CGroup: /system.slice/predict_web.service
-              └─9445 /ic/software/tools/python3/3.12.12/bin/python3.8 /ic/software/tools/python3/3.12.12/bin/gunicorn -c predict_gconf.py predict_web:app
+              └─9445 /ic/software/tools/python3/3.12.12/bin/python3 /ic/software/tools/python3/3.12.12/bin/gunicorn -c predict_gconf.py predict_web:app
 
 Jun 14 11:43:44 ic-admin2 systemd[1]: Started LSF memory prediction web service.
 ```
@@ -431,7 +429,7 @@ Jun 14 11:43:44 ic-admin2 systemd[1]: Started LSF memory prediction web service.
 ...
 ```
 
-##### 3.3.5.2 在 LSF 中启用模型预测服务 (required)
+##### 3.3.4.2 在 LSF 中启用模型预测服务 (required)
 
 可以使用 esub 的方式，在 LSF 中使用该内存预测服务。
 
@@ -463,11 +461,11 @@ lsadmin reconfig
 
 > 该 `esub.mem_predict` 文件主要实现的是当预留内存为 0 的时候，帮助用户使用模型预测的 memory 值进行内存预留的功能。
 
-#### 3.3.6 Web 应用部署 (optional)
+#### 3.3.5 Web 应用部署 (optional)
 
 memPrediction 提供 Web 应用的部署工具 **setup**，可以在 memPrediction 安装路径下的 `web_app` 文件夹下找到这个工具。该工具不需要额外配置即可在命令行端快速启动 Web 应用。
 
-##### 3.3.6.1 部署 Elastic Search 数据库
+##### 3.3.5.1 部署 Elastic Search 数据库
 
 memPrediction 的 Web 应用使用的数据库是 **Elastic Search** 数据库，因此在启动 Web 应用之前，需要先启动 Elastic Search 数据库。
 
@@ -502,7 +500,7 @@ curl -L -O https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.
 [2025-03-27 20:29:42] *Info*: Rewrite configuration done.
 ```
 
-##### 3.3.6.2 部署 Web 后端服务
+##### 3.3.5.2 部署 Web 后端服务
 
 memPrediction 可以使用部署工具 setup，执行 `setup --backend`，直接启动 Web 后端应用。
 
@@ -521,7 +519,7 @@ WARNING: This is a development server. Do not use it in a production deployment.
  * Running on http://10.232.134.66:12345
 ```
 
-##### 3.3.6.3 部署 Web 前端服务
+##### 3.3.5.3 部署 Web 前端服务
 
 memPrediction 可以使用部署工具 setup，执行 `setup --frontend`，启动最终可以进行信息检索和查看的 Web 前端应用。在终端最终打印出的 Network 网址，例如下面例子中的 `http://10.232.134.66:3000/`，可以直接通过浏览器进行访问。
 
@@ -567,19 +565,19 @@ Rsbuild v0.6.15
   > Network: http://10.232.134.66:3000/
 ```
 
-##### 3.3.6.4 数据库导入
+##### 3.3.5.4 数据库导入
 
 经过以上步骤，现在 Web 页面已经全部导入了，但是因为数据库中还没有数据，所以还不能看到信息。
 
 memPrediction 的 Web 应用自带一个数据归档工具，只需要将数据归档工具部署为一个定时任务，就可以将 memPrediction 已经采集到的 job 数据，或者 lsfMonitor 采样到的 job 数据自动归档到数据库中。
 
-该定时任务的 crontab 不需要额外配置环境变量，仅配置定时任务即可：`59 59,23 * * * ${INSTALL_PATH}/web_app/setup --collect`，需要将其中的 `${INSTALL_PATH}` 更改为安装路径。
+该定时任务的 crontab 不需要额外配置环境变量，仅配置定时任务即可：`59 22,23 * * * ${INSTALL_PATH}/web_app/setup --collect`，需要将其中的 `${INSTALL_PATH}` 更改为安装路径。
 
 以下是一个 crontab 的范例：
 
 ```bash
 # For memPrediction web data Collect
-59 59,23 * * * /ic/software/tools/memPrediction/web_app/setup --collect
+59 22,23 * * * /ic/software/tools/memPrediction/web_app/setup --collect
 ```
 
 ### 3.4 工具效果演示
@@ -592,7 +590,7 @@ memPrediction: The recommended rusage memory value is: 120768MB.
 Job <35747> is submitted to queue <test>.
 ```
 
-可以看到，memPrediction 提供的内存预测服务预测该 job 的实际内存用量为 **45MB**（此处原文描述为实际最大使用内存 268GB 对应预测 271GB 的例子，但演示中为简单 ls 命令预测 120768MB ≈ 118GB），并会为用户的该 job 自动预留内存，可以使用 `bjobs -UF <jobid>` 查看是否为确实为该 job 预留了内存：
+可以看到，memPrediction 的内存预测服务为该 job 预测的 max memory 为 **120768MB**（约 118GB），并会为该 job 自动预留内存。预测值的精度取决于模型质量和训练数据（演示时模型尚未充分训练，对 `ls` 这类小命令的预测值会明显偏大，模型评估方法见 4.3.3），可以使用 `bjobs -UF <jobid>` 查看是否确实为该 job 预留了内存：
 
 ```bash
 [root@openlava-master etc]# bjobs -UF 35747
@@ -831,9 +829,8 @@ pictures_memory  rusage_mem_analysis_from_2024-05-15_to_2024-06-14.md  tables_me
 
 - **tolerance pie chart**：首先定义用户预留 memory 的容许范围。
   - **容许范围外多预留 memory**：使用 `rusage memory - max memory * (1 + boundary)` 计算该 job 多预留 memory。
-  - **容许比例表**：`boundray_list = [4, 3, 2, 1, 1, 0.5, 0.5, 0.3, 0.3, 0.3]`
-    - 解释：
-    - 0-1GB：容许 rusage_mem 指定为 max mem*5
+  - **容许倍数按 job 真实 max memory 分档**（与 4.3.4 的报告 bins 一一对应），`boundary_list = [4, 3, 2, 1, 1, 0.5, 0.5, 0.3, 0.3, 0.3, 0.3]`，即：
+    - ≤1GB：容许 rusage_mem 指定为 max mem*5
     - 1-2GB：容许 rusage_mem 指定为 max mem*4
     - 2-4GB：容许 rusage_mem 指定为 max mem*3
     - 4-16GB：容许 rusage_mem 指定为 max mem*2
@@ -1378,7 +1375,7 @@ predict cost time: 0.83 s
 277801
 ```
 
-预测结果为 **277802 MB**，即 **271GB**，跟实际使用内存量（268GB）十分接近。
+预测结果为 **277801 MB**，即 **271GB**，跟实际使用内存量（268GB）十分接近。
 
 ##### 4.4.3.1 获取预测结果
 
@@ -1389,7 +1386,7 @@ predict cost time: 0.83 s
 PREDICT_SCRIPT='/ic/software/tools/memPrediction/bin/predict'
 
 # 对 job 进行预测
-JOB_PREDICT_MEMORY_CONTENT=$($PREDICT_SCRIPT --job_name \
+JOB_PREDICT_MEMORY_CONTENT=$($PREDICT_SCRIPT \
     --job_name $job_name \
     --user $user --started_time $started_time --command $command \
     --cwd $cwd --project $project --queue $queue 2>&1)
@@ -1474,7 +1471,7 @@ JOB_PREDICT_MEMORY=$(echo "$JOB_PREDICT_MEMORY_CONTENT" | tail -n1)
 
 ### 4.6 memory 分析 Web 应用
 
-如果已经部署了 memPrediction 的 Web 应用，就可以通过浏览器，使用部署好的前端界面的 URL 链接，直接访问到 memPrediction 的 Web 应用界面。如果还没有部署，需要参考第三章 3.3.6 Web 应用部署，进行部署，再使用。
+如果已经部署了 memPrediction 的 Web 应用，就可以通过浏览器，使用部署好的前端界面的 URL 链接，直接访问到 memPrediction 的 Web 应用界面。如果还没有部署，需要参考第三章 3.3.5 Web 应用部署，进行部署，再使用。
 
 Web 提供两个 memory 分析界面，一个是**用户内存使用分析界面**，一个是**任务内存分布分析界面**。
 
@@ -1494,7 +1491,7 @@ Web 提供两个 memory 分析界面，一个是**用户内存使用分析界面
 - **平均最大内存**：`Σ最大内存 / 任务数量`
 - **平均预留内存**：`Σ预留内存 / 任务数量`
 - **95 分位最大内存**：`Σ(开始日期到结束日期 每天95分位最大内存) / (结束日期 - 开始日期)`
-- **CPU 超用量**：`Σmax(0, CPU利用率 - 1)`
+- **CPU 超用量**：`Σmax(0, CPU利用率 - 1)`（CPU利用率 = 实际使用核数/申请核数；该指标按 job 累计超出的比率，大于 0 表示实际用量超过申请）
 
 点击表格右上方的"收起"后，可以看到表格下方的饼状图。饼状图展示的是内存超用量最大的前五个用户，和其他所有用户所占内存超用量总量的占比。
 

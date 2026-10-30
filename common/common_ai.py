@@ -16,6 +16,11 @@ import shlex
 import datetime
 import threading
 
+try:
+    import pwd
+except ImportError:
+    pwd = None
+
 import numpy as np
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -1766,6 +1771,18 @@ def collect_cluster_snapshot(tool='lsf', raw_data=None):
     return '\n\n'.join(sections)
 
 
+def _is_system_user(name):
+    """True when name resolves to a local account; busers lists users and groups together."""
+    if pwd is None:
+        return True
+
+    try:
+        pwd.getpwnam(name)
+        return True
+    except KeyError:
+        return False
+
+
 def _lsf_int(value):
     """Parse an LSF integer cell; return None for '-', 'unlimited', or non-numeric."""
     if value is not None and re.match(r'^\d+$', str(value).strip()):
@@ -2075,8 +2092,8 @@ def compute_cluster_metrics(tool='lsf', raw_data=None):
         users = []
 
         for i, user in enumerate(busers_dic.get('USER/GROUP', [])):
-            # Skip groups: real users contain a dot (e.g. "liyanqing.1987"),
-            if user == 'default' or '.' not in user:
+            # busers mixes users and project groups; keep only real accounts.
+            if user == 'default' or not _is_system_user(user):
                 continue
 
             run = _lsf_int(busers_dic.get('RUN', [''] * (i + 1))[i]) or 0
@@ -3649,7 +3666,7 @@ _EXIT_CODE_CN = {
     ('139', 'SEGV'): '段错误（内存访问非法）',
     ('134', 'ABRT'): '程序异常中止（assert/abort）',
     ('136', 'FPE'): '浮点异常（除零等）',
-    ('143', 'TERM'): '被 SIGTERM 正常终止',
+    ('143', 'TERM'): '被 SIGTERM 终止（bkill 默认方式）',
     ('1', 'TERM'): '被终止且返回错误',
 }
 
@@ -4082,7 +4099,7 @@ Produce ONLY two sections — <h2>状态分析</h2> and <h2>分析汇总</h2> �
 - **RUN**: analyze performance — is idle_factor low (CPU idle)? Is host load high (ut/r1m/mem tight)? Is memory near limit? If runtime > 14 days, mention it as "运行时间较长" (NOT "zombie" unless there's concrete evidence the job is stuck). If the job uses EDA license, use query_license_info to check. Each finding cites concrete numbers + job_id. Compare runtime to RUNLIMIT only if RUNLIMIT data is available, and only say "接近" when runtime > 80% of RUNLIMIT.
 - **EXIT**: analyze failure — exit_code + term_signal pattern. TERM_EXTERNAL_SIGNAL 或类似信号表示作业被 LSF 外部信号终止，可能原因包括：(1) 操作系统 OOM killer（检查 max_mem 是否接近或超过主机内存）; (2) early_oom_killer 等第三方工具; (3) 其他系统进程发送信号。若 max_mem 较高，疑似 OOM。
   验证 OOM 疑似：调用 run_command 执行 `bmonitor_cli db host-load <exec_host> --days N`（exec_host 为作业执行主机，N 为 job 退出时间距今的天数，向上取整，如距今 2 天则 --days 2），查看 job 退出时间点附近的主机负载时序，重点关注 avail mem（可用内存）——如果 job 退出前 avail mem 很低（接近 0 或远低于正常水平），则很可能是 OOM 导致的。如需查内核 OOM 日志，提示用户在执行主机上执行 `dmesg | grep -i "oom" | tail -20`（AI 不直接 ssh）。引用 max_mem / exit_code / term_signal + 主机内存时序数据 + 推断依据。
-  **主动查看错误日志**：作业信息中有 CWD 和 Command 字段。如果是应用层错误（exit code 1/2 等），应主动调用 run_command 查看作业的错误日志或输出文件，而不是让用户自己去查。常见做法：(1) 在 CWD 目录下找 .log/.err/.out 文件; (2) 用 `bjobs -l <jobid>` 查看 LSF 日志中的退出详情; (3) 如果 CWD 下有 vmanager session 日志，查看 debug_logs/ 目录下的 .err 文件。把查到的错误信息直接写进报告，不要只说"用户应检查错误日志"。
+  **主动查看错误日志**：作业信息中有 CWD 和 Command 字段。如果是应用层错误（exit code 1/2 等），应主动调用 run_command 查看作业的错误日志或输出文件，而不是让用户自己去查。常见做法：(1) 在 CWD 目录下找 .log/.err/.out/.rpt 文件; (2) 用 `bjobs -l <jobid>` 查看 LSF 日志中的退出详情; (3) 按验证/仿真工具定位日志：Cadence vManager 查 session 目录及 debug_logs/*.err；Synopsys VCS 查 vcs.log/simv.log；Cadence Xcelium/xrun 查 xrun.log/xmsim.log 及 xcelium.d/；Siemens Questa/ModelSim 查 transcript；JasperGold 查 jg.log/proof.*；通用再查 make.log、nohup.out 及其它 *.log。把查到的错误信息直接写进报告，不要只说"用户应检查错误日志"。
 - **DONE**: brief confirmation that the job completed normally; mention runtime objectively (e.g. "运行 3 天完成") without judgment.
 - **Other states** (SUSP/UNKWN/WAIT/ZOMBI/PROV): explain what the state means, why the job is in it, whether action is needed (resume/kill).
 
@@ -4094,9 +4111,9 @@ Produce ONLY two sections — <h2>状态分析</h2> and <h2>分析汇总</h2> �
 
 ## LSF memory unit knowledge
 
-- 本集群 LSF_UNIT_FOR_LIMITS = MB，所以 rusage[mem=] 的单位是 MB，不支持 G/T 后缀。
-- 建议用户重新提交时，内存数值用 MB：如需 900GB 内存，写 -R "rusage[mem=921600]"（900 GB × 1024 = 921600 MB）。注意 GB → MB 是 ×1024，TB → MB 是 ×1024×1024。
-- 不要写 rusage[mem=900G]，这种后缀在本集群不被识别。
+- 本集群 LSF_UNIT_FOR_LIMITS = {lsf_unit}，所以 rusage[mem=] 的数值单位是 {lsf_unit}。
+- 建议用户重新提交时，先把内存需求换算成 {lsf_unit} 再写纯数字（1 GB = 1024 MB，1 MB = 1024 KB，1 TB = 1024 GB），不要带 K/M/G/T 后缀。
+- 不要写 rusage[mem=900G] 这类带后缀的写法，LSF 会按 LSF_UNIT_FOR_LIMITS 解释数值。
 
 ## bsub -M knowledge (common pitfall)
 
@@ -4694,8 +4711,14 @@ def generate_job_analyze_report(api_base_url, api_key, model_name, jobid, tool='
         f"{'有 ' + str(len(metrics.get('mem_curve', []))) + ' 个采样点' if metrics.get('mem_curve') else '无采样数据'}\n"
     )
 
+    try:
+        from common import common_lsf
+        lsf_unit = common_lsf.get_lsf_unit_for_limits() or 'MB'
+    except Exception:
+        lsf_unit = 'MB'
+
     messages = [
-        {"role": "system", "content": JOB_ANALYZE_SYSTEM_PROMPT},
+        {"role": "system", "content": JOB_ANALYZE_SYSTEM_PROMPT.replace('{lsf_unit}', lsf_unit)},
         {"role": "user", "content": user_prompt},
     ]
 

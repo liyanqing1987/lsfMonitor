@@ -10,6 +10,7 @@
 import os
 import re
 import sys
+import signal
 import socket
 import getpass
 import datetime
@@ -324,12 +325,31 @@ def run_command(command, mystdin=subprocess.DEVNULL, mystdout=subprocess.PIPE, m
     stdin defaults to DEVNULL so interactive prompts (e.g. ssh host-key
     confirmation) get EOF immediately and exit instead of blocking forever.
     """
-    SP = subprocess.Popen(command, shell=True, stdin=mystdin, stdout=mystdout, stderr=mystderr)
+    SP = subprocess.Popen(command, shell=True, stdin=mystdin, stdout=mystdout, stderr=mystderr, start_new_session=True)
+    pgid = None
+
+    try:
+        pgid = os.getpgid(SP.pid)
+    except OSError:
+        pass
 
     try:
         (stdout, stderr) = SP.communicate(timeout=timeout)
     except subprocess.TimeoutExpired:
-        SP.kill()
+        # Kill the whole process group: killing only the shell leaves
+        # grandchildren (e.g. sleep under "sh -c") holding the pipes, and
+        # communicate() would block until they exit on their own
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except OSError:
+                pass
+
+        try:
+            SP.kill()
+        except OSError:
+            pass
+
         SP.communicate()
         return 1, b'', f'Command timed out after {timeout}s: {command}'.encode()
 

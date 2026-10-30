@@ -96,16 +96,17 @@ class GetLicenseInfo():
             stdout_list = []
             lm_license_file_list = os.environ.get('LM_LICENSE_FILE', '').split(':')
 
-            with ProcessPoolExecutor(max_workers=min(len(lm_license_file_list), 16)) as executor:
-                job_list = []
+            executor = ProcessPoolExecutor(max_workers=min(len(lm_license_file_list), 16))
+            job_list = []
 
+            try:
                 for lm_license_file in lm_license_file_list:
                     if lm_license_file:
                         lmstat_command = self.get_lmstat_command(specified_server=lm_license_file)
-                        job_list.append(executor.submit(common.run_command, lmstat_command))
+                        job_list.append(executor.submit(common.run_command, lmstat_command, timeout=120))
 
                 try:
-                    for job in as_completed(job_list, timeout=120):
+                    for job in as_completed(job_list, timeout=150):
                         try:
                             (return_code, stdout, stderr) = job.result()
 
@@ -114,13 +115,17 @@ class GetLicenseInfo():
                         except Exception as error:
                             common.bprint(f'lmstat job failed: {error}', level='Warning')
                 except TimeoutError:
-                    common.bprint('Some lmstat jobs timed out after 120s, results may be incomplete.', level='Warning')
+                    common.bprint('Some lmstat jobs timed out after 150s, results may be incomplete.', level='Warning')
 
                     for pending_job in job_list:
                         pending_job.cancel()
+            finally:
+                # Each lmstat carries its own 120s timeout, so do not block the
+                # caller on a stuck worker while shutting the pool down
+                executor.shutdown(wait=False, cancel_futures=True)
         else:
             lmstat_command = self.get_lmstat_command()
-            (return_code, stdout, stderr) = common.run_command(lmstat_command)
+            (return_code, stdout, stderr) = common.run_command(lmstat_command, timeout=120)
             stdout_list = stdout.decode('utf-8', errors='replace').split('\n')
 
         # Parse lmstat output message

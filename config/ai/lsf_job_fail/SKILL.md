@@ -109,17 +109,22 @@ ls -la <script_path>                # 检查脚本权限
 
 #### 2.2 Exit Code >= 128：系统信号终止
 
-信号编号 = Exit Code - 128
+128+N 表示作业被编号为 N 的信号终止。信号本身不携带发送者身份，**是谁杀的看 Step 3 的 TERM_***（TERM_OWNER=用户自己 bkill、TERM_ADMIN=管理员 bkill、TERM_MEMLIMIT/TERM_RUNLIMIT=LSF 超限终止）。注意 128 本身无信号含义（程序直接 exit(128)）；程序主动 exit(N) 时值不会落到 >=128 区间，因此 1~127 均为程序自己退出。
 
 | 退出码 | 信号 | 含义 | 最常见原因 |
 |---|---|---|---|
 | 130 | SIGINT (2) | Ctrl+C 中断 | 用户手动中断 |
 | 131 | SIGQUIT (3) | 退出+core dump | 程序异常 |
+| 132 | SIGILL (4) | CPU 不支持指令 | 编译目标与机器架构不匹配 |
 | 134 | SIGABRT (6) | 异常终止 | 断言失败 |
-| 137 | SIGKILL (9) | 被强制杀死 | **内存溢出 OOM** |
+| 135 | SIGBUS (7) | 总线错误 | 读损坏文件、mmap 文件被截断（存储问题） |
+| 136 | SIGFPE (8) | 算术异常 | 除零、浮点溢出 |
+| 137 | SIGKILL (9) | 被强制杀死 | **内存溢出 OOM**（TERM_MEMLIMIT/OOM killer/kill -9） |
 | 139 | SIGSEGV (11) | 段错误 | 内存越界、空指针 |
-| 143 | SIGTERM (15) | 被优雅终止 | 管理员/调度器终止 |
+| 141 | SIGPIPE (13) | 管道破裂 | 读取方已退出仍写 stdout |
+| 143 | SIGTERM (15) | 被请求终止 | bkill 默认方式（TERM_OWNER=用户自己 / TERM_ADMIN=管理员） |
 | 152 | SIGXCPU (24) | CPU 时间超限 | 超过 CPULIMIT |
+| 153 | SIGXFSZ (25) | 文件大小超限 | 输出（fsdb/wave/日志）超出文件大小限制 |
 
 **Exit Code 137 深度排查：**
 - MAX MEM > MEMLIMIT → LSF 杀死
@@ -151,6 +156,11 @@ ls -la <script_path>                # 检查脚本权限
 | TERM_PREEMPT | 被高优先级作业抢占 | 提交到更高优先级队列 |
 | TERM_WINDOW | 队列时间窗口关闭 | 换无限制队列 |
 | TERM_EXTERNAL_SIGNAL | 外部信号 | 查节点系统日志，通常是 OOM killer |
+| TERM_OTHER | LSF 泛化终止原因 | 查 `bhist -l` 事件细节 |
+| TERM_ZOMBIE | LSF 不可用（mbatchd 异常）时终止 | 联系管理员确认 |
+| TERM_RC | 云平台回收资源连接器主机 | 联系管理员 |
+
+> 完整的 TERM_* 清单见 `config/lsf/term_signal.yaml`（33 条）。
 
 ### Step 4：进阶排查
 

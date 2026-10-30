@@ -182,10 +182,10 @@ class PredictModel:
             if column in job_df.columns:
                 dt = job_df[column].dtypes
 
-                if dt == "int" or dt == "float":
-                    job_df[column].fillna(0, inplace=True)
+                if str(dt).startswith(('int', 'float')):
+                    job_df[column] = job_df[column].fillna(0)
                 elif dt == 'object':
-                    job_df[column].fillna("None", inplace=True)
+                    job_df[column] = job_df[column].fillna("None")
 
         job_df['rusage_mem'] = 0.0
 
@@ -237,9 +237,9 @@ class PredictModel:
             job_df["hour_of_day"] = 0
             job_df["month"] = 0
 
-        job_df["day_of_weekday"].fillna('None', inplace=True)
-        job_df["hour_of_day"].fillna(0, inplace=True)
-        job_df["month"].fillna(0, inplace=True)
+        job_df["day_of_weekday"] = job_df["day_of_weekday"].fillna('None')
+        job_df["hour_of_day"] = job_df["hour_of_day"].fillna(0)
+        job_df["month"] = job_df["month"].fillna(0)
 
         return job_df
 

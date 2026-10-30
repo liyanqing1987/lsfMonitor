@@ -30,12 +30,13 @@ class ESDB:
         self.ep_client = None
         self.es_client = None
 
-    def create_ep_client(self):
+    def _connection_params(self):
         """
-        Create Elastic Pandas client
+        Build Elasticsearch client kwargs for the installed client version.
+        8.x replaced http_auth/use_ssl with basic_auth and URL-based TLS.
         """
         params = {}
-        es_url = self.config.get('ESURL')
+        es_url = str(self.config.get('ESURL') or '')
         es_timeout = self.config.get('TIMEOUT', 1)
         es_max_retries = self.config.get('MAX_RETRIES', 5)
         es_auth = self.config.get('ES_AUTH', False)
@@ -43,18 +44,36 @@ class ESDB:
         es_pass = self.config.get('ES_PASS')
         es_cert = self.config.get('ES_CERT')
 
+        try:
+            from elasticsearch import __version__ as es_version
+            es_major = int(es_version.split('.')[0])
+        except Exception:
+            es_major = 8
+
         if es_user and es_pass and es_auth:
-            params['http_auth'] = (es_user, es_pass)
+            if es_major >= 8:
+                params['basic_auth'] = (es_user, es_pass)
+            else:
+                params['http_auth'] = (es_user, es_pass)
+
         if es_cert:
-            params['use_ssl'] = True
             params['ca_certs'] = es_cert
+            params['verify_certs'] = True
+        elif es_url.startswith('https://'):
+            params['verify_certs'] = True
 
         params['timeout'] = es_timeout
         params['max_retries'] = es_max_retries
         params['retry_on_timeout'] = True
 
+        return params
+
+    def create_ep_client(self):
+        """
+        Create Elastic Pandas client
+        """
         try:
-            self.ep_client = es_pandas(es_url, **params)
+            self.ep_client = es_pandas(self.config.get('ESURL'), **self._connection_params())
         except Exception as e:
             logger.error("Create Elastic Pandas client failed! Error: {}".format(str(e)))
 
@@ -62,25 +81,8 @@ class ESDB:
         """
         Create Elastic client
         """
-        params = {}
-        es_url = self.config.get('ESURL')
-        es_timeout = self.config.get('TIMEOUT', 1)
-        es_max_retries = self.config.get('MAX_RETRIES', 5)
-        es_auth = self.config.get('ES_AUTH', False)
-        es_user = self.config.get('ES_USER')
-        es_pass = self.config.get('ES_PASS')
-        es_cert = self.config.get('ES_CERT')
-        if es_user and es_pass and es_auth:
-            params['http_auth'] = (es_user, es_pass)
-        if es_cert:
-            params['use_ssl'] = True
-            params['ca_certs'] = es_cert
-        params['timeout'] = es_timeout
-        params['max_retries'] = es_max_retries
-        params['retry_on_timeout'] = True
-
         try:
-            self.es_client = Elasticsearch(es_url, **params)
+            self.es_client = Elasticsearch(self.config.get('ESURL'), **self._connection_params())
         except Exception as e:
             logger.error("Create Elastic Pandas client failed! Error: {}".format(str(e)))
 

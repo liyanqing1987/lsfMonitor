@@ -14,6 +14,7 @@ import time
 import copy
 import shlex
 import datetime
+import threading
 
 from PyQt5.QtWidgets import QWidget, QAction, QFrame, QGridLayout, QSplitter, QTableWidget, QTableWidgetItem, QPushButton, QLabel, QLineEdit, QDateEdit, QFileDialog, QApplication
 from PyQt5.QtGui import QIcon, QBrush, QColor, QFont
@@ -243,8 +244,15 @@ class LicensePanel(PanelBase):
         """Stop the background loader if still running on application exit."""
         thread = self._license_load_thread
 
-        if thread is not None:
-            thread.wait(3000)
+        if thread is None:
+            return
+
+        thread.stop()
+        thread.wait(5000)
+
+        # Keep the reference when the fetch could not finish in time: dropping
+        # it would destroy a live QThread and abort the process
+        if not thread.isRunning():
             self._license_load_thread = None
 
     def apply_entry_args(self, args):
@@ -2750,10 +2758,18 @@ class LicenseLoadThread(QThread):
     def __init__(self, panel):
         super().__init__()
         self._panel = panel
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        """Skip emitting the result once the panel is going away."""
+
+        self._stop_event.set()
 
     def run(self):
         license_dic = self._fetch_license_info()
-        self.loaded.emit(license_dic or {})
+
+        if not self._stop_event.is_set():
+            self.loaded.emit(license_dic or {})
 
     def _fetch_license_info(self):
         """Mirror of LicensePanel.get_license_dic's data-fetching body.

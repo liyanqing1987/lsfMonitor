@@ -66,22 +66,25 @@ def get_LM_LICENSE_FILE_setting(module_files_dir_list):
             for file in files:
                 module_file = str(root) + '/' + str(file)
 
-                with open(module_file, 'r') as MF:
-                    print('>>> Parse "' + str(module_file) + '"')
-                    mark = False
+                try:
+                    with open(module_file, 'r', errors='ignore') as MF:
+                        print('>>> Parse "' + str(module_file) + '"')
+                        mark = False
 
-                    for line in MF.readlines():
-                        if not mark:
-                            if re.match(r'^\s*#%Module.*$', line):
-                                mark = True
+                        for line in MF.readlines():
+                            if not mark:
+                                if re.match(r'^\s*#%Module.*$', line):
+                                    mark = True
+                                else:
+                                    break
                             else:
-                                break
-                        else:
-                            for license_server in re.findall(r'\d+@\S+', line):
-                                print('    Find ' + str(license_server))
+                                for license_server in re.findall(r'\d+@\S+', line):
+                                    print('    Find ' + str(license_server))
 
-                                if license_server not in LM_LICENSE_FILE_list:
-                                    LM_LICENSE_FILE_list.append(license_server)
+                                    if license_server not in LM_LICENSE_FILE_list:
+                                        LM_LICENSE_FILE_list.append(license_server)
+                except OSError as warning:
+                    common.bprint(f'Skip "{module_file}": {warning}', level='Warning')
 
     if not LM_LICENSE_FILE_list:
         common.bprint('Not get any valid LM_LICENSE_FILE setting.', level='Warning')
@@ -141,8 +144,15 @@ def write_LM_LICENSE_FILE(LM_LICENSE_FILE_list, LM_LICENSE_FILE_file):
 def main():
     (module_files_dir_list, LM_LICENSE_FILE_file) = read_args()
     LM_LICENSE_FILE_list = get_LM_LICENSE_FILE_setting(module_files_dir_list)
+
+    if not LM_LICENSE_FILE_list:
+        print('')
+        print(f'*Error*: no reachable license server found, "{LM_LICENSE_FILE_file}" is not written.')
+        return 1
+
     write_LM_LICENSE_FILE(LM_LICENSE_FILE_list, LM_LICENSE_FILE_file)
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

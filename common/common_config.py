@@ -3,11 +3,16 @@
 # File Name   : common_config.py
 # Author      : liyanqing.1987
 # Created On : 2026-08-24
-# Description : Unified config loader for the four sidebar panels. Each panel
-#               reads its own config_<name>.py from config/ (lsf / license /
-#               run / ai), overlaid by ~/.lsfMonitor/config/config_<name>.py
-#               Loaded into sys.modules['config_<name>'] via importlib so panel
-#               configs never collide with each other
+# Description : Unified config loader for the top-level default and the four
+#               sidebar panels (lsf / license / run / ai). Every config has a
+#               uniform naming rule and an optional cluster-specific override:
+#
+#                 config.py            <-> config_<cluster>.py
+#                 config_<name>.py     <-> config_<name>_<cluster>.py
+#
+#               Each is overlaid by the user's file of the same name under
+#               ~/.lsfMonitor/config/. Loaded into sys.modules via importlib
+#               so panel configs never collide with each other.
 ################################
 
 import os
@@ -15,73 +20,79 @@ import sys
 import importlib.util
 
 
-def load_config(name):
-    """
-    Load a panel config by name (lsf / license / run / ai).
+def _config_paths(name, cluster):
+    """Return the four config file paths (base, cluster base, user, user cluster).
 
-    Merge behavior:
-      1. Load base config from <install>/config/config_<name>.py.
-      2. If ~/.lsfMonitor/config/config_<name>.py exists, overlay user settings.
-    The resulting module is registered as sys.modules['config_<name>'] and
-    returned.
+    name '' is the top-level config: config.py / config_<cluster>.py.
+    A panel config: config_<name>.py / config_<name>_<cluster>.py.
     """
     install_path = os.environ.get('LSFMONITOR_INSTALL_PATH', '')
-    base_config_file = os.path.join(install_path, 'config', f'config_{name}.py')
     local_config_dir = os.path.join(os.path.expanduser('~'), '.lsfMonitor', 'config')
-    local_config_file = os.path.join(local_config_dir, f'config_{name}.py')
 
-    if not os.path.isfile(base_config_file):
-        raise FileNotFoundError(f'Base config file not found: {base_config_file}')
+    if name:
+        base_name = f'config_{name}.py'
+        cluster_name = f'config_{name}_{cluster}.py'
+    else:
+        base_name = 'config.py'
+        cluster_name = f'config_{cluster}.py'
 
-    config = _load_module_from_file(f'config_{name}', base_config_file)
+    return (
+        os.path.join(install_path, 'config', base_name),
+        os.path.join(install_path, 'config', cluster_name),
+        os.path.join(local_config_dir, base_name),
+        os.path.join(local_config_dir, cluster_name),
+    )
 
-    if os.path.exists(local_config_file):
-        local_config = _load_module_from_file(f'_local_config_{name}', local_config_file)
-        _merge_config(config, local_config)
 
-    sys.modules[f'config_{name}'] = config
+def load_config(name='', cluster=''):
+    """Load the top-level (name='') or one panel's config, with an optional
+    cluster-specific override.
+
+    Merge order (last wins):
+      1. <install>/config/config[_<name>].py
+      2. <install>/config/config[_<name>]_<cluster>.py
+      3. ~/.lsfMonitor/config/config[_<name>].py
+      4. ~/.lsfMonitor/config/config[_<name>]_<cluster>.py
+
+    A missing base raises for panels (name != '') and returns None for the
+    top-level config (e.g. not yet installed).
+    """
+    base_file, cluster_base_file, local_file, cluster_local_file = _config_paths(name, cluster)
+    module_name = f'config_{name}' if name else 'config'
+
+    if os.path.isfile(base_file):
+        config = _load_module_from_file(module_name, base_file)
+        overlay_files = (cluster_base_file, local_file, cluster_local_file)
+    elif not name and os.path.isfile(cluster_base_file):
+        # Top-level cluster file can stand alone (e.g. config.py not installed
+        # yet but the site ships a config_<cluster>.py).
+        config = _load_module_from_file(module_name, cluster_base_file)
+        overlay_files = (local_file, cluster_local_file)
+    elif name:
+        raise FileNotFoundError(f'Base config file not found: {base_file}')
+    else:
+        return None
+
+    for tag, path in enumerate(overlay_files, start=1):
+        if os.path.exists(path):
+            overlay = _load_module_from_file(f'_{tag}_{module_name}', path)
+            _merge_config(config, overlay)
+
+    sys.modules[module_name] = config
 
     return config
 
 
 def reload_config_for_cluster(cluster, name='lsf'):
-    """Reload a panel config with a cluster-specific override. Merge order
-    (last wins): base config_<name>.py < cluster override (install) < user
-    config_<name>.py < user cluster override. If cluster is falsy, reloads
-    just base + user. For name='lsf' the legacy config_<cluster>.py form
-    (no panel prefix) is honored for backward compat."""
-    if not cluster:
-        return load_config(name)
+    """Backward-compatible wrapper of load_config(name, cluster)."""
+    return load_config(name, cluster)
 
-    install_path = os.environ.get('LSFMONITOR_INSTALL_PATH', '')
-    base_config_file = os.path.join(install_path, 'config', f'config_{name}.py')
-    local_config_dir = os.path.join(os.path.expanduser('~'), '.lsfMonitor', 'config')
-    local_config_file = os.path.join(local_config_dir, f'config_{name}.py')
 
-    if name == 'lsf':
-        cluster_config_base = os.path.join(install_path, 'config', f'config_{cluster}.py')
-        cluster_config_local = os.path.join(local_config_dir, f'config_{cluster}.py')
-    else:
-        cluster_config_base = os.path.join(install_path, 'config', f'config_{name}_{cluster}.py')
-        cluster_config_local = os.path.join(local_config_dir, f'config_{name}_{cluster}.py')
-
-    config = _load_module_from_file(f'config_{name}', base_config_file)
-
-    if os.path.exists(cluster_config_base):
-        cluster_base = _load_module_from_file(f'_cluster_base_{name}', cluster_config_base)
-        _merge_config(config, cluster_base)
-
-    if os.path.exists(local_config_file):
-        local_config = _load_module_from_file(f'_local_config_{name}', local_config_file)
-        _merge_config(config, local_config)
-
-    if os.path.exists(cluster_config_local):
-        cluster_local = _load_module_from_file(f'_cluster_local_{name}', cluster_config_local)
-        _merge_config(config, cluster_local)
-
-    sys.modules[f'config_{name}'] = config
-
-    return config
+def load_default_config(cluster=''):
+    """Load the top-level config.py (project defaults), with an optional
+    cluster-specific override (config_<cluster>.py).
+    """
+    return load_config('', cluster)
 
 
 def _load_module_from_file(module_name, file_path):
@@ -95,35 +106,6 @@ def _load_module_from_file(module_name, file_path):
     spec.loader.exec_module(module)
 
     return module
-
-
-def load_default_config():
-    """Load the top-level config.py (project defaults).
-
-    Merge behavior:
-      1. Load <install>/config/config.py.
-      2. If ~/.lsfMonitor/config/config.py exists, overlay user settings.
-    Registered as sys.modules['config'] and returned. Returns None if the
-    base config.py does not exist (e.g. not yet installed).
-    """
-    install_path = os.environ.get('LSFMONITOR_INSTALL_PATH', '')
-    base_config_file = os.path.join(install_path, 'config', 'config.py')
-
-    if not os.path.isfile(base_config_file):
-        return None
-
-    config = _load_module_from_file('config', base_config_file)
-
-    local_config_dir = os.path.join(os.path.expanduser('~'), '.lsfMonitor', 'config')
-    local_config_file = os.path.join(local_config_dir, 'config.py')
-
-    if os.path.exists(local_config_file):
-        local_config = _load_module_from_file('_local_config', local_config_file)
-        _merge_config(config, local_config)
-
-    sys.modules['config'] = config
-
-    return config
 
 
 def _merge_config(base, overlay):

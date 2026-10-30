@@ -21,9 +21,6 @@ def read_args():
     """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-p', '--prefix',
-                        default=CWD,
-                        help='Specify the lsfMonitor install path (recorded in the generated config files); defaults to the current directory.')
     parser.add_argument('-c', '--clean',
                         action='store_true',
                         default=False,
@@ -32,22 +29,16 @@ def read_args():
                         action='store_true',
                         default=False,
                         help='Install by force.')
-    parser.add_argument('-m', '--memPrediction',
-                        action='store_true',
-                        default=False,
-                        help='Install memPrediction the same time.')
-
     args = parser.parse_args()
 
-    return args.prefix, args.clean, args.force, args.memPrediction
+    return args.clean, args.force
 
 
 class Installation():
-    def __init__(self, prefix, clean_mode, force_mode, install_memPrediction):
-        self.prefix = os.path.abspath(prefix)
+    def __init__(self, clean_mode, force_mode):
+        self.prefix = CWD
         self.clean_mode = clean_mode
         self.force_mode = force_mode
-        self.install_memPrediction = install_memPrediction
         self.tool_list = [
             'bin/bmonitor',
             'bin/bmonitor_cli',
@@ -169,7 +160,7 @@ python3 $LSFMONITOR_INSTALL_PATH/{tool_name}.py "$@"
                 sys.exit(1)
 
     def gen_default_config_file(self):
-        """Generate <prefix>/config/config.py (top-level project defaults).
+        """Generate <install root>/config/config.py (top-level project defaults).
 
         Currently only holds db_path, the root data directory shared by all
         subsystems (lsf/license/run/ai/log). Each config_<name>.py defaults its
@@ -197,7 +188,7 @@ db_path = "{db_path}"
             sys.exit(1)
 
     def ensure_db_root(self):
-        """Ensure <prefix>/db/ exists with 1777 so any user can create their
+        """Ensure <install root>/db/ exists with 1777 so any user can create their
         own subsystem subdir (lsf/license/ai/run/log) at runtime. Run
         unconditionally (not gated by config file existence) so a re-install
         still fixes db/ permissions.
@@ -266,7 +257,7 @@ db_path = "{db_path}"
             return
 
     def gen_lsf_config_file(self):
-        """Generate <prefix>/config/config_lsf.py for the LSF panel."""
+        """Generate <install root>/config/config_lsf.py for the LSF panel."""
         print(f'\n>>> Generate LSF config file "{self.lsf_config_file}".')
 
         if os.path.exists(self.lsf_config_file) and not self.force_mode:
@@ -300,7 +291,7 @@ cleanup_expire_days = {'job': 30, 'job_data': 30, 'user': 365, 'queue': 365, 'qu
             print(f'    *Warning*: Failed on creating "{lsf_data_dir}": {warning}')
 
     def gen_ai_config_file(self):
-        """Generate <prefix>/config/config_ai.py for the AI panel."""
+        """Generate <install root>/config/config_ai.py for the AI panel."""
         print(f'\n>>> Generate AI config file "{self.ai_config_file}".')
 
         if os.path.exists(self.ai_config_file) and not self.force_mode:
@@ -336,7 +327,7 @@ ai_dangerous_commands = "bkill badmin brestart bstop bresume bswitch bmod rm kil
             sys.exit(1)
 
     def gen_run_config_file(self):
-        """Generate <prefix>/config/config_run.py for the Run panel."""
+        """Generate <install root>/config/config_run.py for the Run panel."""
         print(f'\n>>> Generate Run config file "{self.run_config_file}".')
 
         if os.path.exists(self.run_config_file) and not self.force_mode:
@@ -368,7 +359,7 @@ max_parallel = 512
 
     def gen_license_config_file(self):
         """
-        Generate license subsystem config file <prefix>/config/config_license.py.
+        Generate license subsystem config file <install root>/config/config_license.py.
         Loaded by common_config.load_config('license'); override at
         ~/.lsfMonitor/config/config_license.py.
         """
@@ -412,7 +403,7 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
 
     def gen_license_config_files(self):
         """
-        Generate the license subsystem LM_LICENSE_FILE under <prefix>/config/.
+        Generate the license subsystem LM_LICENSE_FILE under <install root>/config/.
         """
         config_dir = os.path.join(CWD, 'config')
 
@@ -443,12 +434,61 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
             print(f'    *Error*: Failed on opening file "{file_path}" for write: {error}')
             sys.exit(1)
 
+    def sub_project_available(self, name):
+        """
+        Return True when the sub-project source directory ships its own install.py.
+        """
+        sub_source_path = os.path.join(CWD, name)
+
+        if os.path.isdir(sub_source_path) and os.path.isfile(os.path.join(sub_source_path, 'install.py')):
+            return True
+
+        print(f'    *Warning*: sub-project "{name}" not found under "{CWD}", skipped.')
+
+        return False
+
+    def install_jobMine_tool(self):
+        """
+        Install jobMine function.
+        """
+        if not self.sub_project_available('jobMine'):
+            return
+
+        command = [sys.executable, 'install.py']
+
+        if self.clean_mode:
+            command.append('--clean')
+
+        if self.force_mode:
+            command.append('--force')
+
+        print('\n>>> Install tool "jobMine" ...')
+        print(f'    {" ".join(command)}')
+
+        try:
+            SP = subprocess.Popen(command, cwd='jobMine', stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+            stdout, stderr = SP.communicate()
+            return_code = SP.returncode
+
+            if return_code != 0:
+                print(f'    *Error*: Failed on installing tool "jobMine" (exit code {return_code}): {stdout}')
+
+                if stderr:
+                    print(f'    *Error*: stderr: {stderr}')
+
+                sys.exit(1)
+        except Exception as error:
+            print(f'    *Error*: Exception during jobMine installation: {error}')
+            sys.exit(1)
+
     def install_memPrediction_tool(self):
         """
         Install memPrediction function.
         """
-        mem_prediction_path = os.path.join(self.prefix, 'memPrediction')
-        command = [sys.executable, 'install.py', '--prefix', mem_prediction_path]
+        if not self.sub_project_available('memPrediction'):
+            return
+
+        command = [sys.executable, 'install.py']
 
         if self.clean_mode:
             command.append('--clean')
@@ -489,8 +529,8 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
         self.gen_ai_config_file()
         self.gen_license_config_files()
 
-        if self.install_memPrediction:
-            self.install_memPrediction_tool()
+        self.install_jobMine_tool()
+        self.install_memPrediction_tool()
 
         print('\nDone, Please enjoy it.')
 
@@ -499,8 +539,8 @@ cleanup_expire_days = {{'usage': 365, 'utilization': 365, 'utilization_day': 365
 # Main Process #
 ################
 def main():
-    (prefix, clean_mode, force_mode, install_memPrediction) = read_args()
-    my_installation = Installation(prefix, clean_mode, force_mode, install_memPrediction)
+    (clean_mode, force_mode) = read_args()
+    my_installation = Installation(clean_mode, force_mode)
     my_installation.run()
 
 

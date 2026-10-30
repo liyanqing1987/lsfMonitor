@@ -400,6 +400,14 @@ def _lookup_yaml(yaml_file, key):
 
 def cmd_jobs(args):
     """List jobs with optional filters."""
+    valid_status = {'PEND', 'RUN', 'SSUSP', 'USUSP', 'PSUSP', 'DONE', 'EXIT',
+                    'UNKWN', 'WAIT', 'ZOMBI'}
+
+    if args.status and args.status not in valid_status:
+        _json_output({'error': f'Invalid status "{args.status}".'
+                               f' Valid: {", ".join(sorted(valid_status))}.'})
+        return
+
     command = 'bjobs -u all -w'
 
     if args.user:
@@ -717,14 +725,15 @@ def cmd_pending_reasons(args):
     top_n = args.top
     reasons = common_ai._aggregate_pending_reasons('bjobs -u all -p', top_n=top_n)
 
-    # Total pending jobs (bjobs -p lists only PEND jobs) for context
+    # Total pending jobs (bjobs -p lists only PEND jobs) for context. Count job
+    # rows directly: `bjobs -p` also prints indented reason lines that the
+    # generic bjobs table parser reports as invalid.
     total_pend = None
 
     try:
-        bjobs_dic = common_lsf.get_bjobs_info('bjobs -u all -p')
-
-        if 'STAT' in bjobs_dic:
-            total_pend = sum(1 for s in bjobs_dic['STAT'] if s == 'PEND')
+        (_returncode, stdout, _stderr) = common.run_command('bjobs -u all -p')
+        text = stdout.decode('utf-8', 'ignore')
+        total_pend = len(re.findall(r'^\s*\d+(?:\[\d+\])?\s+\S+\s+PEND\b', text, re.M))
     except Exception:
         pass
 
@@ -955,6 +964,14 @@ def cmd_db_job(args):
 
 def cmd_db_jobs(args):
     """List finished jobs from historical job/<date>.db files."""
+    valid_status = {'PEND', 'RUN', 'SSUSP', 'USUSP', 'PSUSP', 'DONE', 'EXIT',
+                    'UNKWN', 'WAIT', 'ZOMBI'}
+
+    if args.status and args.status.upper() not in valid_status:
+        _json_output({'error': f'Invalid status "{args.status}".'
+                               f' Valid: {", ".join(sorted(valid_status))}.'})
+        return
+
     (db_root, cluster) = _resolve_lsf_db_root()
 
     if not db_root:
@@ -1499,13 +1516,19 @@ def cmd_license(args):
                 if specified_user and not users:
                     continue
 
+                # Uncounted features have no finite "available" value
+                if str(issued) == 'Uncounted':
+                    available = None
+                else:
+                    available = _safe_int(issued) - _safe_int(in_use)
+
                 entry = {
                     'server': server,
                     'vendor': vendor,
                     'feature': feature,
                     'issued': issued,
                     'in_use': in_use,
-                    'available': _safe_int(issued) - _safe_int(in_use),
+                    'available': available,
                     'users': users,
                 }
                 result.append(entry)

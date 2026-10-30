@@ -68,8 +68,8 @@ bsample — LSF 数据采样工具
 推荐 crontab 配置：
   */5  * * * * bsample -m -q -H -l                 # 高频：内存/队列/主机/负载
   */30 * * * * bsample -qH -gH                     # 中频：队列-主机/group-主机映射
-  10   11,23 * * * bsample -j                      # 低频：已完成作业
-  30   11,23 * * * bsample -u                      # 低频：用户统计
+  10   8,12,16,20 * * * bsample -j                 # 白天加密：已完成作业（夜间无人清理可留空窗）
+  30   8,20 * * * bsample -u                       # 低频：用户统计
   */10 * * * * bsample -U                          # 中频：利用率
   55   23 * * * bsample -UD                        # 每日：日利用率
   3    0 * * * bsample -c                          # 每日：清理
@@ -135,6 +135,13 @@ bsample — LSF 数据采样工具
     return args.cleanup, args.job, args.job_mem, args.queue, args.queue_host_mapping, args.group_host_mapping, args.host, args.load, args.user, args.utilization, args.utilization_day, args.analyze
 
 
+def get_finished_date(job_info):
+    """Return the job's finished date as YYYYMMDD, '' when it cannot be parsed."""
+    date_text = common_lsf.switch_bjobs_uf_time(job_info.get('finished_time', ''), '%Y%m%d')
+
+    return date_text if re.match(r'^\d{8}$', str(date_text)) else ''
+
+
 class Sampling:
     """
     Sample LSF basic information with LSF bjobs/bqueues/bhosts/lshosts/lsload/bmgroup commands.
@@ -176,7 +183,7 @@ class Sampling:
             config_lsf = reloaded
 
         if cluster:
-            self.db_path = common_db_path.resolve_db_path(config_lsf, 'lsf') + '/' + str(cluster)
+            self.db_path = common_db_path.resolve_db_path(config_lsf, 'lsf', cluster) + '/' + str(cluster)
 
         # Data retention days for cleanup (after cluster config_lsf reload)
         default_cleanup_expire_days = {
@@ -414,9 +421,14 @@ class Sampling:
 
         # Re-organize jobs_dic with finished_date
         date_bjobs_dic = {}
+        skipped_jobs = 0
 
         for job in bjobs_dic.keys():
-            finished_date = common_lsf.switch_bjobs_uf_time(bjobs_dic[job]['finished_time'], '%Y%m%d')
+            finished_date = get_finished_date(bjobs_dic[job])
+
+            if not finished_date:
+                skipped_jobs += 1
+                continue
 
             if finished_date not in date_bjobs_dic:
                 date_bjobs_dic[finished_date] = {}
@@ -449,7 +461,8 @@ class Sampling:
                 finally:
                     finished_date_db_conn.close()
 
-        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        skipped_text = f', {skipped_jobs} without finished date' if skipped_jobs else ''
+        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs{skipped_text}).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def get_bjobs_mem_idle_factor_info(self):
         """
@@ -704,11 +717,17 @@ class Sampling:
 
         # Re-organize jobs_dic with finished_date
         date_bjobs_dic = {}
+        skipped_jobs = 0
 
         for job in bjobs_dic.keys():
-            finished_date = common_lsf.switch_bjobs_uf_time(bjobs_dic[job]['finished_time'], '%Y%m%d')
-            date_bjobs_dic.setdefault(finished_date, {})
+            finished_date = get_finished_date(bjobs_dic[job])
+
+            if not finished_date:
+                skipped_jobs += 1
+                continue
+
             user = bjobs_dic[job]['user']
+            date_bjobs_dic.setdefault(finished_date, {})
             date_bjobs_dic[finished_date].setdefault(user, {})
             date_bjobs_dic[finished_date][user][job] = {'status': bjobs_dic[job]['status'], 'queue': bjobs_dic[job]['queue'], 'project': bjobs_dic[job]['project'], 'rusage_mem': bjobs_dic[job]['rusage_mem'], 'max_mem': bjobs_dic[job]['max_mem']}
 
@@ -745,7 +764,8 @@ class Sampling:
                 finally:
                     finished_date_db_conn.close()
 
-        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
+        skipped_text = f', {skipped_jobs} without finished date' if skipped_jobs else ''
+        common.bprint(f'Done ({len(bjobs_dic.keys())} jobs{skipped_text}).', date_format='%Y-%m-%d %H:%M:%S', indent=4)
 
     def sample_queue_host_mapping_info(self):
         """
@@ -898,6 +918,7 @@ class Sampling:
                     lsload_dic = common_lsf.get_lsload_info()
 
                 host_list = lsload_dic['HOST_NAME']
+                invalid_utilization_list = []
 
                 key_list = ['sample_second', 'sample_time', 'slot', 'cpu', 'mem']
                 key_type_list = ['INTEGER PRIMARY KEY', 'TEXT', 'TEXT', 'TEXT', 'TEXT']
@@ -918,7 +939,7 @@ class Sampling:
                             slot_utilization = round(int(bhosts_dic['NJOBS'][j]) / int(bhosts_dic['MAX'][j]) * 100, 1)
 
                             if slot_utilization > 100:
-                                common.bprint(f'For host "{host}", invalid slot utilization "{slot_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                                invalid_utilization_list.append(f'{host} slot={slot_utilization}%')
 
                                 if bhosts_dic['STATUS'][j] == 'unavail':
                                     slot_utilization = 0.0
@@ -961,7 +982,7 @@ class Sampling:
                             mem_utilization = round((maxmem - mem) * 100 / maxmem, 1) if maxmem > 0 else 0.0
 
                             if mem_utilization > 100:
-                                common.bprint(f'For host "{host}", invalid mem utilization "{mem_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                                invalid_utilization_list.append(f'{host} mem={mem_utilization}%')
                                 mem_utilization = 100.0
 
                             break
@@ -969,6 +990,11 @@ class Sampling:
                     value_list = [self.sample_second, self.sample_time, slot_utilization, cpu_utilization, mem_utilization]
                     value_string = common_sqlite3.gen_sql_table_value_string(value_list)
                     common_sqlite3.insert_into_sql_table(utilization_db_file, utilization_db_conn, utilization_table_name, value_string, commit=False)
+
+                if invalid_utilization_list:
+                    common.bprint('Clamped utilization >100% for: ' + ', '.join(invalid_utilization_list[:10])
+                                  + (f' (+{len(invalid_utilization_list) - 10} more)' if len(invalid_utilization_list) > 10 else ''),
+                                  date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
 
                 utilization_db_conn.commit()
             except Exception as error:
@@ -994,6 +1020,7 @@ class Sampling:
         if result == 'passed':
             try:
                 utilization_table_list = common_sqlite3.get_sql_table_list(utilization_db_file, utilization_db_conn)
+                invalid_day_list = []
 
                 for utilization_table_name in utilization_table_list:
                     # Get current day slot/cpu/mem from sqlite3 database
@@ -1016,18 +1043,23 @@ class Sampling:
                         mem_avg_utilization = round(mem_utilization_sum / len(utilization_db_data_dic['slot']), 1)
 
                         if slot_avg_utilization > 100:
-                            common.bprint(f'For db table "{utilization_table_name}", invalid slot average utilization "{slot_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                            invalid_day_list.append(f'{utilization_table_name} slot={slot_avg_utilization}%')
                             slot_avg_utilization = 100.0
 
                         if cpu_avg_utilization > 100:
-                            common.bprint(f'For db table "{utilization_table_name}", invalid cpu average utilization "{cpu_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                            invalid_day_list.append(f'{utilization_table_name} cpu={cpu_avg_utilization}%')
                             cpu_avg_utilization = 100.0
 
                         if mem_avg_utilization > 100:
-                            common.bprint(f'For db table "{utilization_table_name}", invalid mem average utilization "{mem_avg_utilization}".', date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
+                            invalid_day_list.append(f'{utilization_table_name} mem={mem_avg_utilization}%')
                             mem_avg_utilization = 100.0
 
                         utilization_day_dic[utilization_table_name] = {'slot': slot_avg_utilization, 'cpu': cpu_avg_utilization, 'mem': mem_avg_utilization}
+
+                if invalid_day_list:
+                    common.bprint('Clamped daily average utilization >100% for: ' + ', '.join(invalid_day_list[:10])
+                                  + (f' (+{len(invalid_day_list) - 10} more)' if len(invalid_day_list) > 10 else ''),
+                                  date_format='%Y-%m-%d %H:%M:%S', level='Warning', indent=4)
             except Exception as error:
                 common.bprint(f'Failed on getting utilization day info: {error}', date_format='%Y-%m-%d %H:%M:%S', level='Warning')
             finally:

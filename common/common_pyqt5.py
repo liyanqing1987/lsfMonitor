@@ -1165,3 +1165,14 @@ class ShowMessage(QThread):
         # Step 4: let run() return. Bounded so a wedged child can't freeze the
         # GUI thread indefinitely; caller's wait(3000) is the backstop
         self.wait(3000)
+
+    def __del__(self):
+        """Last-resort guard: a QThread destructor aborts the process when the
+        thread is still running. Call sites that return early without
+        terminate() rely on this to shut the thread down before Qt frees it."""
+
+        try:
+            if self.isRunning():
+                self.terminate()
+        except Exception:
+            pass

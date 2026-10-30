@@ -304,10 +304,10 @@ class TrainingModel:
             if column in self.df.columns:
                 dt = self.df[column].dtypes
 
-                if dt == "int" or dt == "float":
-                    self.df[column].fillna(0, inplace=True)
+                if str(dt).startswith(('int', 'float')):
+                    self.df[column] = self.df[column].fillna(0)
                 elif dt == 'object':
-                    self.df[column].fillna("None", inplace=True)
+                    self.df[column] = self.df[column].fillna("None")
 
     def unit_convert(self):
         """
@@ -377,9 +377,9 @@ class TrainingModel:
             self.df["hour_of_day"] = 0
             self.df["month"] = 0
 
-        self.df["day_of_weekday"].fillna('None', inplace=True)
-        self.df["hour_of_day"].fillna(0, inplace=True)
-        self.df["month"].fillna(0, inplace=True)
+        self.df["day_of_weekday"] = self.df["day_of_weekday"].fillna('None')
+        self.df["hour_of_day"] = self.df["hour_of_day"].fillna(0)
+        self.df["month"] = self.df["month"].fillna(0)
 
         self.factor_name_list += ['day_of_weekday', 'hour_of_day', 'month']
         self.column_name_list += ['day_of_weekday', 'hour_of_day', 'month']

@@ -22,9 +22,6 @@ def read_args():
     """
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-p', '--prefix',
-                        default=CWD,
-                        help='Specify memPrediction install path on config file, default is current directory.')
     parser.add_argument('-c', '--clean',
                         action='store_true',
                         default=False,
@@ -36,12 +33,12 @@ def read_args():
 
     args = parser.parse_args()
 
-    return args.prefix, args.clean, args.force
+    return args.clean, args.force
 
 
 class Installation:
-    def __init__(self, prefix, clean_mode, force_mode):
-        self.prefix = prefix
+    def __init__(self, clean_mode, force_mode):
+        self.prefix = CWD
         self.clean_mode = clean_mode
         self.force_mode = force_mode
         self.tool_list = ['bin/sample', 'bin/report', 'bin/train', 'bin/predict', 'tools/update', 'web_app/setup', 'web_app/backend/dataCollector',
@@ -411,8 +408,8 @@ systemctl status predict_web.service
 # Main Process #
 ################
 def main():
-    (prefix, clean_mode, force_mode) = read_args()
-    my_installation = Installation(prefix, clean_mode, force_mode)
+    (clean_mode, force_mode) = read_args()
+    my_installation = Installation(clean_mode, force_mode)
     my_installation.run()
 
 

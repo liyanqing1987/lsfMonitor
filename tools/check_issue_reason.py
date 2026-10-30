@@ -14,6 +14,7 @@ import shlex
 import yaml
 import argparse
 import subprocess
+import threading
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QTabWidget, QFrame, QGridLayout, QLabel, QLineEdit, QComboBox, QPushButton, QTextEdit
 from PyQt5.QtCore import QThread
@@ -64,6 +65,15 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.process_args()
+
+    def closeEvent(self, event):
+        """Stop the Process Tracer window before the main window goes away."""
+        tracer = getattr(self, 'my_process_tracer', None)
+
+        if tracer is not None and tracer.isRunning():
+            tracer.stop()
+
+        super().closeEvent(event)
 
     def get_exit_code_info(self):
         """
@@ -271,6 +281,18 @@ class MainWindow(QMainWindow):
             self.info_text.append('            Find key command, click command pid on Process Tracer.')
             self.info_text.append('            Check what EDA tool is doing with strace terminal.')
 
+            old_tracer = getattr(self, 'my_process_tracer', None)
+
+            if old_tracer is not None and old_tracer.isRunning():
+                old_tracer.stop()
+
+            # Never rebind while the old tracer still runs: dropping the
+            # reference would destroy a live QThread and abort the process
+            if old_tracer is not None and old_tracer.isRunning():
+                self.info_text.append('<font color="#FF0000">*Warning*: previous Process Tracer is still running.</font>')
+
+                return
+
             self.my_process_tracer = ProcessTracer(job)
             self.my_process_tracer.start()
 
@@ -304,10 +326,43 @@ class ProcessTracer(QThread):
     def __init__(self, job):
         super(ProcessTracer, self).__init__()
         self.job = job
+        self._proc = None
+        self._proc_ready = threading.Event()
 
     def run(self):
         command = [str(os.environ['LSFMONITOR_INSTALL_PATH']) + '/tools/process_tracer', '-j', str(self.job)]
-        subprocess.run(command)
+
+        try:
+            self._proc = subprocess.Popen(command)
+        except Exception:
+            self._proc_ready.set()
+
+            return
+
+        self._proc_ready.set()
+        self._proc.wait()
+
+    def stop(self):
+        """Kill the child tool window and wait for run() to return."""
+
+        if self._proc is None:
+            self._proc_ready.wait(timeout=2.0)
+
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+            except Exception:
+                pass
+
+            try:
+                self._proc.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                try:
+                    self._proc.kill()
+                except Exception:
+                    pass
+
+        self.wait(3000)
 
 
 ################

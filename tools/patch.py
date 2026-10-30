@@ -74,10 +74,42 @@ class Patch():
 
         # Config files handled via migration, not direct copy
         self.config_rel_paths = [
+            'config/config.py',
             'config/config_lsf.py',
             'config/config_license.py',
             'config/config_run.py',
             'config/config_ai.py',
+        ]
+
+        # Install-generated files (not shipped in the package, or holding
+        # site-specific settings): patch must never overwrite or delete them.
+        # Keep in sync with the tool_list of every install.py
+        # (lsfMonitor/jobMine/memPrediction).
+        self.generated_files = [
+            # lsfMonitor install.py
+            'config/license/LM_LICENSE_FILE',
+            # jobMine/install.py
+            'jobMine/config/config.py',
+            'bin/jobmine',
+            'bin/snapshot',
+            'bin/jobmine_mcp_server',
+            # memPrediction/install.py
+            'memPrediction/config/config.py',
+            'memPrediction/bin/sample',
+            'memPrediction/bin/report',
+            'memPrediction/bin/train',
+            'memPrediction/bin/predict',
+            'memPrediction/tools/update',
+            'memPrediction/tools/.env',
+            'memPrediction/tools/predict_web.service',
+            'memPrediction/tools/stopservice.sh',
+            'memPrediction/tools/predict_gconf.py',
+            'memPrediction/tools/esub.mem_predict',
+            'memPrediction/tools/train.sh',
+            'memPrediction/tools/web_startup.sh',
+            'memPrediction/web_app/setup',
+            'memPrediction/web_app/backend/dataCollector',
+            'memPrediction/db/model_db/latest',
         ]
 
         # Shell wrappers (generated, not synced directly)
@@ -136,6 +168,10 @@ class Patch():
 
         # Exclude generated shell wrappers
         if rel_path in self.tool_list:
+            return True
+
+        # Exclude install-generated data/wrapper files
+        if rel_path in self.generated_files:
             return True
 
         return False

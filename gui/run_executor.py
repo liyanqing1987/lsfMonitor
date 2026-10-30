@@ -115,6 +115,12 @@ class RunThread(QThread):
         self.ssh_targets = ssh_targets or {}
         self._lock = threading.Lock()
         self._done = 0
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        """Stop starting new hosts; hosts already running finish on their own timeout."""
+
+        self._stop_event.set()
 
     def run(self):
         total = len(self.hosts_list)
@@ -128,7 +134,15 @@ class RunThread(QThread):
         threads_list = []
 
         for host in self.hosts_list:
-            semaphore.acquire()
+            if self._stop_event.is_set():
+                break
+
+            while not semaphore.acquire(timeout=0.2):
+                if self._stop_event.is_set():
+                    break
+
+            if self._stop_event.is_set():
+                break
 
             t = threading.Thread(target=self._worker, args=(host, semaphore))
             t.start()
